@@ -1,0 +1,54 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 背景渐变：清爽的效率蓝 -->
+    <linearGradient id="bgBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00C6FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0072FF;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- 装饰网格图案 (代表日历/记录) -->
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" stroke-width="2" opacity="0.1"/>
+    </pattern>
+    
+    <!-- 投影 -->
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="8" stdDeviation="6" flood-color="#004e92" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- 1. 背景 -->
+  <rect x="0" y="0" width="512" height="512" rx="128" ry="128" fill="url(#bgBlue)" />
+  <rect x="0" y="0" width="512" height="512" rx="128" ry="128" fill="url(#grid)" />
+
+  <!-- 2. 核心图形：双对勾组成的 "W" -->
+  <g transform="translate(106, 156)" filter="url(#shadow)">
+    <!-- 左边的对勾 (Checkmark 1) -->
+    <!-- 颜色：浅白色，半透明 -->
+    <path d="M 20 100 L 80 160 L 160 20" 
+          stroke="white" 
+          stroke-width="50" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" 
+          fill="none" 
+          opacity="0.7"/>
+          
+    <!-- 右边的对勾 (Checkmark 2) - 叠加形成 W -->
+    <!-- 颜色：纯亮白 -->
+    <path d="M 140 100 L 200 160 L 280 20" 
+          stroke="white" 
+          stroke-width="50" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" 
+          fill="none" />
+          
+    <!-- 视觉修正：连接两个对勾的底部，强化 "W" 的识别度 -->
+    <!-- 这是一个隐形的连接意向，通过位置重叠实现 -->
+  </g>
+  
+  <!-- 3. 底部点缀：记录点 -->
+  <circle cx="256" cy="400" r="16" fill="white" opacity="0.6" />
+  <circle cx="206" cy="400" r="12" fill="white" opacity="0.4" />
+  <circle cx="306" cy="400" r="12" fill="white" opacity="0.4" />
+
+</svg>

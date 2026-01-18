@@ -1,0 +1,40 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2B32B2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1488CC;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- 背景：圆角矩形 -->
+  <rect x="0" y="0" width="512" height="512" rx="120" ry="120" fill="url(#bgGradient)" />
+  
+  <!-- 图形部分：W 轨迹 + 火箭 -->
+  <g transform="translate(56, 128)" filter="url(#glow)">
+    <!-- W 轨迹线条 -->
+    <path d="M40 80 L120 250 L200 80 L280 250 L360 40" 
+          stroke="white" 
+          stroke-width="40" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" 
+          fill="none" />
+          
+    <!-- 火箭（箭头）在轨迹末端 -->
+    <path d="M330 70 L360 40 L390 70 M360 40 L360 100" 
+          stroke="white" 
+          stroke-width="40" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" 
+          fill="none" />
+  </g>
+  
+  <!-- 文字部分（可选，增加识别度） -->
+  <!-- 如果需要更简洁，可以去掉 -->
+</svg>

@@ -1,0 +1,8 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "custom-header": "../../components/CustomHeader",
+    "profile-view": "../../components/ProfileView",
+    "custom-tab-bar": "../../components/CustomTabBar"
+  }
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"CustomHeader.js","sources":["../../tools/HBuilderX.4.57.2025032507/HBuilderX/plugins/uniapp-cli-vite/uniComponent:/RDovd29yay93aW8tbWluaS9jb21wb25lbnRzL0N1c3RvbUhlYWRlci52dWU"],"sourcesContent":["import Component from 'D:/work/wio-mini/components/CustomHeader.vue'\nwx.createComponent(Component)"],"names":[],"mappings":";;;;;;;;;AACA,GAAG,gBAAgB,SAAS;"}

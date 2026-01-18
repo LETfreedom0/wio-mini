@@ -1,0 +1,12 @@
+
+.container.data-v-1cf27b2a {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: #F8F9FA;
+  padding-bottom: calc(50px + env(safe-area-inset-bottom)); /* Make space for TabBar */
+}
+.content-area.data-v-1cf27b2a {
+  flex: 1;
+  height: 0;
+}

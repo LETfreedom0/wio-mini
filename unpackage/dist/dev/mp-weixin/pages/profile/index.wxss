@@ -1,0 +1,13 @@
+
+.container.data-v-201c0da5 {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: #F8F9FA;
+  padding-bottom: calc(50px + env(safe-area-inset-bottom));
+}
+.content-area.data-v-201c0da5 {
+  flex: 1;
+  height: 0;
+  /* ProfileView contains a scroll-view with height: 100% */
+}

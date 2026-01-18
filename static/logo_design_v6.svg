@@ -1,0 +1,67 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 纸张纹理质感滤镜 -->
+    <filter id="paper-texture">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="5" result="noise"/>
+      <feDiffuseLighting in="noise" lighting-color="#fff" surfaceScale="2">
+        <feDistantLight azimuth="45" elevation="60"/>
+      </feDiffuseLighting>
+      <feComposite operator="in" in2="SourceGraphic"/>
+    </filter>
+    
+    <!-- 墨水晕染效果 -->
+    <filter id="ink-bleed">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- 1. 背景：米白色宣纸/手账本纸张质感 -->
+  <rect x="0" y="0" width="512" height="512" rx="128" ry="128" fill="#FDFBF7" />
+  
+  <!-- 2. 核心图形：一笔“迹” -->
+  <!-- 这是一个抽象的线条，既像是一条蜿蜒的小路（轨迹），又像是一个草写的 "W" -->
+  <!-- 颜色：黛蓝色 (中国传统色，文艺、沉静) -->
+  <path d="M 120 200 
+           Q 160 350 200 250 
+           T 280 250 
+           T 360 200" 
+        stroke="#2C3E50" 
+        stroke-width="16" 
+        stroke-linecap="round" 
+        stroke-linejoin="round" 
+        fill="none" 
+        filter="url(#ink-bleed)" />
+
+  <!-- 3. 点缀：记录的“印记” -->
+  <!-- 一个红色的不规则圆点，象征日历上的标记，或者落款的印章 -->
+  <!-- 颜色：朱红 -->
+  <circle cx="380" cy="180" r="24" fill="#E74C3C" opacity="0.9" filter="url(#ink-bleed)" />
+
+  <!-- 4. 文字：竖排/艺术排版的“迹录”二字 -->
+  <!-- 这里用几何图形模拟汉字结构，保持图形化，避免字体依赖 -->
+  <g transform="translate(380, 280)" fill="#2C3E50" opacity="0.8">
+     <!-- 迹 (抽象结构) -->
+     <!-- 足字旁 -->
+     <rect x="0" y="0" width="10" height="30" rx="2" />
+     <rect x="0" y="35" width="10" height="10" rx="2" />
+     <!-- 亦 -->
+     <rect x="20" y="5" width="4" height="40" rx="2" />
+     <circle cx="15" cy="20" r="3" />
+     <circle cx="35" cy="20" r="3" />
+     
+     <!-- 录 (抽象结构) -->
+     <!-- 彐 -->
+     <path d="M 60 0 L 90 0 M 60 15 L 85 15 M 60 30 L 90 30" stroke="#2C3E50" stroke-width="6" stroke-linecap="round" />
+     <!-- 下半部分 -->
+     <path d="M 75 30 L 75 50 M 65 45 L 55 55 M 85 45 L 95 55" stroke="#2C3E50" stroke-width="6" stroke-linecap="round" />
+  </g>
+  
+  <!-- 5. 光影：模拟阳光洒在纸面上的感觉 -->
+  <path d="M 0 0 L 512 0 L 512 512 Z" fill="url(#gradientLight)" opacity="0.1" style="mix-blend-mode: overlay;" />
+  <linearGradient id="gradientLight" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" style="stop-color:#fff;stop-opacity:0.8" />
+    <stop offset="100%" style="stop-color:#fff;stop-opacity:0" />
+  </linearGradient>
+
+</svg>

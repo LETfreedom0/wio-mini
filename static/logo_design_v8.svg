@@ -1,0 +1,57 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FFD54F;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4CAF50;stop-opacity:1" />
+    </linearGradient>
+    
+    <filter id="inner-shadow">
+       <feOffset dx="0" dy="2"/>
+       <feGaussianBlur stdDeviation="3" result="offset-blur"/>
+       <feComposite operator="out" in="SourceGraphic" in2="offset-blur" result="inverse"/>
+       <feFlood flood-color="black" flood-opacity="0.2" result="color"/>
+       <feComposite operator="in" in="color" in2="inverse" result="shadow"/>
+       <feComposite operator="over" in="shadow" in2="SourceGraphic"/> 
+    </filter>
+  </defs>
+
+  <!-- 1. 背景：极简白，凸显数据 -->
+  <rect x="0" y="0" width="512" height="512" rx="120" ry="120" fill="#FFFFFF" />
+
+  <!-- 2. 仪表盘底槽 (灰色圆环) -->
+  <path d="M 106 256 A 150 150 0 1 1 406 256" 
+        stroke="#F0F0F0" 
+        stroke-width="40" 
+        stroke-linecap="round" 
+        fill="none" />
+        
+  <!-- 3. 进度条 (核心元素) -->
+  <!-- 这是一个显示了约 75% 进度的圆弧，颜色从黄渐变到绿，暗示“即将达标”或“已达标” -->
+  <path d="M 106 256 A 150 150 0 1 1 360 150" 
+        stroke="url(#progressGradient)" 
+        stroke-width="40" 
+        stroke-linecap="round" 
+        fill="none" 
+        filter="url(#inner-shadow)"/>
+
+  <!-- 4. 达标线 (Target Line) -->
+  <!-- 在圆环的某处有一个明显的标记，代表“及格线” -->
+  <line x1="256" y1="50" x2="256" y2="106" 
+        stroke="#2C3E50" 
+        stroke-width="4" 
+        stroke-dasharray="8,4" />
+  <text x="245" y="45" font-family="Arial" font-size="24" fill="#999">Target</text>
+
+  <!-- 5. 中心文字/结果 -->
+  <!-- 显示一个对勾，代表 Passed / OK -->
+  <g transform="translate(256, 280)">
+     <path d="M -40 -10 L -10 20 L 50 -40" 
+           stroke="#4CAF50" 
+           stroke-width="12" 
+           stroke-linecap="round" 
+           stroke-linejoin="round" 
+           fill="none" />
+     <text x="0" y="60" text-anchor="middle" font-family="sans-serif" font-size="28" fill="#4CAF50" font-weight="bold">达标</text>
+  </g>
+
+</svg>
