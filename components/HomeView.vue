@@ -30,7 +30,7 @@
 
     <view class="content-wrapper">
       <view class="date-section anim-entry" style="animation-delay: 0.1s;">
-        <text class="today-label">Today</text>
+        <text class="today-label">{{ i18n.home.today }}</text>
         <text class="date-text">{{ currentDateStr }}</text>
       </view>
 
@@ -45,7 +45,7 @@
       </view>
 
       <view class="text-container">
-        <text class="question anim-text" :class="{ 'text-pop': triggerTextAnim }">
+        <text class="question anim-text" :class="{ 'text-pop': triggerTextAnim, 'english': settings.language === 'en-US' }">
           {{ statusText }}
         </text>
       </view>
@@ -56,8 +56,8 @@
               @touchmove="onTouchMove" 
               @touchend="onTouchEnd">
           <view class="toggle-labels">
-            <text class="toggle-label" :class="{ active: location === 'home' }" @click="setStatus('home')">居家办公</text>
-            <text class="toggle-label" :class="{ active: location === 'company' }" @click="setStatus('company')">公司办公</text>
+            <text class="toggle-label" :class="{ active: location === 'home' }" @click="setStatus('home')">{{ i18n.home.workFromHome }}</text>
+            <text class="toggle-label" :class="{ active: location === 'company' }" @click="setStatus('company')">{{ i18n.home.workFromCompany }}</text>
           </view>
           <view class="toggle-thumb shadow-effect" 
                 :class="{ 'thumb-animate': !isDragging }" 
@@ -67,7 +67,7 @@
         </view>
       </view>
 
-      <text class="hint anim-entry" style="animation-delay: 0.5s;">点击或拖动上方选项切换状态</text>
+      <text class="hint anim-entry" style="animation-delay: 0.5s;">{{ i18n.home.hint }}</text>
     </view>
   </view>
 </template>
@@ -75,6 +75,7 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { getRandomQuote } from '@/utils/motivationQuotes.js'
+import { locales, getMonthName, getWeekdayName } from '@/utils/locales.js'
 
 export default {
   name: 'HomeView',
@@ -96,26 +97,34 @@ export default {
       showConfetti: false,
       showRocket: false,
       confettiPieces: [],
-      currentQuote: ''
+      currentQuote: '',
+      settings: {}
     }
   },
   computed: {
+    i18n() {
+      return locales[this.settings.language] || locales['zh-CN'];
+    },
     statusText() {
       if (this.currentQuote) return this.currentQuote;
       
       if (this.location === 'home') {
-        return '在家办公，享受专注时光 ☕';
+        return this.i18n.home.homeStatus;
       } else if (this.location === 'company') {
-        return '元气满满，与团队并肩作战 🚀';
+        return this.i18n.home.companyStatus;
       }
-      return '今天在哪儿办公呢？';
+      return this.i18n.home.question;
     },
     currentDateStr() {
       const now = new Date();
       const month = now.getMonth() + 1;
       const date = now.getDate();
-      const days = ['日', '一', '二', '三', '四', '五', '六'];
-      const day = days[now.getDay()];
+      const day = getWeekdayName(now.getDay(), this.settings.language);
+      if (this.settings.language === 'en-US') {
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+        return `${months[month - 1]} ${date}, ${day}`;
+      }
       return `${month}月${date}日 星期${day}`;
     },
     currentEmoji() {
@@ -139,19 +148,21 @@ export default {
     this.maxLeft = this.trackWidth - this.thumbWidth - this.padding; 
     this.initData();
   },
+  onShow() {
+    this.settings = wioService.getSettings();
+  },
   methods: {
     initData() {
+      this.settings = wioService.getSettings();
       this.todayStr = wioService.getTodayDateStr();
       const entry = wioService.getEntryForDate(this.todayStr);
       this.location = entry;
-      // Set initial position without animation
       this.updateThumbPosition(entry);
       
-      // Initialize quote if status exists
       if (entry) {
-        this.currentQuote = getRandomQuote(entry);
+        this.currentQuote = getRandomQuote(entry, this.settings.language);
       } else {
-        this.currentQuote = getRandomQuote('default');
+        this.currentQuote = getRandomQuote('default', this.settings.language);
       }
     },
     triggerAnimation() {
@@ -166,25 +177,17 @@ export default {
       } else if (status === 'company') {
         this.thumbPosition = this.maxLeft;
       } else {
-        // Center or default to left if null? Let's keep it in middle-ish or default left
         this.thumbPosition = (this.trackWidth - this.thumbWidth) / 2;
       }
     },
     setStatus(status) {
       if (this.location !== status) {
-         // Haptic feedback only when status changes
          uni.vibrateShort();
-         
-         // Update Quote Dynamically
-         this.currentQuote = getRandomQuote(status);
-
-         // Trigger text animation
+         this.currentQuote = getRandomQuote(status, this.settings.language);
          this.triggerTextAnim = true;
          setTimeout(() => {
            this.triggerTextAnim = false;
          }, 400);
-
-         // Trigger Confetti if Home
          if (status === 'home') {
              this.triggerConfetti();
          } else if (status === 'company') {
@@ -195,31 +198,18 @@ export default {
       wioService.saveEntry(this.todayStr, status);
     },
     triggerConfetti() {
-        // Generate random confetti data
         const colors = ['#ff0055', '#00ddff', '#00ff99', '#9900ff', '#ffd300', '#ff8800'];
         const pieces = [];
-        // Increase to 80 pieces for fuller effect
         for (let i = 0; i < 80; i++) {
             const isLeft = i < 40;
             const color = colors[Math.floor(Math.random() * colors.length)];
-            
-            // Randomize physics
-            // Duration: Longer fall -> 3s - 5s
             const duration = 3 + Math.random() * 2; 
-            const delay = Math.random() * 0.3; // Slight burst delay
-            
-            // Horizontal spread: 
-            // Left side: 0% -> 10-60%
-            // Right side: 100% -> 40-90%
+            const delay = Math.random() * 0.3;
             const targetX = isLeft 
                 ? 10 + Math.random() * 50  
                 : 40 + Math.random() * 50; 
-            
-            // Vertical Apex (Target Y): 5% - 35% (Randomize to avoid clustering)
             const targetY = 5 + Math.random() * 30;
-
-            // Rotation
-            const rotation = (Math.random() - 0.5) * 720; // -360 to +360
+            const rotation = (Math.random() - 0.5) * 720;
 
             pieces.push({
                 className: isLeft ? 'confetti-left-anim' : 'confetti-right-anim',
@@ -231,18 +221,17 @@ export default {
                     '--duration': `${duration}s`,
                     '--delay': `${delay}s`,
                     backgroundColor: color, 
-                    left: isLeft ? '0%' : '100%' // Start from edges
+                    left: isLeft ? '0%' : '100%'
                 }
             });
         }
         this.confettiPieces = pieces;
-
         this.showConfetti = false; 
         this.$nextTick(() => {
             this.showConfetti = true;
             setTimeout(() => {
                 this.showConfetti = false;
-            }, 6000); // Allow time for full fall
+            }, 6000);
         });
     },
     triggerRocket() {
@@ -268,7 +257,6 @@ export default {
         const diff = touchX - this.startX;
         let newPos = this.currentX + diff;
         
-        // Clamp
         if (newPos < this.padding) newPos = this.padding;
         if (newPos > this.maxLeft) newPos = this.maxLeft;
         
@@ -279,7 +267,6 @@ export default {
       if (!this.isDragging) return;
       this.isDragging = false;
       
-      // Determine snap target
       const centerPoint = this.trackWidth / 2;
       const thumbCenter = this.thumbPosition + this.thumbWidth / 2;
       
@@ -441,7 +428,14 @@ export default {
   font-weight: 500;
   letter-spacing: 1px;
   transition: all 0.3s ease;
-  white-space: nowrap; /* 防止换行，如果不希望换行的话。或者去掉允许换行 */
+  max-width: 90vw;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.question.english {
+  font-size: 15px;
+  letter-spacing: 0.5px;
 }
 
 /* 礼花筒动画 */

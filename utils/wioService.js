@@ -9,6 +9,7 @@ const DEFAULT_SETTINGS = {
   targetPercentage: 40,
   vacationDays: 20,
   sickDays: 12,
+  language: 'zh-CN',
   // 调休配置规则 (Key: 节日名称, Value: boolean 是否调休)
   // 默认只有春节调休
   compOffRules: {

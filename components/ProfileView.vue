@@ -2,10 +2,31 @@
   <scroll-view scroll-y="true" class="profile-scroll">
     <view class="content">
       
+      <!-- Language Settings Card -->
+      <view class="settings-card">
+        <view class="card-header">
+          <text class="card-title">{{ i18n.profile.language }}</text>
+        </view>
+        <view class="language-toggle-container">
+          <text class="card-desc language-desc">{{ i18n.profile.languageDesc }}</text>
+          <view 
+            class="toggle"
+            :class="{ 'active': settings.language === 'en-US' }"
+            @click="toggleLanguage"
+          >
+            <text class="toggle-text">中文</text>
+            <view class="toggle__switch">
+              <view class="toggle__circle"></view>
+            </view>
+            <text class="toggle-text">English</text>
+          </view>
+        </view>
+      </view>
+      
       <!-- WIO Target Card -->
       <view class="settings-card">
         <view class="card-header">
-          <text class="card-title">🎯 WIO 目标</text>
+          <text class="card-title">{{ i18n.profile.wioTarget }}</text>
           <text class="card-value blue">{{ settings.targetPercentage }}%</text>
         </view>
         <view class="slider-container">
@@ -15,16 +36,16 @@
              @changing="onSliderChanging($event, 'targetPercentage')"
              min="0" max="100" step="10" activeColor="#007AFF" backgroundColor="#E3F2FD" block-size="24" block-color="#fff" />
         </view>
-        <text class="card-desc">设置您每月期望在公司办公的时间比例。</text>
+        <text class="card-desc">{{ i18n.profile.wioTargetDesc }}</text>
       </view>
 
       <!-- Vacation Card -->
       <view class="settings-card">
         <view class="card-header">
-          <text class="card-title">🏖️ 年假额度</text>
+          <text class="card-title">{{ i18n.profile.vacationDays }}</text>
           <view class="value-group">
-            <text class="card-value orange">{{ settings.vacationDays }} 天</text>
-            <text class="balance-sub">剩余 {{ settings.vacationDays - yearStats.vacationDaysUsed }} 天</text>
+            <text class="card-value orange">{{ settings.vacationDays }} {{ i18n.common.days }}</text>
+            <text class="balance-sub">{{ i18n.common.remaining }} {{ settings.vacationDays - yearStats.vacationDaysUsed }} {{ i18n.common.days }}</text>
           </view>
         </view>
         <view class="slider-container">
@@ -37,16 +58,16 @@
         <view class="usage-bar">
           <view class="usage-fill orange-bg" :style="{ width: getUsagePercentage(yearStats.vacationDaysUsed, settings.vacationDays) + '%' }"></view>
         </view>
-        <text class="card-desc">今年已使用 {{ yearStats.vacationDaysUsed }} 天</text>
+        <text class="card-desc">{{ i18n.common.used }} {{ yearStats.vacationDaysUsed }} {{ i18n.common.days }}</text>
       </view>
 
       <!-- Sick Leave Card -->
       <view class="settings-card">
         <view class="card-header">
-          <text class="card-title">💊 病假额度</text>
+          <text class="card-title">{{ i18n.profile.sickDays }}</text>
           <view class="value-group">
-            <text class="card-value purple">{{ settings.sickDays }} 天</text>
-            <text class="balance-sub">剩余 {{ settings.sickDays - yearStats.sickDaysUsed }} 天</text>
+            <text class="card-value purple">{{ settings.sickDays }} {{ i18n.common.days }}</text>
+            <text class="balance-sub">{{ i18n.common.remaining }} {{ settings.sickDays - yearStats.sickDaysUsed }} {{ i18n.common.days }}</text>
           </view>
         </view>
         <view class="slider-container">
@@ -59,16 +80,16 @@
         <view class="usage-bar">
           <view class="usage-fill purple-bg" :style="{ width: getUsagePercentage(yearStats.sickDaysUsed, settings.sickDays) + '%' }"></view>
         </view>
-        <text class="card-desc">今年已使用 {{ yearStats.sickDaysUsed }} 天</text>
+        <text class="card-desc">{{ i18n.common.used }} {{ yearStats.sickDaysUsed }} {{ i18n.common.days }}</text>
       </view>
 
       <!-- Comp Off Settings Card -->
       <view class="settings-card">
         <view class="card-header">
-          <text class="card-title">📅 调休配置</text>
+          <text class="card-title">{{ i18n.profile.compOffSettings }}</text>
         </view>
         
-        <text class="section-hint">点击卡片切换状态 (蓝色表示补班算工作日)</text>
+        <text class="section-hint">{{ i18n.profile.compOffHint }}</text>
 
         <scroll-view class="holiday-scroll" scroll-x="true" show-scrollbar="false">
           <view class="holiday-row">
@@ -76,18 +97,18 @@
               class="holiday-item" 
               v-for="item in holidayList" 
               :key="item.name"
-              :class="{ 'active-comp-off': getCompOffStatus(item.name), disabled: !item.hasCompOff }"
+              :class="{ 'active-comp-off': getCompOffStatus(item.name), disabled: !item.hasCompOff, 'english': settings.language === 'en-US' }"
               @click="toggleCompOff(item)"
             >
-              <text class="holiday-name">{{ item.name }}</text>
+              <text class="holiday-name">{{ getHolidayName(item) }}</text>
               <view class="holiday-status-icon" v-if="getCompOffStatus(item.name)">✓</view>
-              <text class="no-comp-off-text" v-if="!item.hasCompOff">无补班</text>
+              <text class="no-comp-off-text" v-if="!item.hasCompOff">{{ i18n.profile.noCompOff }}</text>
             </view>
           </view>
         </scroll-view>
         
         <view v-if="holidayList.length === 0" class="empty-hint">
-            <text>本年度无节日安排</text>
+            <text>{{ i18n.profile.noHoliday }}</text>
         </view>
       </view>
 
@@ -97,6 +118,17 @@
 
 <script>
 import wioService from '@/utils/wioService.js'
+import { locales, t } from '@/utils/locales.js'
+
+const holidayNameMap = {
+  '元旦': 'New Year\'s',
+  '春节': 'Spring Fest',
+  '清明节': 'Qingming',
+  '劳动节': 'Labor Day',
+  '端午节': 'Dragon Boat',
+  '中秋节': 'Mid-Autumn',
+  '国庆节': 'National Day'
+};
 
 export default {
   name: 'ProfileView',
@@ -106,7 +138,8 @@ export default {
         username: '',
         targetPercentage: 40,
         vacationDays: 20,
-        sickDays: 12
+        sickDays: 12,
+        language: 'zh-CN'
       },
       yearStats: {
         vacationDaysUsed: 0,
@@ -116,20 +149,26 @@ export default {
       holidayList: [] // 完整节日列表
     }
   },
+  computed: {
+    i18n() {
+      return locales[this.settings.language] || locales['zh-CN'];
+    }
+  },
   mounted() {
     this.loadSettings();
     this.holidayList = wioService.getHolidayInfoList();
   },
   onShow() {
-    // Reload when showing (in case changed elsewhere, though Profile is usually entry)
     this.loadSettings();
   },
   methods: {
     loadSettings() {
       this.settings = wioService.getSettings();
-      // 确保 compOffRules 存在
       if (!this.settings.compOffRules) {
           this.settings.compOffRules = { '春节': true };
+      }
+      if (!this.settings.language) {
+          this.settings.language = 'zh-CN';
       }
       const currentYear = new Date().getFullYear();
       this.yearStats = wioService.getYearStats(currentYear);
@@ -141,38 +180,43 @@ export default {
     getCompOffStatus(name) {
         return !!this.settings.compOffRules[name];
     },
+    getHolidayName(item) {
+      if (this.settings.language === 'en-US') {
+        return holidayNameMap[item.name] || item.name;
+      }
+      return item.name;
+    },
     toggleCompOff(item) {
-        // 如果该节日没有调休安排，则不允许切换状态（或点击无效）
-        // 用户体验上，既然显示了“无补班”，最好点击无反应或提示
         if (!item.hasCompOff) {
             return;
         }
-
-        // Toggle status
         const name = item.name;
         const current = this.getCompOffStatus(name);
         this.settings.compOffRules[name] = !current;
-        
-        // Haptic feedback
         uni.vibrateShort();
-        
         this.save();
+    },
+    setLanguage(lang) {
+      this.settings.language = lang;
+      uni.vibrateShort();
+      this.save();
+    },
+    toggleLanguage() {
+      const newLang = this.settings.language === 'zh-CN' ? 'en-US' : 'zh-CN';
+      this.setLanguage(newLang);
     },
     onSliderChange(e, key) {
       this.settings[key] = e.detail.value;
       this.save();
     },
     onSliderChanging(e, key) {
-      // 实时更新数值显示
       this.settings[key] = e.detail.value;
-      // 震动反馈 (Taptic Engine) - 轻微震动
       uni.vibrateShort(); 
     },
-
     save() {
       wioService.saveSettings(this.settings);
       uni.showToast({
-        title: '已保存',
+        title: t('profile.saved', this.settings.language),
         icon: 'none'
       });
     }
@@ -325,6 +369,22 @@ slider {
   transform: scale(0.96);
 }
 
+/* English holiday item optimization */
+.holiday-item.english {
+  flex: 0 0 70px; /* Slightly narrower for English */
+}
+
+.holiday-item.english .holiday-name {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.1;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .holiday-item.active-comp-off {
   background-color: #E3F2FD; /* Light Blue */
   border-color: #007AFF;
@@ -372,6 +432,104 @@ slider {
     text-align: center;
     color: #ccc;
     font-size: 14px;
+}
+
+.language-toggle-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  gap: 15px;
+  padding: 12px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #f0f0f0;
+}
+
+.language-desc {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+.toggle-checkbox {
+  display: none;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  font-size: 12px;
+  color: #666;
+}
+
+.toggle-text {
+  min-width: 45px;
+  text-align: center;
+  transition: color 0.3s ease;
+  line-height: 1;
+}
+
+.toggle:not(.active) .toggle-text:first-child {
+  color: hsl(119, 84%, 10%);
+  font-weight: 600;
+}
+
+.toggle:not(.active) .toggle-text:last-child {
+  color: #999;
+}
+
+.toggle.active .toggle-text:first-child {
+  color: #999;
+}
+
+.toggle.active .toggle-text:last-child {
+  color: hsl(119, 84%, 10%);
+  font-weight: 600;
+}
+
+.toggle__switch {
+  --bg-toggle: hsl(0, 0%, 95%);
+  --bg-circle: hsl(119, 84%, 10%);
+  --w-toggle-switch: 120px;
+  --w-h-toggle-circle: 28px;
+  --pd-toggle-switch: 0.4rem;
+  height: 44px;
+  width: var(--w-toggle-switch);
+  background-color: var(--bg-toggle);
+  border-radius: 4rem;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--pd-toggle-switch);
+  cursor: pointer;
+  transition: background-color 500ms;
+  border: 1px solid #e0e0e0;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.toggle__circle {
+  width: var(--w-h-toggle-circle);
+  height: var(--w-h-toggle-circle);
+  background-color: var(--bg-circle);
+  border-radius: 50%;
+  transition: margin 400ms ease-in-out, background-color 1000ms;
+}
+
+.toggle.active .toggle__circle {
+  margin-left: calc(var(--w-toggle-switch) - (var(--pd-toggle-switch) * 2) - var(--w-h-toggle-circle));
+}
+
+.toggle.active .toggle__switch {
+  --bg-toggle: hsl(119, 84%, 10%);
+  --bg-circle: hsl(0, 0%, 96%);
+  box-shadow: 0 .3rem 5rem 0 hsla(96, 85%, 34%, 30%);
+  border-color: hsl(119, 84%, 10%);
 }
 
 </style>

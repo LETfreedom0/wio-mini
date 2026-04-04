@@ -9,15 +9,16 @@
       <view class="card stats-card" :class="{ 'warning-border': wioPercentage < targetPercentage, 'success-border': wioPercentage >= targetPercentage }">
         <view class="card-header">
           <view class="card-title-row">
-            <text class="card-title">月度 WIO</text>
-            <view v-if="stats.totalOvertime > 0" class="tag overtime-tag">OT {{ stats.totalOvertime }}h</view>
+            <text class="card-title">{{ i18n.calendar.monthlyWio }}</text>
+            <view v-if="stats.companyDays > 0" class="tag office-tag">{{ i18n.calendar.legends.company }} {{ stats.companyDays }}d</view>
+            <view v-if="stats.totalOvertime > 0" class="tag overtime-tag">{{ i18n.calendar.ot }} {{ stats.totalOvertime }}h</view>
           </view>
           <text class="percentage" :class="{ 'red-text': wioPercentage < targetPercentage, 'green-text': wioPercentage >= targetPercentage }">
             {{ wioPercentage }}%
           </text>
         </view>
         
-        <text class="target-text">目标: {{ targetPercentage }}%</text>
+        <text class="target-text">{{ i18n.calendar.target }}: {{ targetPercentage }}%</text>
         
         <view class="progress-bar">
           <view class="progress-fill" 
@@ -25,14 +26,14 @@
           </view>
         </view>
         
-        <text class="warning-text" v-if="wioPercentage < targetPercentage">您的WIO百分比低于目标。</text>
-        <text class="success-text" v-else>您已达到WIO目标！</text>
+        <text class="warning-text" v-if="wioPercentage < targetPercentage">{{ i18n.calendar.warning }}</text>
+        <text class="success-text" v-else>{{ i18n.calendar.success }}</text>
       </view>
 
       <!-- Calendar Card -->
       <view class="card calendar-card">
         <view class="calendar-header">
-          <text class="month-year">{{ currentYear }}年{{ currentMonth }}月</text>
+          <text class="month-year">{{ monthYearText }}</text>
           <view class="nav-arrows">
             <view class="nav-btn" @click="changeMonth(-1)">
                <text class="arrow-icon">←</text>
@@ -44,41 +45,30 @@
         </view>
 
         <view class="weekdays">
-          <text v-for="day in weekdays" :key="day" class="weekday">{{ day }}</text>
+          <text v-for="(day, index) in weekdays" :key="index" class="weekday">{{ day }}</text>
         </view>
 
         <view class="days-grid">
-          <!-- Empty slots for days before 1st of month -->
           <view v-for="n in startEmptyDays" :key="'empty-'+n" class="day-cell empty"></view>
           
-          <!-- Days -->
           <view v-for="day in daysInMonth" :key="day" class="day-cell" @click="onDayClick(day)" @longpress="onDayLongPress(day)">
             <view class="day-content" :class="[getDayClass(day), { 'today-highlight': isToday(day) }]">
               <text class="day-number">{{ day }}</text>
               <view v-if="getOvertimeDisplay(day)" class="overtime-badge">{{ getOvertimeDisplay(day) }}</view>
-              <text v-if="getHolidayName(day)" class="holiday-text" :class="{'text-work': isHolidayWork(day)}">{{ getHolidayName(day) }}</text>
-              <view v-if="isHolidayWork(day)" class="work-badge">班</view>
+              <text v-if="getHolidayName(day)" class="holiday-text" :class="{'text-work': isHolidayWork(day), 'english': settings.language === 'en-US'}">{{ getHolidayDisplayName(day) }}</text>
+              <view v-if="isHolidayWork(day)" class="work-badge">{{ i18n.calendar.workBadge }}</view>
             </view>
           </view>
         </view>
       </view>
 
-      <!-- Clear Modal (Simple simulation or just toast/confirm?) 
-           Actually, double click is hard to detect natively in some frameworks without a library,
-           but 'longpress' is standard. User asked for "Double Click", but on mobile/touch, 
-           longpress is often better or we can implement a custom double tap.
-           Let's try to implement a simple double tap logic in onDayClick or just use longpress as alternative if double tap is tricky.
-           Wait, standard uniapp/vue has no @dblclick for mobile easily.
-           Let's implement manual double tap detection.
-      -->
-
       <!-- Legend Card -->
       <view class="card legend-card">
         <view class="legend-header">
-          <text class="legend-title">图例 (点击选择后标记日历)</text>
+          <text class="legend-title">{{ i18n.calendar.legendTitle }}</text>
           <view class="clear-btn-header" @click="selectLegend({ value: 'clear' })" :class="{ active: selectedStatus === 'clear' }">
             <view class="legend-dot dashed"></view>
-            <text class="legend-label">清除</text>
+            <text class="legend-label">{{ i18n.calendar.legends.clear }}</text>
           </view>
         </view>
         
@@ -92,12 +82,12 @@
 
     </view>
     
-    <!-- Overtime Modal - Moved outside .content to avoid stacking context issues -->
+    <!-- Overtime Modal -->
     <view class="modal-overlay" v-if="showOvertimeModal" @click="closeOvertimeModal">
       <view class="modal-content" @click.stop>
         <view class="modal-close-btn" @click="closeOvertimeModal">×</view>
         <view class="modal-header">
-          <text class="modal-title">加班时长</text>
+          <text class="modal-title">{{ i18n.calendar.overtime }}</text>
           <text class="modal-subtitle">{{ currentOvertimeDateStr }}</text>
         </view>
         
@@ -107,7 +97,7 @@
           </view>
           <view class="stepper-value">
             <text class="value-text">{{ overtimeValue }}</text>
-            <text class="unit-text">小时</text>
+            <text class="unit-text">{{ i18n.common.hour }}</text>
           </view>
           <view class="stepper-btn plus" @click="changeOvertime(0.5)" :class="{ disabled: overtimeValue >= 12 }">
             <text class="stepper-icon">+</text>
@@ -124,6 +114,17 @@
 import CustomHeader from '@/components/CustomHeader.vue'
 import CustomTabBar from '@/components/CustomTabBar.vue'
 import wioService from '@/utils/wioService.js'
+import { locales, t } from '@/utils/locales.js'
+
+const holidayNameMap = {
+  '元旦': 'New Year\'s',
+  '春节': 'Spring Fest',
+  '清明节': 'Qingming',
+  '劳动节': 'Labor Day',
+  '端午节': 'Dragon Boat',
+  '中秋节': 'Mid-Autumn',
+  '国庆节': 'National Day'
+};
 
 export default {
   components: {
@@ -132,22 +133,9 @@ export default {
   },
   data() {
     return {
-      weekdays: ['日', '一', '二', '三', '四', '五', '六'],
-      legends: [
-        { label: '公司办公', color: 'green', value: 'company' },
-        { label: '居家办公', color: 'blue', value: 'home' },
-        { label: '休年假', color: 'orange', value: 'vacation' },
-        { label: '调休', color: 'cyan', value: 'comp_off' },
-        { label: '休病假', color: 'purple', value: 'sick' },
-        { label: '无薪假', color: 'gray', value: 'unpaid' },
-        { label: '公共假期', color: 'red', value: 'public' },
-        { label: '记录加班', color: 'purple-ot', value: 'overtime_record' },
-        { label: '不统计WIO', color: 'exclude', value: 'exclude_wio' },
-        { label: '清除', color: 'dashed', value: 'clear' },
-      ],
       currentDate: new Date(),
       entries: {},
-      overtimeEntries: {}, // New: Store overtime data
+      overtimeEntries: {},
       settings: {},
       stats: { 
         companyDays: 0, 
@@ -165,14 +153,41 @@ export default {
       selectedStatus: null,
       lastClickTime: 0,
       lastClickDay: null,
-      
-      // Overtime Modal
       showOvertimeModal: false,
       overtimeValue: 0,
       currentOvertimeDateStr: ''
     }
   },
   computed: {
+    i18n() {
+      return locales[this.settings.language] || locales['zh-CN'];
+    },
+    weekdays() {
+      return this.i18n.calendar.weekdays;
+    },
+    legends() {
+      const lang = this.settings.language || 'zh-CN';
+      return [
+        { label: t('calendar.legends.company', lang), color: 'green', value: 'company' },
+        { label: t('calendar.legends.home', lang), color: 'blue', value: 'home' },
+        { label: t('calendar.legends.vacation', lang), color: 'orange', value: 'vacation' },
+        { label: t('calendar.legends.comp_off', lang), color: 'cyan', value: 'comp_off' },
+        { label: t('calendar.legends.sick', lang), color: 'purple', value: 'sick' },
+        { label: t('calendar.legends.unpaid', lang), color: 'gray', value: 'unpaid' },
+        { label: t('calendar.legends.public', lang), color: 'red', value: 'public' },
+        { label: t('calendar.legends.overtime_record', lang), color: 'purple-ot', value: 'overtime_record' },
+        { label: t('calendar.legends.exclude_wio', lang), color: 'exclude', value: 'exclude_wio' },
+        { label: t('calendar.legends.clear', lang), color: 'dashed', value: 'clear' },
+      ];
+    },
+    monthYearText() {
+      if (this.settings.language === 'en-US') {
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+        return `${months[this.currentMonth - 1]} ${this.currentYear}`;
+      }
+      return `${this.currentYear}年${this.currentMonth}月`;
+    },
     currentYear() {
       return this.currentDate.getFullYear();
     },
@@ -189,21 +204,14 @@ export default {
       return this.settings.targetPercentage || 40;
     },
     wioPercentage() {
-      // WIO = Days in Office / (Total Working Days - Annual Leave - Sick Leave - Unpaid Leave - Compensatory Leave - Excluded Days)
-      // Note: workingDays already excludes weekends and public holidays based on isOfficialWorkingDay logic.
-      
       const numerator = this.stats.companyDays;
       
-      // Calculate total deductible days from the stats
       const totalDeductible = this.stats.vacationDays 
                             + this.stats.sickDays 
                             + this.stats.unpaidDays 
                             + this.stats.compOffDays
                             + this.stats.excludeWioDays;
                             
-      // We must add back any leaves that occurred on weekends/holidays (stats.weekendLeaves)
-      // because they were counted in the totals above, but should NOT reduce the denominator
-      // (since workingDays didn't include them in the first place).
       const effectiveDeductible = totalDeductible - (this.stats.weekendLeaves || 0);
 
       const denominator = this.stats.workingDays - effectiveDeductible;
@@ -213,10 +221,6 @@ export default {
       return Math.round((numerator / denominator) * 100);
     },
     filteredLegends() {
-      // User specified order:
-      // Row 1: Company, Home, Vacation
-      // Row 2: Sick, OT, Public
-      // Row 3: Comp Off, Unpaid, Exclude
       const order = [
         'company', 'home', 'vacation',
         'sick', 'overtime_record', 'public',
@@ -227,14 +231,18 @@ export default {
     }
   },
   onShareAppMessage(res) {
-    const title = `本月回公司率: ${this.wioPercentage}% - WIO 达标了吗`;
+    const title = this.settings.language === 'en-US' 
+      ? `This month's office rate: ${this.wioPercentage}% - Did you reach WIO target?`
+      : `本月回公司率: ${this.wioPercentage}% - WIO 达标了吗`;
     return {
       title: title,
       path: '/pages/index/index'
     }
   },
   onShareTimeline(res) {
-    const title = `本月回公司率: ${this.wioPercentage}% - WIO 达标了吗`;
+    const title = this.settings.language === 'en-US' 
+      ? `This month's office rate: ${this.wioPercentage}% - Did you reach WIO target?`
+      : `本月回公司率: ${this.wioPercentage}% - WIO 达标了吗`;
     return {
       title: title
     }
@@ -266,7 +274,6 @@ export default {
              now.getFullYear() === this.currentDate.getFullYear();
     },
     selectLegend(item) {
-      // Add haptic feedback
       uni.vibrateShort({
         success: function () {
             console.log('success');
@@ -276,36 +283,30 @@ export default {
       this.selectedStatus = item.value;
       if (item.value === 'clear') {
         uni.showToast({
-            title: '请点击日期清除状态',
+            title: t('calendar.clickToClear', this.settings.language),
             icon: 'none',
             duration: 1500
         });
       }
     },
     onDayClick(day) {
-      // 震动反馈
       uni.vibrateShort();
-
       const currentTime = new Date().getTime();
       const dateStr = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-      // Double click detection (within 300ms)
       if (this.lastClickDay === day && (currentTime - this.lastClickTime) < 300) {
-        // Double click detected: Clear status
         wioService.saveEntry(dateStr, null);
-        uni.vibrateShort(); // Feedback
+        uni.vibrateShort();
         this.loadData();
         this.lastClickTime = 0;
         this.lastClickDay = null;
         return;
       }
 
-      // Update last click info
       this.lastClickTime = currentTime;
       this.lastClickDay = day;
 
       if (!this.selectedStatus) {
-        // Optional: show detail or do nothing
         return;
       }
 
@@ -313,8 +314,6 @@ export default {
         wioService.saveEntry(dateStr, null);
       } else if (this.selectedStatus === 'overtime_record') {
         console.log('Opening overtime modal for', dateStr);
-        
-        // Open Overtime Modal
         this.currentOvertimeDateStr = dateStr;
         try {
           const existing = wioService.getOvertimeForDate(dateStr);
@@ -324,29 +323,25 @@ export default {
           this.overtimeValue = 0;
         }
         this.showOvertimeModal = true;
-        // Force update just in case
         this.$forceUpdate(); 
         console.log('Modal state set to true');
-        return; // Don't reload data yet, wait for modal save
+        return;
       } else {
         wioService.saveEntry(dateStr, this.selectedStatus);
       }
       
-      // Refresh local data
       this.loadData();
     },
     changeOvertime(delta) {
       console.log('changeOvertime called', delta, 'current:', this.overtimeValue);
       let newVal = this.overtimeValue + delta;
       
-      // Constraints
       if (newVal < 0) newVal = 0;
       if (newVal > 12) newVal = 12;
       
-      this.overtimeValue = parseFloat(newVal.toFixed(1)); // Fix float precision
+      this.overtimeValue = parseFloat(newVal.toFixed(1));
       console.log('new overtimeValue:', this.overtimeValue);
       
-      // Auto save on change
       this.saveOvertime();
       uni.vibrateShort();
     },
@@ -355,13 +350,10 @@ export default {
       if (hours > 0) {
         wioService.saveOvertimeEntry(this.currentOvertimeDateStr, hours);
       } else {
-        // If 0, remove entry
         wioService.saveOvertimeEntry(this.currentOvertimeDateStr, 0);
       }
-      // Force update data to reflect changes immediately
-      // Using Object.assign to trigger reactivity or re-assigning the whole object
       this.entries = wioService.getEntries();
-      this.overtimeEntries = { ...wioService.getOvertimeEntries() }; // Create new reference
+      this.overtimeEntries = { ...wioService.getOvertimeEntries() };
       this.updateStats();
       this.$forceUpdate();
     },
@@ -375,7 +367,6 @@ export default {
       return val ? `${val}` : '';
     },
     onDayLongPress(day) {
-       // Alternative: Long press to clear
        const dateStr = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
        wioService.saveEntry(dateStr, null);
        uni.vibrateShort();
@@ -389,6 +380,13 @@ export default {
       const info = this.getHolidayInfo(day);
       return info ? info.name : '';
     },
+    getHolidayDisplayName(day) {
+      const name = this.getHolidayName(day);
+      if (this.settings.language === 'en-US') {
+        return holidayNameMap[name] || name;
+      }
+      return name;
+    },
     isHolidayWork(day) {
       const info = this.getHolidayInfo(day);
       return info ? !info.isOffDay : false;
@@ -397,9 +395,6 @@ export default {
       const dateStr = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const status = this.entries[dateStr];
       
-      // Removed direct 'today' return to allow status colors to show underneath
-      // if (this.isToday(day)) return 'today';
-
       if (status === 'company') return 'company-office';
       if (status === 'home') return 'home-office';
       if (status === 'vacation') return 'status-vacation';
@@ -409,7 +404,6 @@ export default {
       if (status === 'public') return 'status-public';
       if (status === 'exclude_wio') return 'status-exclude-wio';
       
-      // Check for public holiday if no manual status
       if (!status) {
         const holiday = this.getHolidayInfo(day);
         if (holiday && holiday.isOffDay) {
@@ -417,10 +411,8 @@ export default {
         }
       }
       
-      // Simple logic for weekends (if no status)
       const dayOfWeek = new Date(this.currentYear, this.currentMonth - 1, day).getDay();
       if ((dayOfWeek === 0 || dayOfWeek === 6) && !status) {
-         // return 'public-holiday'; // Maybe don't mark weekends as holiday by default unless specified
       }
 
       return '';
@@ -433,14 +425,12 @@ export default {
 .container {
   min-height: 100vh;
   background-color: #F8F9FA;
-  padding-bottom: calc(20px + 50px + env(safe-area-inset-bottom)); /* 20px padding + 50px tabbar + safe area */
+  padding-bottom: calc(20px + 50px + env(safe-area-inset-bottom));
 }
 
 .content {
   padding: 15px;
 }
-
-
 
 .card {
   background-color: #fff;
@@ -451,10 +441,9 @@ export default {
   border: 1px solid #eee;
 }
 
-/* Stats Card - More Compact */
 .stats-card {
   border: 1px solid #eee;
-  padding: 10px 12px; /* Reduced padding */
+  padding: 10px 12px;
 }
 
 .stats-card.warning-border {
@@ -477,6 +466,9 @@ export default {
 .card-title-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
 }
 
 .card-title {
@@ -494,9 +486,16 @@ export default {
 }
 
 .overtime-tag {
-  background-color: #EDE7F6; /* Deep Purple 50 */
-  color: #673AB7; /* Deep Purple 500 */
+  background-color: #EDE7F6;
+  color: #673AB7;
   border: 1px solid #D1C4E9;
+  font-weight: 600;
+}
+
+.office-tag {
+  background-color: #E3F2FD;
+  color: #1976D2;
+  border: 1px solid #BBDEFB;
   font-weight: 600;
 }
 
@@ -543,7 +542,6 @@ export default {
   margin-top: 2px;
 }
 
-/* Calendar Card */
 .calendar-header {
   display: flex;
   justify-content: space-between;
@@ -603,7 +601,7 @@ export default {
 
 .day-cell {
   width: 14.28%;
-  height: 48px; /* Increased from 40px */
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -611,16 +609,16 @@ export default {
 }
 
 .day-content {
-  width: 42px; /* Increased from 36px */
-  height: 42px; /* Increased from 36px */
+  width: 42px;
+  height: 42px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-radius: 10px; /* Increased radius */
-  font-size: 16px; /* Increased from 14px */
+  border-radius: 10px;
+  font-size: 16px;
   color: #333;
-  transition: all 0.2s; /* Smooth press effect */
+  transition: all 0.2s;
   position: relative;
 }
 
@@ -632,11 +630,22 @@ export default {
   font-size: 8px;
   line-height: 1;
   margin-top: 2px;
-  color: #c62828; /* Default red for holiday name */
+  color: #c62828;
+  max-width: 36px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .holiday-text.text-work {
-  color: #333; /* Dark color for work day holiday name */
+  color: #333;
+}
+
+/* English holiday text optimization */
+.holiday-text.english {
+  font-size: 7px;
+  letter-spacing: -0.5px;
+  max-width: 32px;
 }
 
 .work-badge {
@@ -655,36 +664,46 @@ export default {
   transform: scale(0.9);
 }
 
-/* Day Classes */
 .public-holiday { background-color: #FFCDD2; color: #C62828; }
 .home-office { background-color: #BBDEFB; color: #1565C0; }
 .company-office { background-color: #C8E6C9; color: #2E7D32; }
 
-/* Today Highlight Style */
 .today-highlight {
   position: relative;
   font-weight: bold;
+  animation: pulse 2s infinite;
 }
 
-/* Add a blue dot indicator for Today */
 .today-highlight::after {
   content: '';
   position: absolute;
   bottom: 2px;
-  width: 4px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
   background-color: #1976D2;
   border-radius: 50%;
+  box-shadow: 0 0 4px rgba(25, 118, 210, 0.5);
 }
 
-/* If no status background, give today a subtle blue background */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(25, 118, 210, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(25, 118, 210, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(25, 118, 210, 0);
+  }
+}
+
 .today-highlight:not(.company-office):not(.home-office):not(.status-vacation):not(.status-comp-off):not(.status-sick):not(.status-unpaid):not(.status-public) {
   background-color: #E3F2FD;
   color: #1976D2;
-  border: 1px solid #1976D2;
+  border: 2px solid #1976D2;
+  border-radius: 12px;
 }
 
-/* If it HAS a status background, add a blue border to indicate today */
 .today-highlight.company-office,
 .today-highlight.home-office,
 .today-highlight.status-vacation,
@@ -692,26 +711,11 @@ export default {
 .today-highlight.status-sick,
 .today-highlight.status-unpaid,
 .today-highlight.status-public {
-  border: 2px solid #1976D2; /* Stronger border for visibility */
-}
-
-/* Remove old today styles */
-/* .today {
-  border: 1px solid #1976D2;
-  color: #1976D2;
-}
-
-.today-text {
-  font-size: 12px;
-  color: #1976D2;
-  border: 1px solid #1976D2;
+  border: 3px solid #1976D2;
   border-radius: 12px;
-  padding: 2px 6px;
-  width: auto;
-  height: auto;
-} */
+  box-shadow: 0 0 8px rgba(25, 118, 210, 0.3);
+}
 
-/* Legend Card */
 .legend-header {
   display: flex;
   align-items: center;
@@ -767,21 +771,20 @@ export default {
 }
 
 .legend-item {
-  width: calc(33.33% - 5px); /* 3 columns */
+  width: calc(33.33% - 5px);
   display: flex;
-  flex-direction: row; /* Horizontal layout: dot left, text right */
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  padding: 4px 2px; /* Even smaller vertical padding */
+  padding: 4px 2px;
   background-color: #F5F7FA;
   border: 1px solid #EAEAEA;
   border-radius: 6px;
   box-sizing: border-box;
   transition: all 0.2s ease;
-  height: 28px; /* Fixed small height */
+  height: 28px;
 }
 
-/* Highlight Primary Items (First 6 items - first 2 rows) */
 .legend-item:nth-child(-n+6) {
   background-color: #ffffff;
   border-color: #d1d9e6;
@@ -815,8 +818,8 @@ export default {
   width: 8px; 
   height: 8px;
   border-radius: 50%;
-  margin-right: 4px; /* Space between dot and text */
-  margin-bottom: 0; /* No bottom margin */
+  margin-right: 4px;
+  margin-bottom: 0;
   flex-shrink: 0;
 }
 
@@ -824,7 +827,7 @@ export default {
   font-size: 10px; 
   color: #666; 
   font-weight: 500;
-  text-align: left; /* Align left */
+  text-align: left;
   line-height: 1;
   white-space: nowrap; 
 }
@@ -853,14 +856,13 @@ export default {
   background-color: #EDE7F6;
   color: #673AB7;
   font-size: 9px;
-  padding: 2px 4px 2px 2px; /* Top Right Bottom Left */
-  border-radius: 10px 0 6px 0; /* TopLeft TopRight BottomRight BottomLeft - Curve top-left and bottom-right for a smooth corner look */
+  padding: 2px 4px 2px 2px;
+  border-radius: 10px 0 6px 0;
   z-index: 2;
   font-weight: bold;
   line-height: 1;
 }
 
-/* Modal Styles */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -871,7 +873,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999; /* Increased z-index */
+  z-index: 9999;
 }
 
 .modal-content {
@@ -900,7 +902,6 @@ export default {
   color: #999;
 }
 
-/* Stepper Styles */
 .stepper-container {
   display: flex;
   align-items: center;
@@ -966,45 +967,15 @@ export default {
   color: #999;
 }
 
-.modal-actions.single-action {
-  justify-content: center;
-}
-
-.modal-actions.single-action .modal-btn {
-  flex: none;
-  width: 100%;
-}
-
-.modal-btn {
-  flex: 1;
-  height: 40px;
-  line-height: 40px;
-  text-align: center;
-  border-radius: 8px;
-  font-size: 16px;
-  margin: 0 5px;
-}
-
-.modal-btn.cancel {
-  background-color: #f5f5f5;
-  color: #666;
-}
-
-.modal-btn.confirm {
-  background-color: #007AFF;
-  color: #fff;
-}
-
 .legend-item.active {
   background-color: #FFFFFF;
   border-radius: 8px;
-  border: 1px solid #007AFF; /* Ensure border exists */
+  border: 1px solid #007AFF;
   box-shadow: 0 2px 8px rgba(0, 122, 255, 0.15);
   position: relative;
   z-index: 1;
 }
 
-/* Additional Status Classes */
 .status-vacation { background-color: #FFE0B2; color: #EF6C00; }
 .status-comp-off { background-color: #B2EBF2; color: #006064; }
 .status-sick { background-color: #E1BEE7; color: #4A148C; }
