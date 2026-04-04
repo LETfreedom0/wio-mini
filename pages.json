@@ -33,20 +33,20 @@
 		"list": [
 			{
 				"pagePath": "pages/index/index",
-				"iconPath": "static/logo.png",
-				"selectedIconPath": "static/logo.png",
+				"iconPath": "static/tab-icon.png",
+				"selectedIconPath": "static/tab-icon.png",
 				"text": "首页"
 			},
 			{
 				"pagePath": "pages/calendar/index",
-				"iconPath": "static/logo.png",
-				"selectedIconPath": "static/logo.png",
+				"iconPath": "static/tab-icon.png",
+				"selectedIconPath": "static/tab-icon.png",
 				"text": "日历"
 			},
 			{
 				"pagePath": "pages/profile/index",
-				"iconPath": "static/logo.png",
-				"selectedIconPath": "static/logo.png",
+				"iconPath": "static/tab-icon.png",
+				"selectedIconPath": "static/tab-icon.png",
 				"text": "我的"
 			}
 		]

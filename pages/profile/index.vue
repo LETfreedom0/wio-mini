@@ -19,6 +19,17 @@ export default {
     CustomHeader,
     ProfileView,
     CustomTabBar
+  },
+  onShareAppMessage(res) {
+    return {
+      title: 'WIO 达标了吗 - 实时追踪回公司办公达标率',
+      path: '/pages/index/index'
+    }
+  },
+  onShareTimeline(res) {
+    return {
+      title: 'WIO 达标了吗 - 实时追踪回公司办公达标率'
+    }
   }
 }
 </script>

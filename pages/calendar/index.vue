@@ -10,7 +10,7 @@
         <view class="card-header">
           <view class="card-title-row">
             <text class="card-title">月度 WIO</text>
-            <view class="tag purple" v-if="stats.totalOvertime > 0">加班 {{ stats.totalOvertime }}h</view>
+            <view v-if="stats.totalOvertime > 0" class="tag overtime-tag">OT {{ stats.totalOvertime }}h</view>
           </view>
           <text class="percentage" :class="{ 'red-text': wioPercentage < targetPercentage, 'green-text': wioPercentage >= targetPercentage }">
             {{ wioPercentage }}%
@@ -76,10 +76,14 @@
       <view class="card legend-card">
         <view class="legend-header">
           <text class="legend-title">图例 (点击选择后标记日历)</text>
+          <view class="clear-btn-header" @click="selectLegend({ value: 'clear' })" :class="{ active: selectedStatus === 'clear' }">
+            <view class="legend-dot dashed"></view>
+            <text class="legend-label">清除</text>
+          </view>
         </view>
         
         <view class="legend-grid">
-          <view class="legend-item" v-for="(item, index) in legends" :key="index" @click="selectLegend(item)" :class="{ active: selectedStatus === item.value }">
+          <view class="legend-item" v-for="(item, index) in filteredLegends" :key="index" @click="selectLegend(item)" :class="{ active: selectedStatus === item.value }">
             <view class="legend-dot" :class="item.color"></view>
             <text class="legend-label">{{ item.label }}</text>
           </view>
@@ -137,8 +141,9 @@ export default {
         { label: '休病假', color: 'purple', value: 'sick' },
         { label: '无薪假', color: 'gray', value: 'unpaid' },
         { label: '公共假期', color: 'red', value: 'public' },
+        { label: '记录加班', color: 'purple-ot', value: 'overtime_record' },
+        { label: '不统计WIO', color: 'exclude', value: 'exclude_wio' },
         { label: '清除', color: 'dashed', value: 'clear' },
-        { label: '记录加班', color: 'red-dot', value: 'overtime_record' },
       ],
       currentDate: new Date(),
       entries: {},
@@ -152,6 +157,7 @@ export default {
         unpaidDays: 0,
         compOffDays: 0,
         publicDays: 0,
+        excludeWioDays: 0,
         totalRecorded: 0,
         workingDays: 0,
         totalOvertime: 0
@@ -183,20 +189,54 @@ export default {
       return this.settings.targetPercentage || 40;
     },
     wioPercentage() {
-      // WIO = Days in Office / (Total Working Days - WFH - Public Holidays - Annual Leave - Sick Leave - Unpaid Leave - Compensatory Leave)
+      // WIO = Days in Office / (Total Working Days - Annual Leave - Sick Leave - Unpaid Leave - Compensatory Leave - Excluded Days)
+      // Note: workingDays already excludes weekends and public holidays based on isOfficialWorkingDay logic.
+      
       const numerator = this.stats.companyDays;
       
-      const denominator = this.stats.workingDays 
-                        - this.stats.homeDays 
-                        - this.stats.publicDays 
-                        - this.stats.vacationDays 
-                        - this.stats.sickDays 
-                        - this.stats.unpaidDays 
-                        - this.stats.compOffDays;
+      // Calculate total deductible days from the stats
+      const totalDeductible = this.stats.vacationDays 
+                            + this.stats.sickDays 
+                            + this.stats.unpaidDays 
+                            + this.stats.compOffDays
+                            + this.stats.excludeWioDays;
+                            
+      // We must add back any leaves that occurred on weekends/holidays (stats.weekendLeaves)
+      // because they were counted in the totals above, but should NOT reduce the denominator
+      // (since workingDays didn't include them in the first place).
+      const effectiveDeductible = totalDeductible - (this.stats.weekendLeaves || 0);
+
+      const denominator = this.stats.workingDays - effectiveDeductible;
 
       if (denominator <= 0) return 0;
       
       return Math.round((numerator / denominator) * 100);
+    },
+    filteredLegends() {
+      // User specified order:
+      // Row 1: Company, Home, Vacation
+      // Row 2: Sick, OT, Public
+      // Row 3: Comp Off, Unpaid, Exclude
+      const order = [
+        'company', 'home', 'vacation',
+        'sick', 'overtime_record', 'public',
+        'comp_off', 'unpaid', 'exclude_wio'
+      ];
+      
+      return order.map(key => this.legends.find(item => item.value === key)).filter(Boolean);
+    }
+  },
+  onShareAppMessage(res) {
+    const title = `本月回公司率: ${this.wioPercentage}% - WIO 达标了吗`;
+    return {
+      title: title,
+      path: '/pages/index/index'
+    }
+  },
+  onShareTimeline(res) {
+    const title = `本月回公司率: ${this.wioPercentage}% - WIO 达标了吗`;
+    return {
+      title: title
     }
   },
   onShow() {
@@ -213,6 +253,7 @@ export default {
       this.stats = wioService.getMonthStats(this.currentYear, this.currentMonth);
     },
     changeMonth(delta) {
+      uni.vibrateShort();
       const newDate = new Date(this.currentDate);
       newDate.setMonth(newDate.getMonth() + delta);
       this.currentDate = newDate;
@@ -225,13 +266,26 @@ export default {
              now.getFullYear() === this.currentDate.getFullYear();
     },
     selectLegend(item) {
-      if (this.selectedStatus === item.value) {
-        this.selectedStatus = null;
-      } else {
-        this.selectedStatus = item.value;
+      // Add haptic feedback
+      uni.vibrateShort({
+        success: function () {
+            console.log('success');
+        }
+      });
+      
+      this.selectedStatus = item.value;
+      if (item.value === 'clear') {
+        uni.showToast({
+            title: '请点击日期清除状态',
+            icon: 'none',
+            duration: 1500
+        });
       }
     },
     onDayClick(day) {
+      // 震动反馈
+      uni.vibrateShort();
+
       const currentTime = new Date().getTime();
       const dateStr = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
@@ -353,6 +407,7 @@ export default {
       if (status === 'sick') return 'status-sick';
       if (status === 'unpaid') return 'status-unpaid';
       if (status === 'public') return 'status-public';
+      if (status === 'exclude_wio') return 'status-exclude-wio';
       
       // Check for public holiday if no manual status
       if (!status) {
@@ -396,9 +451,10 @@ export default {
   border: 1px solid #eee;
 }
 
-/* Stats Card */
+/* Stats Card - More Compact */
 .stats-card {
   border: 1px solid #eee;
+  padding: 10px 12px; /* Reduced padding */
 }
 
 .stats-card.warning-border {
@@ -414,8 +470,8 @@ export default {
 .card-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 10px;
+  align-items: center;
+  margin-bottom: 4px;
 }
 
 .card-title-row {
@@ -424,23 +480,31 @@ export default {
 }
 
 .card-title {
-  font-size: 18px;
-  font-weight: bold;
-  margin-right: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-right: 8px;
+  color: #333;
 }
 
 .tag {
-  padding: 2px 6px;
+  padding: 1px 4px;
   border-radius: 4px;
-  font-size: 12px;
-  margin-right: 5px;
+  font-size: 10px;
+  margin-right: 4px;
+}
+
+.overtime-tag {
+  background-color: #EDE7F6; /* Deep Purple 50 */
+  color: #673AB7; /* Deep Purple 500 */
+  border: 1px solid #D1C4E9;
+  font-weight: 600;
 }
 
 .tag.purple { background-color: #F3E5F5; color: #7B1FA2; }
 .tag.blue { background-color: #E3F2FD; color: #1976D2; }
 
 .percentage {
-  font-size: 24px;
+  font-size: 32px;
   font-weight: bold;
 }
 
@@ -448,17 +512,17 @@ export default {
 .percentage.green-text { color: #4CAF50; }
 
 .target-text {
-  font-size: 14px;
+  font-size: 11px;
   color: #666;
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 
 .progress-bar {
-  height: 8px;
+  height: 6px;
   background-color: #E0E0E0;
-  border-radius: 4px;
-  margin-bottom: 10px;
+  border-radius: 3px;
+  margin-bottom: 6px;
   overflow: hidden;
 }
 
@@ -468,13 +532,15 @@ export default {
 }
 
 .warning-text {
-  font-size: 12px;
-  color: #D32F2F;
+  font-size: 11px;
+  color: #F44336;
+  margin-top: 2px;
 }
 
 .success-text {
-  font-size: 12px;
+  font-size: 11px;
   color: #4CAF50;
+  margin-top: 2px;
 }
 
 /* Calendar Card */
@@ -649,37 +715,123 @@ export default {
 .legend-header {
   display: flex;
   align-items: center;
-  margin-bottom: 10px;
+  justify-content: space-between; 
+  margin-bottom: 8px; 
+  padding-bottom: 6px; 
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .legend-title {
-  font-size: 16px;
-  font-weight: bold;
-  margin-right: 5px;
+  font-size: 14px; 
+  font-weight: 600;
+  color: #333;
+}
+
+.clear-btn-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  background-color: #F5F7FA;
+  border: 1px solid #EAEAEA;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.clear-btn-header:active {
+  transform: scale(0.96);
+  background-color: #EBEEF5;
+}
+
+.clear-btn-header.active {
+  background-color: #FFFFFF;
+  border-color: #007AFF;
+  box-shadow: 0 2px 6px rgba(0, 122, 255, 0.15);
+}
+
+.clear-btn-header .legend-dot {
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  margin-bottom: 0;
+}
+
+.clear-btn-header .legend-label {
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .legend-grid {
   display: flex;
   flex-wrap: wrap;
+  gap: 6px; 
 }
 
 .legend-item {
-  width: 25%; /* 4 columns */
+  width: calc(33.33% - 5px); /* 3 columns */
   display: flex;
+  flex-direction: row; /* Horizontal layout: dot left, text right */
   align-items: center;
-  margin-bottom: 10px;
+  justify-content: center;
+  padding: 4px 2px; /* Even smaller vertical padding */
+  background-color: #F5F7FA;
+  border: 1px solid #EAEAEA;
+  border-radius: 6px;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+  height: 28px; /* Fixed small height */
+}
+
+/* Highlight Primary Items (First 6 items - first 2 rows) */
+.legend-item:nth-child(-n+6) {
+  background-color: #ffffff;
+  border-color: #d1d9e6;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.legend-item:nth-child(-n+6) .legend-label {
+  font-weight: 600;
+  color: #333;
+}
+
+.legend-item:active {
+  transform: scale(0.96);
+  background-color: #EBEEF5;
+}
+
+.legend-item.active {
+  background-color: #FFFFFF;
+  border-radius: 6px;
+  border: 1px solid #007AFF !important; 
+  box-shadow: 0 2px 6px rgba(0, 122, 255, 0.15);
+  position: relative;
+  z-index: 1;
+}
+
+.legend-item.active .legend-label {
+  color: #007AFF;
 }
 
 .legend-dot {
-  width: 12px;
-  height: 12px;
+  width: 8px; 
+  height: 8px;
   border-radius: 50%;
-  margin-right: 5px;
+  margin-right: 4px; /* Space between dot and text */
+  margin-bottom: 0; /* No bottom margin */
+  flex-shrink: 0;
 }
 
 .legend-label {
-  font-size: 12px;
-  color: #333;
+  font-size: 10px; 
+  color: #666; 
+  font-weight: 500;
+  text-align: left; /* Align left */
+  line-height: 1;
+  white-space: nowrap; 
+}
+
+.legend-item.active .legend-label {
+  color: #007AFF;
+  font-weight: 600;
 }
 
 .legend-dot.green { background-color: #C8E6C9; border: 1px solid #2E7D32; }
@@ -690,21 +842,21 @@ export default {
 .legend-dot.gray { background-color: #E0E0E0; border: 1px solid #9E9E9E; }
 .legend-dot.red { background-color: #FFCDD2; border: 1px solid #C62828; }
 .legend-dot.dashed { border: 1px dashed #999; background-color: transparent; }
-.legend-dot.red-dot { background-color: #F44336; border: 1px solid #D32F2F; }
+.legend-dot.purple-ot { background-color: #EDE7F6; border: 1px solid #673AB7; }
+.legend-dot.exclude { background-color: #ECEFF1; border: 1px dashed #607D8B; }
 
 .overtime-badge {
   position: absolute;
-  top: 2px;
-  left: 2px;
+  top: 0;
+  left: 0;
   right: auto;
-  background-color: transparent;
-  color: #F44336;
-  font-size: 10px;
-  padding: 0;
-  border-radius: 0;
+  background-color: #EDE7F6;
+  color: #673AB7;
+  font-size: 9px;
+  padding: 2px 4px 2px 2px; /* Top Right Bottom Left */
+  border-radius: 10px 0 6px 0; /* TopLeft TopRight BottomRight BottomLeft - Curve top-left and bottom-right for a smooth corner look */
   z-index: 2;
   font-weight: bold;
-  box-shadow: none;
   line-height: 1;
 }
 
@@ -844,9 +996,12 @@ export default {
 }
 
 .legend-item.active {
-  background-color: #F5F5F5;
+  background-color: #FFFFFF;
   border-radius: 8px;
-  border: 1px solid #ddd;
+  border: 1px solid #007AFF; /* Ensure border exists */
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.15);
+  position: relative;
+  z-index: 1;
 }
 
 /* Additional Status Classes */
@@ -855,4 +1010,5 @@ export default {
 .status-sick { background-color: #E1BEE7; color: #4A148C; }
 .status-unpaid { background-color: #F5F5F5; color: #616161; border: 1px dashed #9E9E9E; }
 .status-public { background-color: #FFCDD2; color: #B71C1C; }
+.status-exclude-wio { background-color: #ECEFF1; color: #607D8B; border: 1px dashed #90A4AE; }
 </style>

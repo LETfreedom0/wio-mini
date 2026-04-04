@@ -62,6 +62,35 @@
         <text class="card-desc">今年已使用 {{ yearStats.sickDaysUsed }} 天</text>
       </view>
 
+      <!-- Comp Off Settings Card -->
+      <view class="settings-card">
+        <view class="card-header">
+          <text class="card-title">📅 调休配置</text>
+        </view>
+        
+        <text class="section-hint">点击卡片切换状态 (蓝色表示补班算工作日)</text>
+
+        <scroll-view class="holiday-scroll" scroll-x="true" show-scrollbar="false">
+          <view class="holiday-row">
+            <view 
+              class="holiday-item" 
+              v-for="item in holidayList" 
+              :key="item.name"
+              :class="{ 'active-comp-off': getCompOffStatus(item.name), disabled: !item.hasCompOff }"
+              @click="toggleCompOff(item)"
+            >
+              <text class="holiday-name">{{ item.name }}</text>
+              <view class="holiday-status-icon" v-if="getCompOffStatus(item.name)">✓</view>
+              <text class="no-comp-off-text" v-if="!item.hasCompOff">无补班</text>
+            </view>
+          </view>
+        </scroll-view>
+        
+        <view v-if="holidayList.length === 0" class="empty-hint">
+            <text>本年度无节日安排</text>
+        </view>
+      </view>
+
     </view>
   </scroll-view>
 </template>
@@ -83,11 +112,13 @@ export default {
         vacationDaysUsed: 0,
         sickDaysUsed: 0,
         totalOvertime: 0
-      }
+      },
+      holidayList: [] // 完整节日列表
     }
   },
   mounted() {
     this.loadSettings();
+    this.holidayList = wioService.getHolidayInfoList();
   },
   onShow() {
     // Reload when showing (in case changed elsewhere, though Profile is usually entry)
@@ -96,12 +127,36 @@ export default {
   methods: {
     loadSettings() {
       this.settings = wioService.getSettings();
+      // 确保 compOffRules 存在
+      if (!this.settings.compOffRules) {
+          this.settings.compOffRules = { '春节': true };
+      }
       const currentYear = new Date().getFullYear();
       this.yearStats = wioService.getYearStats(currentYear);
     },
     getUsagePercentage(used, total) {
       if (!total || total === 0) return 0;
       return Math.min(100, Math.round((used / total) * 100));
+    },
+    getCompOffStatus(name) {
+        return !!this.settings.compOffRules[name];
+    },
+    toggleCompOff(item) {
+        // 如果该节日没有调休安排，则不允许切换状态（或点击无效）
+        // 用户体验上，既然显示了“无补班”，最好点击无反应或提示
+        if (!item.hasCompOff) {
+            return;
+        }
+
+        // Toggle status
+        const name = item.name;
+        const current = this.getCompOffStatus(name);
+        this.settings.compOffRules[name] = !current;
+        
+        // Haptic feedback
+        uni.vibrateShort();
+        
+        this.save();
     },
     onSliderChange(e, key) {
       this.settings[key] = e.detail.value;
@@ -113,6 +168,7 @@ export default {
       // 震动反馈 (Taptic Engine) - 轻微震动
       uni.vibrateShort(); 
     },
+
     save() {
       wioService.saveSettings(this.settings);
       uni.showToast({
@@ -130,33 +186,33 @@ export default {
 }
 
 .content {
-  padding: 20px;
+  padding: 15px; /* 减少页面边距 */
   padding-bottom: 50px;
 }
 
 .settings-card {
   background-color: #fff;
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  border-radius: 12px; /* 减小圆角 */
+  padding: 15px; /* 减少卡片内边距 */
+  margin-bottom: 15px; /* 减少卡片间距 */
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05); /* 减弱阴影 */
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 10px; /* 减少标题下边距 */
 }
 
 .card-title {
-  font-size: 18px;
+  font-size: 16px; /* 减小标题字号 */
   font-weight: bold;
   color: #333;
 }
 
 .card-value {
-  font-size: 20px;
+  font-size: 18px; /* 减小数值字号 */
   font-weight: 800;
 }
 
@@ -206,5 +262,116 @@ slider {
 
 .usage-fill.orange-bg { background-color: #FF9800; }
 .usage-fill.purple-bg { background-color: #9C27B0; }
+
+.switch-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+}
+
+.switch-label-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.switch-label {
+  font-size: 16px;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.section-hint {
+  font-size: 11px; /* 减小提示文字 */
+  color: #999;
+  margin-bottom: 10px; /* 减少间距 */
+  display: block;
+}
+
+.holiday-scroll {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.holiday-row {
+  display: flex;
+  flex-direction: row;
+  padding-bottom: 4px; /* 防止滚动条遮挡 */
+}
+
+.holiday-item {
+  flex: 0 0 80px; /* 固定宽度，不随父容器伸缩 */
+  height: 44px; 
+  display: flex;
+  flex-direction: column; 
+  align-items: center;
+  justify-content: center;
+  background-color: #F5F7FA;
+  border-radius: 6px; 
+  border: 1px solid #EAEAEA;
+  position: relative;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  padding: 2px;
+  margin-right: 8px; /* 卡片之间的间距 */
+}
+
+/* 最后一个元素不需要右边距 */
+.holiday-item:last-child {
+  margin-right: 0;
+}
+
+.holiday-item:active {
+  transform: scale(0.96);
+}
+
+.holiday-item.active-comp-off {
+  background-color: #E3F2FD; /* Light Blue */
+  border-color: #007AFF;
+  color: #007AFF;
+  font-weight: 600;
+}
+
+.holiday-item.active-comp-off .holiday-name {
+  color: #007AFF;
+}
+
+.holiday-item.disabled {
+  opacity: 0.6;
+  background-color: #f9f9f9;
+  border-color: #eee;
+  color: #aaa;
+}
+
+.holiday-name {
+  font-size: 12px;
+  line-height: 1.1;
+  text-align: center;
+  color: #333;
+}
+
+.no-comp-off-text {
+  position: static;
+  margin-top: 1px;
+  font-size: 9px;
+  color: #ccc;
+  line-height: 1;
+}
+
+.holiday-status-icon {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 10px;
+  color: #007AFF;
+  line-height: 1;
+}
+
+.empty-hint {
+    padding: 20px 0;
+    text-align: center;
+    color: #ccc;
+    font-size: 14px;
+}
 
 </style>
