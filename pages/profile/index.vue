@@ -2,10 +2,6 @@
   <view class="container">
     <view class="status-bar-placeholder" :style="{ height: topSafeHeight + 'px' }"></view>
 
-    <view class="page-head">
-      <text class="page-title">{{ pageTitle }}</text>
-    </view>
-
     <view class="content-area">
       <ProfileView />
     </view>
@@ -17,7 +13,6 @@
 <script>
 import ProfileView from '@/components/ProfileView.vue'
 import CustomTabBar from '@/components/CustomTabBar.vue'
-import { locales } from '@/utils/locales.js'
 import wioService from '@/utils/wioService.js'
 import { getTopSafeArea } from '@/utils/safeArea.js'
 
@@ -30,12 +25,6 @@ export default {
     return {
       language: 'zh-CN',
       topSafeHeight: 0
-    }
-  },
-  computed: {
-    pageTitle() {
-      const localesMap = locales[this.language] || locales['zh-CN'];
-      return localesMap.profile.pageTitle;
     }
   },
   onLoad() {
@@ -74,19 +63,8 @@ export default {
   flex-shrink: 0;
 }
 
-.page-head {
-  padding: 6px 20px 12px 20px;
-  flex-shrink: 0;
-}
-
-.page-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: #15181C;
-  line-height: 1.35;
-}
-
 .content-area {
+  padding-top: 10px;
   flex: 1;
   height: 0;
   /* ProfileView contains a scroll-view with height: 100% */

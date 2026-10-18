@@ -1,5 +1,6 @@
 <template>
-  <scroll-view scroll-y="true" class="profile-scroll" @scroll="onScroll" @touchmove="onTouchMove" @touchend="onTouchEnd">
+  <view class="profile-root">
+    <scroll-view scroll-y="true" class="profile-scroll" @scroll="onScroll" @touchmove="onTouchMove" @touchend="onTouchEnd">
     <view class="content">
 
       <!-- 月度回公司目标 -->
@@ -84,7 +85,7 @@
         </view>
 
         <!-- 病假 -->
-        <view class="quota-block">
+        <view class="quota-block quota-block-last">
           <view class="quota-row">
             <text class="quota-label">{{ i18n.profile.sickDays }}</text>
             <view class="quota-values">
@@ -142,31 +143,38 @@
           </view>
         </view>
       </view>
-
     </view>
 
-    <!-- ===== 补班规则 ⓘ 弹层 ===== -->
-    <view v-if="showRuleSheet" class="sheet-mask" @click="showRuleSheet = false">
-      <view class="sheet" @click.stop>
-        <view class="sheet-head">
-          <text class="sheet-title">{{ i18n.profile.compOffSheetTitle }}</text>
-          <text class="sheet-close" @click="showRuleSheet = false">✕</text>
+    </scroll-view>
+
+    <!-- ===== 补班规则 ⓘ 弹窗 ===== -->
+    <view v-if="showRuleSheet" class="modal-mask" @click="showRuleSheet = false">
+      <view class="modal-card" @click.stop>
+        <view class="modal-icon rule-icon">
+          <text class="modal-icon-text">i</text>
         </view>
-        <text class="sheet-body">{{ i18n.profile.compOffSheetBody }}</text>
+        <text class="modal-title">{{ i18n.profile.compOffSheetTitle }}</text>
+        <text class="modal-body">{{ i18n.profile.compOffSheetBody }}</text>
+        <view class="modal-btn" @click="showRuleSheet = false">
+          <text class="modal-btn-text">{{ i18n.profile.gotIt }}</text>
+        </view>
       </view>
     </view>
 
-    <!-- ===== 生日假 ⓘ 弹层 ===== -->
-    <view v-if="showBirthdaySheet" class="sheet-mask" @click="showBirthdaySheet = false">
-      <view class="sheet" @click.stop>
-        <view class="sheet-head">
-          <text class="sheet-title">{{ i18n.profile.birthdaySheetTitle }}</text>
-          <text class="sheet-close" @click="showBirthdaySheet = false">✕</text>
+    <!-- ===== 生日假 ⓘ 弹窗 ===== -->
+    <view v-if="showBirthdaySheet" class="modal-mask" @click="showBirthdaySheet = false">
+      <view class="modal-card" @click.stop>
+        <view class="modal-icon birthday-icon">
+          <text class="modal-icon-text">i</text>
         </view>
-        <text class="sheet-body">{{ i18n.profile.birthdaySheetBody }}</text>
+        <text class="modal-title">{{ i18n.profile.birthdaySheetTitle }}</text>
+        <text class="modal-body">{{ i18n.profile.birthdaySheetBody }}</text>
+        <view class="modal-btn" @click="showBirthdaySheet = false">
+          <text class="modal-btn-text">{{ i18n.profile.gotIt }}</text>
+        </view>
       </view>
     </view>
-  </scroll-view>
+  </view>
 </template>
 
 <script>
@@ -346,20 +354,25 @@ export default {
 </script>
 
 <style scoped>
+.profile-root {
+  position: relative;
+  height: 100%;
+}
+
 .profile-scroll {
   height: 100%;
 }
 
 .content {
-  padding: 4px 20px 0 20px;
+  padding: 12px 20px 0 20px;
 }
 
 /* ===== 通用卡片 ===== */
 .settings-card {
   background: #FFFFFF;
   border-radius: 18px;
-  padding: 13px;
-  margin-bottom: 9px;
+  padding: 16px;
+  margin-bottom: 14px;
   box-shadow: 0 2px 10px rgba(15, 35, 40, 0.05);
 }
 
@@ -437,7 +450,7 @@ export default {
 }
 
 .target-slider {
-  margin-top: 3px;
+  margin-top: 10px;
 }
 
 .tick-row {
@@ -458,20 +471,20 @@ export default {
 
 /* ===== 生日假卡 ===== */
 .birthday-config {
-  margin-top: 10px;
+  margin-top: 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .month-options {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
+  gap: 8px;
 }
 
 .month-option {
-  height: 32px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -561,11 +574,18 @@ export default {
 .quota-block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .quota-block + .quota-block {
-  margin-top: 10px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #F0F2F4;
+}
+
+/* 最后一个额度块，底部多留一点呼吸空间 */
+.quota-block-last {
+  padding-bottom: 8px;
 }
 
 .quota-row {
@@ -611,7 +631,7 @@ export default {
 .holiday-scroll {
   width: 100%;
   white-space: nowrap;
-  margin-top: 2px;
+  margin-top: 10px;
 }
 
 /* 隐藏横向滚动条 */
@@ -717,7 +737,8 @@ export default {
 }
 
 /* ===== ⓘ 底部弹层 ===== */
-.sheet-mask {
+/* ===== ⓘ 说明弹窗（居中卡片，避免被底部 TabBar 遮挡） ===== */
+.modal-mask {
   position: fixed;
   top: 0;
   left: 0;
@@ -726,47 +747,84 @@ export default {
   background: rgba(11, 14, 18, 0.55);
   z-index: 1000;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: center;
+  /* 防止遮罩挡住 TabBar 手势区的同时保证弹窗本身居中且不被裁切 */
+  padding: 0 32px;
+  box-sizing: border-box;
 }
 
-.sheet {
+.modal-card {
   width: 100%;
   box-sizing: border-box;
   background: #FFFFFF;
-  border-radius: 20px 20px 0 0;
-  padding: 18px 20px calc(24px + env(safe-area-inset-bottom)) 20px;
+  border-radius: 20px;
+  padding: 22px 20px 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  animation: sheet-up 0.25s ease;
+  align-items: center;
+  animation: modal-pop 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
-@keyframes sheet-up {
-  from { transform: translateY(40px); opacity: 0.4; }
-  to { transform: translateY(0); opacity: 1; }
+@keyframes modal-pop {
+  from { opacity: 0; transform: scale(0.92) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-.sheet-head {
+.modal-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  margin-bottom: 12px;
 }
 
-.sheet-title {
+.rule-icon { background: #E8F2F0; }
+.birthday-icon { background: #FBEAF0; }
+
+.modal-icon-text {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: Georgia, "Times New Roman", serif;
+  color: #0E6E62;
+}
+
+.birthday-icon .modal-icon-text {
+  color: #C24A7E;
+}
+
+.modal-title {
   font-size: 16px;
   font-weight: 600;
   color: #15181C;
+  line-height: 1.4;
+  text-align: center;
 }
 
-.sheet-close {
-  font-size: 14px;
-  color: #9AA1A8;
-  padding: 4px;
-}
-
-.sheet-body {
+.modal-body {
   font-size: 13px;
-  color: #3A4149;
-  line-height: 1.7;
+  color: #5A6169;
+  line-height: 1.75;
+  text-align: left;
+  margin-top: 10px;
+}
+
+.modal-btn {
+  width: 100%;
+  height: 44px;
+  margin-top: 20px;
+  border-radius: 12px;
+  background: #0E6E62;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-btn-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: #FFFFFF;
 }
 </style>

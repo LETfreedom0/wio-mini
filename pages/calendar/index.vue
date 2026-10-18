@@ -2,11 +2,6 @@
   <view class="container" @touchmove="onTouchMove" @touchend="onTouchEnd">
     <view class="status-bar-placeholder" :style="{ height: topSafeHeight + 'px' }"></view>
 
-    <view class="page-head">
-      <text class="page-title">{{ i18n.calendar.pageTitle }}</text>
-      <text class="page-sub">{{ i18n.calendar.pageSub }}</text>
-    </view>
-
     <view class="content">
 
 
@@ -585,29 +580,8 @@ export default {
   width: 100%;
 }
 
-/* ===== 页头 ===== */
-.page-head {
-  padding: 6px 20px 12px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.page-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: #15181C;
-  line-height: 1.35;
-}
-
-.page-sub {
-  font-size: 12px;
-  color: #6B737B;
-  line-height: 1.4;
-}
-
 .content {
-  padding: 0 20px;
+  padding: 10px 20px 0 20px;
 }
 
 .card {

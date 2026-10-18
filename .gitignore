@@ -23,6 +23,7 @@ Thumbs.db
 
 # 本地调试工具缓存
 .chrome-cdp/
+.chrome-cdp*/
 .chrome-tmp/
 .omo/
 .devtools/
