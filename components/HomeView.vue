@@ -40,7 +40,7 @@
               @touchstart="isAvatarPressed = true"
               @touchend="isAvatarPressed = false"
         >
-          <text class="avatar-emoji">{{ currentEmoji }}</text>
+          <image class="avatar-gif" src="/static/bloub.gif" mode="aspectFit" />
         </view>
       </view>
 
@@ -92,6 +92,7 @@ export default {
       isDragging: false,
       startX: 0,
       currentX: 0,
+      touchY: 0,
       isAvatarPressed: false,
       triggerTextAnim: false,
       showConfetti: false,
@@ -136,6 +137,18 @@ export default {
       if (this.location === 'home') return 'bg-home';
       if (this.location === 'company') return 'bg-company';
       return '';
+    },
+    // 把滑块位置映射为水平视线：左(home)=-1，中=0，右(company)=1
+    gazeNx() {
+      const center = (this.trackWidth - this.thumbWidth) / 2;
+      const range = center - this.padding;
+      return Math.max(-1, Math.min(1, (this.thumbPosition - center) / range));
+    },
+    // 触摸 y 相对屏幕中心映射为垂直视线（仅拖动时生效）
+    gazeNy() {
+      if (!this.isDragging) return 0;
+      const h = uni.getSystemInfoSync().windowHeight;
+      return Math.max(-1, Math.min(1, (this.touchY - h / 2) / (h / 2)));
     }
   },
   watch: {
@@ -248,12 +261,14 @@ export default {
         this.isDragging = true;
         this.startX = e.changedTouches[0].clientX;
         this.currentX = this.thumbPosition;
+        this.touchY = e.changedTouches[0].clientY;
       }
     },
     onTouchMove(e) {
       if (!this.isDragging) return;
       if (e.changedTouches && e.changedTouches.length > 0) {
         const touchX = e.changedTouches[0].clientX;
+        this.touchY = e.changedTouches[0].clientY;
         const diff = touchX - this.startX;
         let newPos = this.currentX + diff;
         
@@ -398,12 +413,22 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  box-shadow: none;
   transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s ease;
+}
+
+.avatar-gif {
+  width: 100%;
+  height: 100%;
+  border-radius: 35px;
 }
 
 .avatar-pressed {
   transform: scale(0.95);
-  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  box-shadow: none;
 }
 
 

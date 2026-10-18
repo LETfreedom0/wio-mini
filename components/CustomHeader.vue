@@ -17,6 +17,9 @@
 <script>
 export default {
   name: 'CustomHeader',
+  data() {
+    return {}
+  }
 }
 </script>
 
@@ -40,11 +43,17 @@ export default {
   height: 70px; /* Increased height */
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 10px 20px 0 20px;
   background-color: #fff;
 }
 
 .left {
+  display: flex;
+  align-items: center;
+}
+
+.right {
   display: flex;
   align-items: center;
 }

@@ -1,5 +1,5 @@
 <template>
-  <view class="container">
+  <view class="container" @touchmove="onTouchMove" @touchend="onTouchEnd">
     <CustomHeader />
     
     <view class="content">
@@ -10,8 +10,9 @@
         <view class="card-header">
           <view class="card-title-row">
             <text class="card-title">{{ i18n.calendar.monthlyWio }}</text>
-            <view v-if="stats.companyDays > 0" class="tag office-tag">{{ i18n.calendar.legends.company }} {{ stats.companyDays }}d</view>
+            <view v-if="stats.companyDays > 0" class="tag office-tag">OF {{ stats.companyDays }}d</view>
             <view v-if="stats.totalOvertime > 0" class="tag overtime-tag">{{ i18n.calendar.ot }} {{ stats.totalOvertime }}h</view>
+            <view v-if="remainingVacationDays > 0" class="tag vacation-tag">VL {{ remainingVacationDays }}d</view>
           </view>
           <text class="percentage" :class="{ 'red-text': wioPercentage < targetPercentage, 'green-text': wioPercentage >= targetPercentage }">
             {{ wioPercentage }}%
@@ -28,6 +29,18 @@
         
         <text class="warning-text" v-if="wioPercentage < targetPercentage">{{ i18n.calendar.warning }}</text>
         <text class="success-text" v-else>{{ i18n.calendar.success }}</text>
+      </view>
+
+      <!-- Birthday Reminder Card -->
+      <view v-if="showBirthdayReminder" class="card birthday-reminder-card">
+        <view class="birthday-icon">🎂</view>
+        <view class="birthday-content">
+          <text class="birthday-title">{{ i18n.calendar.birthdayReminderTitle }}</text>
+          <text class="birthday-desc">{{ i18n.calendar.birthdayReminderDesc }}</text>
+        </view>
+        <view class="birthday-action" @click="selectBirthdayLegend">
+          <text class="action-text">{{ i18n.calendar.markToday }}</text>
+        </view>
       </view>
 
       <!-- Calendar Card -->
@@ -66,6 +79,7 @@
       <view class="card legend-card">
         <view class="legend-header">
           <text class="legend-title">{{ i18n.calendar.legendTitle }}</text>
+          <text class="legend-tip-text">{{ i18n.calendar.legendTip }}</text>
           <view class="clear-btn-header" @click="selectLegend({ value: 'clear' })" :class="{ active: selectedStatus === 'clear' }">
             <view class="legend-dot dashed"></view>
             <text class="legend-label">{{ i18n.calendar.legends.clear }}</text>
@@ -137,6 +151,11 @@ export default {
       entries: {},
       overtimeEntries: {},
       settings: {},
+      yearStats: {
+        vacationDaysUsed: 0,
+        sickDaysUsed: 0,
+        totalOvertime: 0
+      },
       stats: { 
         companyDays: 0, 
         homeDays: 0, 
@@ -155,7 +174,9 @@ export default {
       lastClickDay: null,
       showOvertimeModal: false,
       overtimeValue: 0,
-      currentOvertimeDateStr: ''
+      currentOvertimeDateStr: '',
+      lastNx: 0,
+      scrollTimer: null
     }
   },
   computed: {
@@ -171,6 +192,7 @@ export default {
         { label: t('calendar.legends.company', lang), color: 'green', value: 'company' },
         { label: t('calendar.legends.home', lang), color: 'blue', value: 'home' },
         { label: t('calendar.legends.vacation', lang), color: 'orange', value: 'vacation' },
+        { label: t('calendar.legends.birthday', lang), color: 'pink', value: 'birthday' },
         { label: t('calendar.legends.comp_off', lang), color: 'cyan', value: 'comp_off' },
         { label: t('calendar.legends.sick', lang), color: 'purple', value: 'sick' },
         { label: t('calendar.legends.unpaid', lang), color: 'gray', value: 'unpaid' },
@@ -207,6 +229,7 @@ export default {
       const numerator = this.stats.companyDays;
       
       const totalDeductible = this.stats.vacationDays 
+                            + this.stats.birthdayDays
                             + this.stats.sickDays 
                             + this.stats.unpaidDays 
                             + this.stats.compOffDays
@@ -227,7 +250,35 @@ export default {
         'comp_off', 'unpaid', 'exclude_wio'
       ];
       
-      return order.map(key => this.legends.find(item => item.value === key)).filter(Boolean);
+      let result = order.map(key => this.legends.find(item => item.value === key)).filter(Boolean);
+      
+      if (this.settings.birthdayEnabled && this.settings.birthdayMonth) {
+        const currentMonthStr = String(this.currentMonth).padStart(2, '0');
+        if (currentMonthStr === this.settings.birthdayMonth) {
+          const birthdayLegend = this.legends.find(item => item.value === 'birthday');
+          if (birthdayLegend) {
+            const insertIndex = 3;
+            result.splice(insertIndex, 0, birthdayLegend);
+          }
+        }
+      }
+      
+      return result;
+    },
+    remainingVacationDays() {
+      const total = this.settings.vacationDays || 20;
+      const used = this.yearStats.vacationDaysUsed || 0;
+      return Math.max(0, total - used);
+    },
+    showBirthdayReminder() {
+      if (!this.settings.birthdayEnabled || !this.settings.birthdayMonth) {
+        return false;
+      }
+      const currentMonthStr = String(this.currentMonth).padStart(2, '0');
+      if (currentMonthStr !== this.settings.birthdayMonth) {
+        return false;
+      }
+      return !this.hasBirthdayInMonth();
     }
   },
   onShareAppMessage(res) {
@@ -250,11 +301,39 @@ export default {
   onShow() {
     this.loadData();
   },
+  onPageScroll(e) {
+    // 滚动位置映射为垂直视线：顶部=向上看，下滑=向下看
+    const ny = Math.max(-1, Math.min(1, e.scrollTop / 400));
+    this.emitGaze(this.lastNx, ny, true);
+    // 滚动停止 300ms 后回归自然漂移
+    clearTimeout(this.scrollTimer);
+    this.scrollTimer = setTimeout(() => {
+      uni.$emit('wio-gaze', { nx: 0, ny: 0, active: false });
+    }, 300);
+  },
   methods: {
+    onTouchMove(e) {
+      if (e.touches && e.touches.length > 0) {
+        const t = e.touches[0];
+        const w = uni.getSystemInfoSync().windowWidth;
+        // 触摸 x 相对屏幕中心映射为水平视线
+        this.lastNx = Math.max(-1, Math.min(1, (t.clientX - w / 2) / (w / 2)));
+      }
+    },
+    onTouchEnd() {
+      // 手指离开后短暂保持，随后由页面滚动继续驱动垂直视线
+      setTimeout(() => {
+        this.lastNx = 0;
+      }, 600);
+    },
+    emitGaze(nx, ny, active) {
+      uni.$emit('wio-gaze', { nx, ny, active });
+    },
     loadData() {
       this.settings = wioService.getSettings();
       this.entries = wioService.getEntries();
       this.overtimeEntries = wioService.getOvertimeEntries();
+      this.yearStats = wioService.getYearStats(new Date().getFullYear());
       this.updateStats();
     },
     updateStats() {
@@ -289,6 +368,15 @@ export default {
         });
       }
     },
+    selectBirthdayLegend() {
+      uni.vibrateShort();
+      this.selectedStatus = 'birthday';
+      uni.showToast({
+        title: this.i18n.calendar.clickDateToMark,
+        icon: 'none',
+        duration: 1500
+      });
+    },
     onDayClick(day) {
       uni.vibrateShort();
       const currentTime = new Date().getTime();
@@ -308,6 +396,17 @@ export default {
 
       if (!this.selectedStatus) {
         return;
+      }
+
+      if (this.selectedStatus === 'birthday') {
+        if (this.hasBirthdayInMonth()) {
+          uni.showToast({
+            title: this.i18n.calendar.birthdayLimit,
+            icon: 'none',
+            duration: 2000
+          });
+          return;
+        }
       }
 
       if (this.selectedStatus === 'clear') {
@@ -398,6 +497,7 @@ export default {
       if (status === 'company') return 'company-office';
       if (status === 'home') return 'home-office';
       if (status === 'vacation') return 'status-vacation';
+      if (status === 'birthday') return 'status-birthday';
       if (status === 'comp_off') return 'status-comp-off';
       if (status === 'sick') return 'status-sick';
       if (status === 'unpaid') return 'status-unpaid';
@@ -416,6 +516,10 @@ export default {
       }
 
       return '';
+    },
+    hasBirthdayInMonth() {
+      const prefix = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}`;
+      return Object.keys(this.entries).some(key => key.startsWith(prefix) && this.entries[key] === 'birthday');
     }
   }
 }
@@ -496,6 +600,13 @@ export default {
   background-color: #E3F2FD;
   color: #1976D2;
   border: 1px solid #BBDEFB;
+  font-weight: 600;
+}
+
+.vacation-tag {
+  background-color: #FFF8E1;
+  color: #FF9800;
+  border: 1px solid #FFE0B2;
   font-weight: 600;
 }
 
@@ -707,6 +818,7 @@ export default {
 .today-highlight.company-office,
 .today-highlight.home-office,
 .today-highlight.status-vacation,
+.today-highlight.status-birthday,
 .today-highlight.status-comp-off,
 .today-highlight.status-sick,
 .today-highlight.status-unpaid,
@@ -768,6 +880,13 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 6px; 
+}
+
+.legend-tip-text {
+  font-size: 10px;
+  color: #999;
+  flex: 1;
+  text-align: center;
 }
 
 .legend-item {
@@ -840,6 +959,7 @@ export default {
 .legend-dot.green { background-color: #C8E6C9; border: 1px solid #2E7D32; }
 .legend-dot.blue { background-color: #BBDEFB; border: 1px solid #1565C0; }
 .legend-dot.orange { background-color: #FFE0B2; border: 1px solid #EF6C00; }
+.legend-dot.pink { background-color: #F8BBD9; border: 1px solid #E91E63; }
 .legend-dot.cyan { background-color: #B2EBF2; border: 1px solid #00BCD4; }
 .legend-dot.purple { background-color: #E1BEE7; border: 1px solid #7B1FA2; }
 .legend-dot.gray { background-color: #E0E0E0; border: 1px solid #9E9E9E; }
@@ -977,9 +1097,61 @@ export default {
 }
 
 .status-vacation { background-color: #FFE0B2; color: #EF6C00; }
+.status-birthday { background-color: #F8BBD9; color: #E91E63; }
 .status-comp-off { background-color: #B2EBF2; color: #006064; }
 .status-sick { background-color: #E1BEE7; color: #4A148C; }
 .status-unpaid { background-color: #F5F5F5; color: #616161; border: 1px dashed #9E9E9E; }
 .status-public { background-color: #FFCDD2; color: #B71C1C; }
 .status-exclude-wio { background-color: #ECEFF1; color: #607D8B; border: 1px dashed #90A4AE; }
+
+.birthday-reminder-card {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: linear-gradient(135deg, #FFF5F5 0%, #FFEBEE 100%);
+  border: 1px solid #FFCDD2;
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+.birthday-icon {
+  font-size: 36px;
+  margin-right: 12px;
+}
+
+.birthday-content {
+  flex: 1;
+}
+
+.birthday-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #E91E63;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.birthday-desc {
+  font-size: 12px;
+  color: #888;
+  display: block;
+}
+
+.birthday-action {
+  padding: 6px 12px;
+  background-color: #E91E63;
+  border-radius: 20px;
+  transition: all 0.2s;
+}
+
+.birthday-action:active {
+  transform: scale(0.95);
+  opacity: 0.8;
+}
+
+.action-text {
+  font-size: 12px;
+  color: #fff;
+  font-weight: 500;
+}
 </style>

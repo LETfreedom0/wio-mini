@@ -10,6 +10,8 @@ const DEFAULT_SETTINGS = {
   vacationDays: 20,
   sickDays: 12,
   language: 'zh-CN',
+  birthdayEnabled: false,
+  birthdayMonth: '',
   // 调休配置规则 (Key: 节日名称, Value: boolean 是否调休)
   // 默认只有春节调休
   compOffRules: {
@@ -200,6 +202,7 @@ export default {
       company: 0,
       home: 0,
       vacation: 0,
+      birthday: 0,
       sick: 0,
       unpaid: 0,
       comp_off: 0,
@@ -263,7 +266,7 @@ export default {
           // so we can adjust the WIO calculation later.
           // We only care about statuses that are subtracted in the formula:
           // vacation, sick, unpaid, comp_off, exclude_wio
-          const deductibleStatuses = ['vacation', 'sick', 'unpaid', 'comp_off', 'exclude_wio'];
+          const deductibleStatuses = ['vacation', 'birthday', 'sick', 'unpaid', 'comp_off', 'exclude_wio'];
           if (!isWorkingDay && deductibleStatuses.includes(entryStatus)) {
              // This is a "Weekend Leave". It shouldn't reduce the denominator.
              // We can record this in a new field or just NOT count it in the main stats?
@@ -294,6 +297,7 @@ export default {
       companyDays: stats.company,
       homeDays: stats.home,
       vacationDays: stats.vacation,
+      birthdayDays: stats.birthday,
       sickDays: stats.sick,
       unpaidDays: stats.unpaid,
       compOffDays: stats.comp_off,
@@ -314,6 +318,7 @@ export default {
     
     let stats = {
       vacation: 0,
+      birthday: 0,
       sick: 0,
       totalOvertime: 0 // New: Total overtime hours for the year
     };
@@ -323,6 +328,7 @@ export default {
       if (date.startsWith(prefix)) {
         const status = entries[date];
         if (status === 'vacation') stats.vacation++;
+        if (status === 'birthday') stats.birthday++;
         if (status === 'sick') stats.sick++;
       }
     });
@@ -336,6 +342,7 @@ export default {
 
     return {
       vacationDaysUsed: stats.vacation,
+      birthdayDaysUsed: stats.birthday,
       sickDaysUsed: stats.sick,
       totalOvertime: parseFloat(stats.totalOvertime.toFixed(1))
     };

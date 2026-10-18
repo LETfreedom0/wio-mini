@@ -1,5 +1,5 @@
 <template>
-  <scroll-view scroll-y="true" class="profile-scroll">
+  <scroll-view scroll-y="true" class="profile-scroll" @scroll="onScroll" @touchmove="onTouchMove" @touchend="onTouchEnd">
     <view class="content">
       
       <!-- Language Settings Card -->
@@ -83,6 +83,36 @@
         <text class="card-desc">{{ i18n.common.used }} {{ yearStats.sickDaysUsed }} {{ i18n.common.days }}</text>
       </view>
 
+      <!-- Birthday Leave Card -->
+      <view class="settings-card birthday-card">
+        <view class="card-header">
+          <text class="card-title">{{ i18n.profile.birthdayLeave }}</text>
+          <view class="toggle-switch" @click="toggleBirthdayEnabled">
+            <view class="switch-track" :class="{ 'on': settings.birthdayEnabled }">
+              <view class="switch-thumb"></view>
+            </view>
+          </view>
+        </view>
+        <text class="card-desc">{{ i18n.profile.birthdayLeaveDesc }}</text>
+
+        <view v-if="settings.birthdayEnabled" class="birthday-config">
+          <view class="month-options">
+            <view
+              v-for="month in monthOptions"
+              :key="month.value"
+              class="month-option"
+              :class="{ active: settings.birthdayMonth === month.value }"
+              @click="selectBirthdayMonth(month.value)"
+            >
+              <text class="month-text">{{ month.label }}</text>
+            </view>
+          </view>
+        </view>
+        <view v-else class="birthday-disabled-hint">
+          <text class="hint-text">{{ i18n.profile.birthdayEnableHint }}</text>
+        </view>
+      </view>
+
       <!-- Comp Off Settings Card -->
       <view class="settings-card">
         <view class="card-header">
@@ -139,19 +169,43 @@ export default {
         targetPercentage: 40,
         vacationDays: 20,
         sickDays: 12,
-        language: 'zh-CN'
+        language: 'zh-CN',
+        birthdayEnabled: false,
+        birthdayMonth: ''
       },
       yearStats: {
         vacationDaysUsed: 0,
         sickDaysUsed: 0,
         totalOvertime: 0
       },
-      holidayList: [] // 完整节日列表
+      holidayList: [], // 完整节日列表
+      lastNx: 0,
+      months: [
+        { value: '01', label: '1月', labelEn: 'Jan' },
+        { value: '02', label: '2月', labelEn: 'Feb' },
+        { value: '03', label: '3月', labelEn: 'Mar' },
+        { value: '04', label: '4月', labelEn: 'Apr' },
+        { value: '05', label: '5月', labelEn: 'May' },
+        { value: '06', label: '6月', labelEn: 'Jun' },
+        { value: '07', label: '7月', labelEn: 'Jul' },
+        { value: '08', label: '8月', labelEn: 'Aug' },
+        { value: '09', label: '9月', labelEn: 'Sep' },
+        { value: '10', label: '10月', labelEn: 'Oct' },
+        { value: '11', label: '11月', labelEn: 'Nov' },
+        { value: '12', label: '12月', labelEn: 'Dec' }
+      ]
     }
   },
   computed: {
     i18n() {
       return locales[this.settings.language] || locales['zh-CN'];
+    },
+    monthOptions() {
+      const isEn = this.settings.language === 'en-US';
+      return this.months.map(m => ({
+        value: m.value,
+        label: isEn ? m.labelEn : m.label
+      }));
     }
   },
   mounted() {
@@ -162,6 +216,25 @@ export default {
     this.loadSettings();
   },
   methods: {
+    onScroll(e) {
+      // 滚动位置映射为垂直视线：顶部=向上看，下滑=向下看
+      const ny = Math.max(-1, Math.min(1, e.detail.scrollTop / 400));
+      uni.$emit('wio-gaze', { nx: this.lastNx, ny, active: true });
+      clearTimeout(this.scrollTimer);
+      this.scrollTimer = setTimeout(() => {
+        uni.$emit('wio-gaze', { nx: 0, ny: 0, active: false });
+      }, 300);
+    },
+    onTouchMove(e) {
+      if (e.touches && e.touches.length > 0) {
+        const t = e.touches[0];
+        const w = uni.getSystemInfoSync().windowWidth;
+        this.lastNx = Math.max(-1, Math.min(1, (t.clientX - w / 2) / (w / 2)));
+      }
+    },
+    onTouchEnd() {
+      setTimeout(() => { this.lastNx = 0; }, 600);
+    },
     loadSettings() {
       this.settings = wioService.getSettings();
       if (!this.settings.compOffRules) {
@@ -204,6 +277,19 @@ export default {
     toggleLanguage() {
       const newLang = this.settings.language === 'zh-CN' ? 'en-US' : 'zh-CN';
       this.setLanguage(newLang);
+    },
+    toggleBirthdayEnabled() {
+      this.settings.birthdayEnabled = !this.settings.birthdayEnabled;
+      if (!this.settings.birthdayEnabled) {
+        this.settings.birthdayMonth = '';
+      }
+      uni.vibrateShort();
+      this.save();
+    },
+    selectBirthdayMonth(value) {
+      this.settings.birthdayMonth = value;
+      uni.vibrateShort();
+      this.save();
     },
     onSliderChange(e, key) {
       this.settings[key] = e.detail.value;
@@ -497,10 +583,10 @@ slider {
 .toggle__switch {
   --bg-toggle: hsl(0, 0%, 95%);
   --bg-circle: hsl(119, 84%, 10%);
-  --w-toggle-switch: 120px;
-  --w-h-toggle-circle: 28px;
-  --pd-toggle-switch: 0.4rem;
-  height: 44px;
+  --w-toggle-switch: 70px;
+  --w-h-toggle-circle: 16px;
+  --pd-toggle-switch: 0.3rem;
+  height: 24px;
   width: var(--w-toggle-switch);
   background-color: var(--bg-toggle);
   border-radius: 4rem;
@@ -530,6 +616,101 @@ slider {
   --bg-circle: hsl(0, 0%, 96%);
   box-shadow: 0 .3rem 5rem 0 hsla(96, 85%, 34%, 30%);
   border-color: hsl(119, 84%, 10%);
+}
+
+/* Birthday Leave Card */
+.birthday-card {
+  border: 1px solid #FFCDD2;
+}
+
+.toggle-switch {
+  cursor: pointer;
+}
+
+.switch-track {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background-color: #ccc;
+  position: relative;
+  transition: background-color 0.3s;
+}
+
+.switch-track.on {
+  background-color: #FF9800;
+}
+
+.switch-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #fff;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: left 0.3s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.switch-track.on .switch-thumb {
+  left: 22px;
+}
+
+.birthday-config {
+  margin-top: 12px;
+}
+
+.month-options {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.month-option {
+  padding: 6px 4px;
+  background-color: #F5F7FA;
+  border-radius: 6px;
+  border: 1px solid #EAEAEA;
+  transition: all 0.2s;
+  cursor: pointer;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.month-option.active {
+  background-color: #FFF3E0;
+  border-color: #FF9800;
+  color: #FF9800;
+  font-weight: 600;
+}
+
+.month-option:active {
+  transform: scale(0.96);
+}
+
+.month-text {
+  font-size: 13px;
+  color: #333;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.month-option.active .month-text {
+  color: #FF9800;
+}
+
+.birthday-disabled-hint {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #FFF8E1;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.hint-text {
+  font-size: 13px;
+  color: #FF9800;
+  font-weight: 500;
 }
 
 </style>
