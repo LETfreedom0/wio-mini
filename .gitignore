@@ -16,4 +16,14 @@ Thumbs.db
 # 环境变量文件
 .env
 .env.local
-.env.*.local
+.env.*
+
+# 废弃代码归档（不影响小程序打包）
+.deprecated/
+
+# 本地调试工具缓存
+.chrome-cdp/
+.chrome-tmp/
+.omo/
+.devtools/
+.playwright-mcp/
