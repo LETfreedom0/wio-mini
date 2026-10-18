@@ -1,16 +1,18 @@
 <template>
-  <view class="tab-bar">
-    <view class="tab-item" :class="{ active: current === 'home' }" @click="switchTab('/pages/index/index')">
-      <image class="tab-icon-img" :src="current === 'home' ? icons.homeActive : icons.home" />
-      <text class="tab-text">{{ i18n.tabBar.home }}</text>
-    </view>
-    <view class="tab-item" :class="{ active: current === 'calendar' }" @click="switchTab('/pages/calendar/index')">
-      <image class="tab-icon-img" :src="current === 'calendar' ? icons.calendarActive : icons.calendar" />
-      <text class="tab-text">{{ i18n.tabBar.calendar }}</text>
-    </view>
-    <view class="tab-item" :class="{ active: current === 'profile' }" @click="switchTab('/pages/profile/index')">
-      <image class="tab-icon-img" :src="current === 'profile' ? icons.userActive : icons.user" />
-      <text class="tab-text">{{ i18n.tabBar.profile }}</text>
+  <view class="tab-bar-area">
+    <view class="tab-bar">
+      <view class="tab-item" :class="{ active: current === 'home' }" @click="switchTab('/pages/index/index')">
+        <image class="tab-icon-img" :src="current === 'home' ? icons.homeActive : icons.home" />
+        <text class="tab-text">{{ i18n.tabBar.home }}</text>
+      </view>
+      <view class="tab-item" :class="{ active: current === 'calendar' }" @click="switchTab('/pages/calendar/index')">
+        <image class="tab-icon-img" :src="current === 'calendar' ? icons.calendarActive : icons.calendar" />
+        <text class="tab-text">{{ i18n.tabBar.calendar }}</text>
+      </view>
+      <view class="tab-item" :class="{ active: current === 'profile' }" @click="switchTab('/pages/profile/index')">
+        <image class="tab-icon-img" :src="current === 'profile' ? icons.userActive : icons.user" />
+        <text class="tab-text">{{ i18n.tabBar.profile }}</text>
+      </view>
     </view>
   </view>
 </template>
@@ -28,9 +30,9 @@ export default {
     }
   },
   data() {
-    const colorDefault = '%23999999';
-    const colorActive = '%23007AFF';
-    
+    const colorDefault = '%239AA1A8';
+    const colorActive = '%23FFFFFF';
+
     const pathHome = '<path d="M12 5.69l5 4.5V18h-2v-6H9v6H7v-7.81l5-4.5M12 3L2 12h3v8h6v-6h2v6h6v-8h3L12 3z"/>';
     const pathHomeFill = '<path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>';
     const pathCalendar = '<path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2zm-7 5h5v5h-5v-5z"/>';
@@ -39,7 +41,7 @@ export default {
     const pathUserFill = '<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>';
 
     const svgPrefix = 'data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="';
-    
+
     return {
       settings: {},
       icons: {
@@ -91,19 +93,29 @@ export default {
 </script>
 
 <style scoped>
-.tab-bar {
+/* 设计稿：Tab Bar Area（外层留白）+ 白色圆角胶囊 Bar */
+.tab-bar-area {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 50px;
-  background-color: #fff;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.05); /* 更轻柔的阴影 */
-  padding-bottom: env(safe-area-inset-bottom);
+  padding: 12px 21px calc(12px + env(safe-area-inset-bottom)) 21px;
   z-index: 999;
+  pointer-events: none; /* 外层不拦截点击 */
+}
+
+.tab-bar {
+  pointer-events: auto;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  height: 62px;
+  padding: 4px;
+  box-sizing: border-box;
+  background: #FFFFFF;
+  border: 1px solid #E9EBEC;
+  border-radius: 36px;
+  box-shadow: 0 8px 24px rgba(15, 35, 40, 0.08);
 }
 
 .tab-item {
@@ -112,23 +124,30 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  gap: 4px;
+  border-radius: 26px;
+  transition: background 0.2s ease;
+}
+
+.tab-item.active {
+  background: #0C6D60;
 }
 
 .tab-icon-img {
-  width: 24px;
-  height: 24px;
-  margin-bottom: 2px;
+  width: 18px;
+  height: 18px;
 }
 
 .tab-text {
   font-size: 10px;
-  color: #999;
+  font-weight: 500;
+  color: #9AA1A8;
+  line-height: 1.2;
   transition: color 0.2s;
 }
 
 .tab-item.active .tab-text {
-  color: #007AFF;
-  font-weight: 500;
+  color: #FFFFFF;
+  font-weight: 600;
 }
 </style>

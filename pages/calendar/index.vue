@@ -1,34 +1,56 @@
 <template>
   <view class="container" @touchmove="onTouchMove" @touchend="onTouchEnd">
-    <CustomHeader />
-    
+    <view class="status-bar-placeholder"></view>
+
+    <view class="page-head">
+      <text class="page-title">{{ i18n.calendar.pageTitle }}</text>
+      <text class="page-sub">{{ i18n.calendar.pageSub }}</text>
+    </view>
+
     <view class="content">
 
 
       <!-- Monthly Stats Card -->
       <view class="card stats-card" :class="{ 'warning-border': wioPercentage < targetPercentage, 'success-border': wioPercentage >= targetPercentage }">
-        <view class="card-header">
-          <view class="card-title-row">
-            <text class="card-title">{{ i18n.calendar.monthlyWio }}</text>
-            <view v-if="stats.companyDays > 0" class="tag office-tag">OF {{ stats.companyDays }}d</view>
-            <view v-if="stats.totalOvertime > 0" class="tag overtime-tag">{{ i18n.calendar.ot }} {{ stats.totalOvertime }}h</view>
-            <view v-if="remainingVacationDays > 0" class="tag vacation-tag">VL {{ remainingVacationDays }}d</view>
+        <view class="stats-head">
+          <view class="stats-main">
+            <text class="stats-label">{{ i18n.calendar.monthlyWio }}</text>
+            <view class="percent-row">
+              <text class="percentage" :class="{ 'red-text': wioPercentage < targetPercentage, 'green-text': wioPercentage >= targetPercentage }">{{ wioPercentage }}</text>
+              <text class="percent-unit" :class="{ 'red-text': wioPercentage < targetPercentage, 'green-text': wioPercentage >= targetPercentage }">%</text>
+            </view>
           </view>
-          <text class="percentage" :class="{ 'red-text': wioPercentage < targetPercentage, 'green-text': wioPercentage >= targetPercentage }">
-            {{ wioPercentage }}%
-          </text>
+          <view class="stats-meta">
+            <text class="target-text">{{ i18n.calendar.target }} {{ targetPercentage }}%</text>
+            <view class="meta-divider"></view>
+            <text class="gap-text" :class="{ 'red-text': wioPercentage < targetPercentage, 'green-text': wioPercentage >= targetPercentage }">{{ gapText }}</text>
+          </view>
         </view>
-        
-        <text class="target-text">{{ i18n.calendar.target }}: {{ targetPercentage }}%</text>
-        
+
         <view class="progress-bar">
-          <view class="progress-fill" 
-            :style="{ width: Math.min(wioPercentage, 100) + '%', backgroundColor: wioPercentage >= targetPercentage ? '#4CAF50' : '#D32F2F' }">
+          <view class="progress-fill"
+                :class="{ 'fill-danger': wioPercentage < targetPercentage, 'fill-success': wioPercentage >= targetPercentage }"
+                :style="{ width: Math.min(wioPercentage, 100) + '%' }"></view>
+          <view class="goal-marker" :style="{ left: Math.min(targetPercentage, 100) + '%' }"></view>
+        </view>
+
+        <view class="stats-chips">
+          <view class="stat-chip">
+            <view class="chip-dot dot-company"></view>
+            <text class="chip-label">{{ i18n.home.workFromCompany }}</text>
+            <text class="chip-value">{{ stats.companyDays }} {{ i18n.home.countDays }}</text>
+          </view>
+          <view class="stat-chip">
+            <view class="chip-dot dot-home"></view>
+            <text class="chip-label">{{ i18n.home.workFromHome }}</text>
+            <text class="chip-value">{{ stats.homeDays }} {{ i18n.home.countDays }}</text>
+          </view>
+          <view class="stat-chip">
+            <view class="chip-dot dot-ot"></view>
+            <text class="chip-label">{{ i18n.calendar.ot }}</text>
+            <text class="chip-value">{{ stats.totalOvertime }}h</text>
           </view>
         </view>
-        
-        <text class="warning-text" v-if="wioPercentage < targetPercentage">{{ i18n.calendar.warning }}</text>
-        <text class="success-text" v-else>{{ i18n.calendar.success }}</text>
       </view>
 
       <!-- Birthday Reminder Card -->
@@ -125,7 +147,6 @@
 </template>
 
 <script>
-import CustomHeader from '@/components/CustomHeader.vue'
 import CustomTabBar from '@/components/CustomTabBar.vue'
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
@@ -142,7 +163,6 @@ const holidayNameMap = {
 
 export default {
   components: {
-    CustomHeader,
     CustomTabBar
   },
   data() {
@@ -269,6 +289,28 @@ export default {
       const total = this.settings.vacationDays || 20;
       const used = this.yearStats.vacationDaysUsed || 0;
       return Math.max(0, total - used);
+    },
+    // 距离目标还差多少个「公司办公日」
+    gapDays() {
+      if (this.wioPercentage >= this.targetPercentage) return 0;
+      const totalDeductible = this.stats.vacationDays 
+                            + this.stats.birthdayDays
+                            + this.stats.sickDays 
+                            + this.stats.unpaidDays 
+                            + this.stats.compOffDays
+                            + this.stats.excludeWioDays;
+      const effectiveDeductible = totalDeductible - (this.stats.weekendLeaves || 0);
+      const denominator = this.stats.workingDays - effectiveDeductible;
+      if (denominator <= 0) return 0;
+      const needCompany = Math.ceil((this.targetPercentage / 100) * denominator);
+      return Math.max(0, needCompany - this.stats.companyDays);
+    },
+    gapText() {
+      if (this.wioPercentage >= this.targetPercentage) {
+        return this.i18n.home.achieved;
+      }
+      const u = this.i18n.home;
+      return `${u.daysToGo} ${this.gapDays} ${u.daysToGoUnit}`;
     },
     showBirthdayReminder() {
       if (!this.settings.birthdayEnabled || !this.settings.birthdayMonth) {
@@ -528,36 +570,173 @@ export default {
 <style scoped>
 .container {
   min-height: 100vh;
-  background-color: #F8F9FA;
-  padding-bottom: calc(20px + 50px + env(safe-area-inset-bottom));
+  background-color: #F4F5F6;
+  padding-bottom: calc(98px + env(safe-area-inset-bottom));
+}
+
+.status-bar-placeholder {
+  height: var(--status-bar-height);
+  width: 100%;
+}
+
+/* ===== 页头 ===== */
+.page-head {
+  padding: 6px 20px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #15181C;
+  line-height: 1.35;
+}
+
+.page-sub {
+  font-size: 12px;
+  color: #6B737B;
+  line-height: 1.4;
 }
 
 .content {
-  padding: 15px;
+  padding: 0 20px;
 }
 
 .card {
   background-color: #fff;
-  border-radius: 12px;
+  border-radius: 18px;
   padding: 15px;
-  margin-bottom: 15px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  border: 1px solid #eee;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 10px rgba(15, 35, 40, 0.05);
+  border: none;
 }
 
+/* ===== 月度 WIO 摘要卡（紧凑版） ===== */
 .stats-card {
-  border: 1px solid #eee;
-  padding: 10px 12px;
+  border: none;
+  border-radius: 18px;
+  padding: 14px 16px;
+  background: #FFFFFF;
+  box-shadow: 0 2px 10px rgba(15, 35, 40, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .stats-card.warning-border {
-  border: 1px solid #FFCDD2;
-  background-color: #FFEBEE;
+  background: linear-gradient(180deg, #FBF1EF 0%, #FFFFFF 62%);
 }
 
 .stats-card.success-border {
-  border: 1px solid #C8E6C9;
-  background-color: #F1F8E9;
+  background: linear-gradient(180deg, #EDF6F4 0%, #FFFFFF 62%);
+}
+
+.stats-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.stats-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stats-label {
+  font-size: 11px;
+  color: #6B737B;
+  line-height: 1.4;
+}
+
+.percent-row {
+  display: flex;
+  align-items: baseline;
+}
+
+.percent-unit {
+  font-size: 13px;
+  font-weight: 600;
+  margin-left: 1px;
+}
+
+.percent-unit.red-text { color: #A63A31; }
+.percent-unit.green-text { color: #0E6E62; }
+
+.stats-meta {
+  display: flex;
+  align-items: center;
+  padding-bottom: 4px;
+}
+
+.meta-divider {
+  width: 1px;
+  height: 9px;
+  background: #DDE1E5;
+  margin: 0 7px;
+}
+
+.gap-text {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #6B737B;
+}
+
+/* 目标刻度线 */
+.goal-marker {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: #15181C;
+  transform: translateX(-1px);
+  z-index: 2;
+}
+
+.fill-danger { background: #A63A31; }
+.fill-success { background: #0E6E62; }
+
+/* 统计胶囊行 */
+.stats-chips {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 9px;
+  border-top: 1px solid #F1F3F5;
+}
+
+.stat-chip {
+  display: flex;
+  align-items: center;
+}
+
+.chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 5px;
+  flex-shrink: 0;
+}
+
+.dot-company { background: #0E6E62; }
+.dot-home { background: #B26B18; }
+.dot-ot { background: #5F53A5; }
+
+.chip-label {
+  font-size: 10px;
+  color: #6B737B;
+  margin-right: 4px;
+  line-height: 1.4;
+}
+
+.chip-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1F242A;
+  line-height: 1.4;
 }
 
 .card-header {
@@ -614,31 +793,36 @@ export default {
 .tag.blue { background-color: #E3F2FD; color: #1976D2; }
 
 .percentage {
-  font-size: 32px;
-  font-weight: bold;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.4px;
 }
 
-.percentage.red-text { color: #D32F2F; }
-.percentage.green-text { color: #4CAF50; }
+.percentage.red-text { color: #A63A31; }
+.percentage.green-text { color: #0E6E62; }
 
 .target-text {
   font-size: 11px;
-  color: #666;
-  display: block;
-  margin-bottom: 4px;
+  color: #6B737B;
+  line-height: 1.4;
 }
 
 .progress-bar {
+  position: relative;
   height: 6px;
-  background-color: #E0E0E0;
+  background-color: #E9ECF0;
   border-radius: 3px;
-  margin-bottom: 6px;
   overflow: hidden;
 }
 
 .progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
   height: 100%;
-  transition: width 0.3s;
+  border-radius: 3px;
+  transition: width 0.4s cubic-bezier(0.25, 0.8, 0.3, 1);
 }
 
 .warning-text {

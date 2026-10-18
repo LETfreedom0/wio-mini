@@ -1,99 +1,43 @@
 <template>
   <scroll-view scroll-y="true" class="profile-scroll" @scroll="onScroll" @touchmove="onTouchMove" @touchend="onTouchEnd">
     <view class="content">
-      
-      <!-- Language Settings Card -->
+
+      <!-- 月度回公司目标 -->
       <view class="settings-card">
-        <view class="card-header">
-          <text class="card-title">{{ i18n.profile.language }}</text>
-        </view>
-        <view class="language-toggle-container">
-          <text class="card-desc language-desc">{{ i18n.profile.languageDesc }}</text>
-          <view 
-            class="toggle"
-            :class="{ 'active': settings.language === 'en-US' }"
-            @click="toggleLanguage"
-          >
-            <text class="toggle-text">中文</text>
-            <view class="toggle__switch">
-              <view class="toggle__circle"></view>
-            </view>
-            <text class="toggle-text">English</text>
+        <view class="target-row">
+          <view class="target-labels">
+            <text class="card-title">{{ i18n.profile.wioTarget }}</text>
+            <text class="card-hint">{{ i18n.profile.wioTargetHint }}</text>
           </view>
+          <text class="target-value">{{ settings.targetPercentage }}%</text>
         </view>
-      </view>
-      
-      <!-- WIO Target Card -->
-      <view class="settings-card">
-        <view class="card-header">
-          <text class="card-title">{{ i18n.profile.wioTarget }}</text>
-          <text class="card-value blue">{{ settings.targetPercentage }}%</text>
+        <view class="slider-wrap target-slider">
+          <slider
+            :value="settings.targetPercentage"
+            @change="onSliderChange($event, 'targetPercentage')"
+            @changing="onSliderChanging($event, 'targetPercentage')"
+            min="0" max="100" step="10" activeColor="#0E6E62" backgroundColor="#ECEEEF" block-size="18" block-color="#ffffff" />
         </view>
-        <view class="slider-container">
-           <slider 
-             :value="settings.targetPercentage" 
-             @change="onSliderChange($event, 'targetPercentage')" 
-             @changing="onSliderChanging($event, 'targetPercentage')"
-             min="0" max="100" step="10" activeColor="#007AFF" backgroundColor="#E3F2FD" block-size="24" block-color="#fff" />
+        <view class="tick-row">
+          <text v-for="tick in targetTicks" :key="tick" class="tick-text" :class="{ 'tick-active': settings.targetPercentage === tick }">{{ tick }}%</text>
         </view>
-        <text class="card-desc">{{ i18n.profile.wioTargetDesc }}</text>
       </view>
 
-      <!-- Vacation Card -->
+      <!-- 生日假 -->
       <view class="settings-card">
-        <view class="card-header">
-          <text class="card-title">{{ i18n.profile.vacationDays }}</text>
-          <view class="value-group">
-            <text class="card-value orange">{{ settings.vacationDays }} {{ i18n.common.days }}</text>
-            <text class="balance-sub">{{ i18n.common.remaining }} {{ settings.vacationDays - yearStats.vacationDaysUsed }} {{ i18n.common.days }}</text>
-          </view>
-        </view>
-        <view class="slider-container">
-           <slider 
-             :value="settings.vacationDays" 
-             @change="onSliderChange($event, 'vacationDays')" 
-             @changing="onSliderChanging($event, 'vacationDays')"
-             min="0" max="30" activeColor="#FF9800" backgroundColor="#FFF3E0" block-size="24" block-color="#fff" />
-        </view>
-        <view class="usage-bar">
-          <view class="usage-fill orange-bg" :style="{ width: getUsagePercentage(yearStats.vacationDaysUsed, settings.vacationDays) + '%' }"></view>
-        </view>
-        <text class="card-desc">{{ i18n.common.used }} {{ yearStats.vacationDaysUsed }} {{ i18n.common.days }}</text>
-      </view>
-
-      <!-- Sick Leave Card -->
-      <view class="settings-card">
-        <view class="card-header">
-          <text class="card-title">{{ i18n.profile.sickDays }}</text>
-          <view class="value-group">
-            <text class="card-value purple">{{ settings.sickDays }} {{ i18n.common.days }}</text>
-            <text class="balance-sub">{{ i18n.common.remaining }} {{ settings.sickDays - yearStats.sickDaysUsed }} {{ i18n.common.days }}</text>
-          </view>
-        </view>
-        <view class="slider-container">
-           <slider 
-             :value="settings.sickDays" 
-             @change="onSliderChange($event, 'sickDays')" 
-             @changing="onSliderChanging($event, 'sickDays')"
-             min="0" max="30" activeColor="#9C27B0" backgroundColor="#F3E5F5" block-size="24" block-color="#fff" />
-        </view>
-        <view class="usage-bar">
-          <view class="usage-fill purple-bg" :style="{ width: getUsagePercentage(yearStats.sickDaysUsed, settings.sickDays) + '%' }"></view>
-        </view>
-        <text class="card-desc">{{ i18n.common.used }} {{ yearStats.sickDaysUsed }} {{ i18n.common.days }}</text>
-      </view>
-
-      <!-- Birthday Leave Card -->
-      <view class="settings-card birthday-card">
-        <view class="card-header">
+        <view class="card-header-row">
           <text class="card-title">{{ i18n.profile.birthdayLeave }}</text>
-          <view class="toggle-switch" @click="toggleBirthdayEnabled">
-            <view class="switch-track" :class="{ 'on': settings.birthdayEnabled }">
-              <view class="switch-thumb"></view>
+          <view class="header-actions">
+            <view class="info-btn" @click="showBirthdaySheet = true">
+              <text class="info-icon">i</text>
+            </view>
+            <view class="toggle-switch" @click="toggleBirthdayEnabled">
+              <view class="switch-track" :class="{ 'on': settings.birthdayEnabled }">
+                <view class="switch-thumb"></view>
+              </view>
             </view>
           </view>
         </view>
-        <text class="card-desc">{{ i18n.profile.birthdayLeaveDesc }}</text>
 
         <view v-if="settings.birthdayEnabled" class="birthday-config">
           <view class="month-options">
@@ -107,41 +51,120 @@
               <text class="month-text">{{ month.label }}</text>
             </view>
           </view>
+          <text class="card-foot-hint">{{ i18n.profile.birthdayCardHint }}</text>
         </view>
         <view v-else class="birthday-disabled-hint">
           <text class="hint-text">{{ i18n.profile.birthdayEnableHint }}</text>
         </view>
       </view>
 
-      <!-- Comp Off Settings Card -->
+      <!-- 假期额度（年假 + 病假合并卡） -->
       <view class="settings-card">
-        <view class="card-header">
-          <text class="card-title">{{ i18n.profile.compOffSettings }}</text>
+        <view class="card-header-row">
+          <text class="card-title">{{ i18n.profile.leaveCard }}</text>
+          <text class="header-hint">{{ i18n.profile.leaveResetHint }}</text>
         </view>
-        
-        <text class="section-hint">{{ i18n.profile.compOffHint }}</text>
+
+        <!-- 年假 -->
+        <view class="quota-block">
+          <view class="quota-row">
+            <text class="quota-label">{{ i18n.profile.vacationDays }}</text>
+            <view class="quota-values">
+              <text class="quota-value vacation-color">{{ settings.vacationDays }} {{ i18n.profile.quotaUnit }}</text>
+              <text class="quota-sub">{{ remainUsedText(yearStats.vacationDaysUsed, settings.vacationDays) }}</text>
+            </view>
+          </view>
+          <view class="slider-wrap quota-slider">
+            <slider
+              :value="settings.vacationDays"
+              @change="onSliderChange($event, 'vacationDays')"
+              @changing="onSliderChanging($event, 'vacationDays')"
+              min="0" max="30" step="1" activeColor="#41598A" backgroundColor="#EAEFF6" block-size="14" block-color="#ffffff" />
+          </view>
+        </view>
+
+        <!-- 病假 -->
+        <view class="quota-block">
+          <view class="quota-row">
+            <text class="quota-label">{{ i18n.profile.sickDays }}</text>
+            <view class="quota-values">
+              <text class="quota-value sick-color">{{ settings.sickDays }} {{ i18n.profile.quotaUnit }}</text>
+              <text class="quota-sub">{{ remainUsedText(yearStats.sickDaysUsed, settings.sickDays) }}</text>
+            </view>
+          </view>
+          <view class="slider-wrap quota-slider">
+            <slider
+              :value="settings.sickDays"
+              @change="onSliderChange($event, 'sickDays')"
+              @changing="onSliderChanging($event, 'sickDays')"
+              min="0" max="30" step="1" activeColor="#8C4F86" backgroundColor="#F3EAF1" block-size="14" block-color="#ffffff" />
+          </view>
+        </view>
+      </view>
+
+      <!-- 调休补班 -->
+      <view class="settings-card">
+        <view class="card-header-row">
+          <text class="card-title">{{ i18n.profile.compOffSettings }}</text>
+          <view class="info-btn" @click="showRuleSheet = true">
+            <text class="info-icon">i</text>
+          </view>
+        </view>
 
         <scroll-view class="holiday-scroll" scroll-x="true" show-scrollbar="false">
           <view class="holiday-row">
-            <view 
-              class="holiday-item" 
-              v-for="item in holidayList" 
+            <view
+              class="holiday-chip"
+              v-for="item in holidayList"
               :key="item.name"
-              :class="{ 'active-comp-off': getCompOffStatus(item.name), disabled: !item.hasCompOff, 'english': settings.language === 'en-US' }"
+              :class="{ active: getCompOffStatus(item.name), disabled: !item.hasCompOff }"
               @click="toggleCompOff(item)"
             >
-              <text class="holiday-name">{{ getHolidayName(item) }}</text>
-              <view class="holiday-status-icon" v-if="getCompOffStatus(item.name)">✓</view>
-              <text class="no-comp-off-text" v-if="!item.hasCompOff">{{ i18n.profile.noCompOff }}</text>
+              <text class="holiday-chip-text">{{ getHolidayName(item) }}</text>
             </view>
           </view>
         </scroll-view>
-        
+
         <view v-if="holidayList.length === 0" class="empty-hint">
             <text>{{ i18n.profile.noHoliday }}</text>
         </view>
       </view>
 
+      <!-- 语言 -->
+      <view class="settings-card language-card">
+        <text class="card-title">{{ i18n.profile.language }}</text>
+        <view class="lang-segmented">
+          <view class="lang-option" :class="{ active: settings.language === 'zh-CN' }" @click="setLanguage('zh-CN')">
+            <text class="lang-option-text">简体中文</text>
+          </view>
+          <view class="lang-option" :class="{ active: settings.language === 'en-US' }" @click="setLanguage('en-US')">
+            <text class="lang-option-text">English</text>
+          </view>
+        </view>
+      </view>
+
+    </view>
+
+    <!-- ===== 补班规则 ⓘ 弹层 ===== -->
+    <view v-if="showRuleSheet" class="sheet-mask" @click="showRuleSheet = false">
+      <view class="sheet" @click.stop>
+        <view class="sheet-head">
+          <text class="sheet-title">{{ i18n.profile.compOffSheetTitle }}</text>
+          <text class="sheet-close" @click="showRuleSheet = false">✕</text>
+        </view>
+        <text class="sheet-body">{{ i18n.profile.compOffSheetBody }}</text>
+      </view>
+    </view>
+
+    <!-- ===== 生日假 ⓘ 弹层 ===== -->
+    <view v-if="showBirthdaySheet" class="sheet-mask" @click="showBirthdaySheet = false">
+      <view class="sheet" @click.stop>
+        <view class="sheet-head">
+          <text class="sheet-title">{{ i18n.profile.birthdaySheetTitle }}</text>
+          <text class="sheet-close" @click="showBirthdaySheet = false">✕</text>
+        </view>
+        <text class="sheet-body">{{ i18n.profile.birthdaySheetBody }}</text>
+      </view>
     </view>
   </scroll-view>
 </template>
@@ -179,6 +202,8 @@ export default {
         totalOvertime: 0
       },
       holidayList: [], // 完整节日列表
+      showRuleSheet: false,
+      showBirthdaySheet: false,
       lastNx: 0,
       months: [
         { value: '01', label: '1月', labelEn: 'Jan' },
@@ -206,6 +231,9 @@ export default {
         value: m.value,
         label: isEn ? m.labelEn : m.label
       }));
+    },
+    targetTicks() {
+      return [0, 20, 40, 60, 80, 100];
     }
   },
   mounted() {
@@ -249,6 +277,13 @@ export default {
     getUsagePercentage(used, total) {
       if (!total || total === 0) return 0;
       return Math.min(100, Math.round((used / total) * 100));
+    },
+    // 设计稿格式：剩余 15 天 · 已用 5 天
+    remainUsedText(used, total) {
+      const remain = Math.max(0, (total || 0) - (used || 0));
+      return this.i18n.profile.remainUsed
+        .replace('{r}', remain)
+        .replace('{u}', used || 0);
     },
     getCompOffStatus(name) {
         return !!this.settings.compOffRules[name];
@@ -316,348 +351,117 @@ export default {
 }
 
 .content {
-  padding: 15px; /* 减少页面边距 */
-  padding-bottom: 50px;
+  padding: 4px 20px 0 20px;
 }
 
+/* ===== 通用卡片 ===== */
 .settings-card {
-  background-color: #fff;
-  border-radius: 12px; /* 减小圆角 */
-  padding: 15px; /* 减少卡片内边距 */
-  margin-bottom: 15px; /* 减少卡片间距 */
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05); /* 减弱阴影 */
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px; /* 减少标题下边距 */
+  background: #FFFFFF;
+  border-radius: 18px;
+  padding: 13px;
+  margin-bottom: 9px;
+  box-shadow: 0 2px 10px rgba(15, 35, 40, 0.05);
 }
 
 .card-title {
-  font-size: 16px; /* 减小标题字号 */
-  font-weight: bold;
-  color: #333;
-}
-
-.card-value {
-  font-size: 18px; /* 减小数值字号 */
-  font-weight: 800;
-}
-
-.card-value.blue { color: #007AFF; }
-.card-value.orange { color: #FF9800; }
-.card-value.purple { color: #9C27B0; }
-.card-value.red { color: #F44336; }
-
-.slider-container {
-  margin-bottom: 10px;
-}
-
-slider {
-  margin: 0;
-}
-
-.card-desc {
-  font-size: 12px;
-  color: #999;
+  font-size: 14px;
+  font-weight: 500;
+  color: #15181C;
   line-height: 1.4;
 }
 
-.value-group {
+.card-hint {
+  font-size: 11px;
+  color: #9AA1A8;
+  line-height: 1.4;
+}
+
+.card-header-row {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.balance-sub {
-  font-size: 12px;
-  color: #666;
-  margin-top: 2px;
-}
-
-.usage-bar {
-  height: 4px;
-  background-color: #F5F5F5;
-  border-radius: 2px;
-  margin-bottom: 8px;
-  overflow: hidden;
-}
-
-.usage-fill {
-  height: 100%;
-  border-radius: 2px;
-}
-
-.usage-fill.orange-bg { background-color: #FF9800; }
-.usage-fill.purple-bg { background-color: #9C27B0; }
-
-.switch-row {
-  display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  padding: 10px 0;
 }
 
-.switch-label-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.switch-label {
-  font-size: 16px;
-  color: #333;
-  margin-bottom: 4px;
-}
-
-.section-hint {
-  font-size: 11px; /* 减小提示文字 */
-  color: #999;
-  margin-bottom: 10px; /* 减少间距 */
-  display: block;
-}
-
-.holiday-scroll {
-  width: 100%;
-  white-space: nowrap;
-}
-
-.holiday-row {
-  display: flex;
-  flex-direction: row;
-  padding-bottom: 4px; /* 防止滚动条遮挡 */
-}
-
-.holiday-item {
-  flex: 0 0 80px; /* 固定宽度，不随父容器伸缩 */
-  height: 44px; 
-  display: flex;
-  flex-direction: column; 
-  align-items: center;
-  justify-content: center;
-  background-color: #F5F7FA;
-  border-radius: 6px; 
-  border: 1px solid #EAEAEA;
-  position: relative;
-  transition: all 0.2s ease;
-  box-sizing: border-box;
-  padding: 2px;
-  margin-right: 8px; /* 卡片之间的间距 */
-}
-
-/* 最后一个元素不需要右边距 */
-.holiday-item:last-child {
-  margin-right: 0;
-}
-
-.holiday-item:active {
-  transform: scale(0.96);
-}
-
-/* English holiday item optimization */
-.holiday-item.english {
-  flex: 0 0 70px; /* Slightly narrower for English */
-}
-
-.holiday-item.english .holiday-name {
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.1;
-  text-align: center;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.holiday-item.active-comp-off {
-  background-color: #E3F2FD; /* Light Blue */
-  border-color: #007AFF;
-  color: #007AFF;
-  font-weight: 600;
-}
-
-.holiday-item.active-comp-off .holiday-name {
-  color: #007AFF;
-}
-
-.holiday-item.disabled {
-  opacity: 0.6;
-  background-color: #f9f9f9;
-  border-color: #eee;
-  color: #aaa;
-}
-
-.holiday-name {
-  font-size: 12px;
-  line-height: 1.1;
-  text-align: center;
-  color: #333;
-}
-
-.no-comp-off-text {
-  position: static;
-  margin-top: 1px;
-  font-size: 9px;
-  color: #ccc;
-  line-height: 1;
-}
-
-.holiday-status-icon {
-  position: absolute;
-  top: 2px;
-  right: 2px;
+.header-hint {
   font-size: 10px;
-  color: #007AFF;
-  line-height: 1;
+  color: #9AA1A8;
 }
 
-.empty-hint {
-    padding: 20px 0;
-    text-align: center;
-    color: #ccc;
-    font-size: 14px;
-}
-
-.language-toggle-container {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 12px;
-  gap: 15px;
-  padding: 12px;
-  background-color: #f9f9f9;
-  border-radius: 8px;
-  border: 1px solid #f0f0f0;
-}
-
-.language-desc {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font-size: 13px;
-  color: #666;
-  font-weight: 500;
-}
-
-.toggle-checkbox {
-  display: none;
-}
-
-.toggle {
+.header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 500;
-  font-size: 12px;
-  color: #666;
 }
 
-.toggle-text {
-  min-width: 45px;
-  text-align: center;
-  transition: color 0.3s ease;
+/* ===== ⓘ 信息按钮 ===== */
+.info-btn {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.2px solid #A3A9B0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.info-icon {
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 600;
+  color: #A3A9B0;
   line-height: 1;
 }
 
-.toggle:not(.active) .toggle-text:first-child {
-  color: hsl(119, 84%, 10%);
-  font-weight: 600;
-}
-
-.toggle:not(.active) .toggle-text:last-child {
-  color: #999;
-}
-
-.toggle.active .toggle-text:first-child {
-  color: #999;
-}
-
-.toggle.active .toggle-text:last-child {
-  color: hsl(119, 84%, 10%);
-  font-weight: 600;
-}
-
-.toggle__switch {
-  --bg-toggle: hsl(0, 0%, 95%);
-  --bg-circle: hsl(119, 84%, 10%);
-  --w-toggle-switch: 70px;
-  --w-h-toggle-circle: 16px;
-  --pd-toggle-switch: 0.3rem;
-  height: 24px;
-  width: var(--w-toggle-switch);
-  background-color: var(--bg-toggle);
-  border-radius: 4rem;
+/* ===== 目标卡 ===== */
+.target-row {
   display: flex;
-  align-items: center;
-  padding: 0 var(--pd-toggle-switch);
-  cursor: pointer;
-  transition: background-color 500ms;
-  border: 1px solid #e0e0e0;
-  box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+  align-items: flex-start;
+  justify-content: space-between;
 }
 
-.toggle__circle {
-  width: var(--w-h-toggle-circle);
-  height: var(--w-h-toggle-circle);
-  background-color: var(--bg-circle);
-  border-radius: 50%;
-  transition: margin 400ms ease-in-out, background-color 1000ms;
+.target-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.toggle.active .toggle__circle {
-  margin-left: calc(var(--w-toggle-switch) - (var(--pd-toggle-switch) * 2) - var(--w-h-toggle-circle));
+.target-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0E6E62;
+  line-height: 1.2;
 }
 
-.toggle.active .toggle__switch {
-  --bg-toggle: hsl(119, 84%, 10%);
-  --bg-circle: hsl(0, 0%, 96%);
-  box-shadow: 0 .3rem 5rem 0 hsla(96, 85%, 34%, 30%);
-  border-color: hsl(119, 84%, 10%);
+.slider-wrap {
+  width: 100%;
 }
 
-/* Birthday Leave Card */
-.birthday-card {
-  border: 1px solid #FFCDD2;
+.target-slider {
+  margin-top: 3px;
 }
 
-.toggle-switch {
-  cursor: pointer;
+.tick-row {
+  display: flex;
+  justify-content: space-between;
 }
 
-.switch-track {
-  width: 44px;
-  height: 24px;
-  border-radius: 12px;
-  background-color: #ccc;
-  position: relative;
-  transition: background-color 0.3s;
+.tick-text {
+  font-size: 9px;
+  color: #9AA1A8;
+  line-height: 1.3;
 }
 
-.switch-track.on {
-  background-color: #FF9800;
+.tick-text.tick-active {
+  color: #0E6E62;
+  font-weight: 500;
 }
 
-.switch-thumb {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background-color: #fff;
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  transition: left 0.3s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.switch-track.on .switch-thumb {
-  left: 22px;
-}
-
+/* ===== 生日假卡 ===== */
 .birthday-config {
-  margin-top: 12px;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .month-options {
@@ -667,21 +471,20 @@ slider {
 }
 
 .month-option {
-  padding: 6px 4px;
-  background-color: #F5F7FA;
-  border-radius: 6px;
-  border: 1px solid #EAEAEA;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #FFFFFF;
+  border: 1px solid #EDEFF1;
+  border-radius: 10px;
   transition: all 0.2s;
-  cursor: pointer;
-  text-align: center;
-  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .month-option.active {
-  background-color: #FFF3E0;
-  border-color: #FF9800;
-  color: #FF9800;
-  font-weight: 600;
+  background: #FBEAF0;
+  border-color: #FBEAF0;
 }
 
 .month-option:active {
@@ -689,28 +492,273 @@ slider {
 }
 
 .month-text {
-  font-size: 13px;
-  color: #333;
+  font-size: 10px;
   font-weight: 500;
+  color: #3A4149;
   white-space: nowrap;
 }
 
 .month-option.active .month-text {
-  color: #FF9800;
+  color: #C24A7E;
+  font-weight: 600;
+}
+
+.card-foot-hint {
+  font-size: 9px;
+  color: #9AA1A8;
+  line-height: 1.6;
 }
 
 .birthday-disabled-hint {
   margin-top: 10px;
   padding: 10px;
-  background-color: #FFF8E1;
-  border-radius: 6px;
+  background-color: #FBEAF0;
+  border-radius: 8px;
   text-align: center;
 }
 
 .hint-text {
-  font-size: 13px;
-  color: #FF9800;
+  font-size: 11px;
+  color: #C24A7E;
   font-weight: 500;
 }
 
+/* ===== 开关 ===== */
+.toggle-switch {
+  cursor: pointer;
+}
+
+.switch-track {
+  width: 44px;
+  height: 26px;
+  border-radius: 13px;
+  background-color: #ccc;
+  position: relative;
+  transition: background-color 0.3s;
+}
+
+.switch-track.on {
+  background-color: #0E6E62;
+}
+
+.switch-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #fff;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: left 0.3s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.switch-track.on .switch-thumb {
+  left: 21px;
+}
+
+/* ===== 假期额度卡 ===== */
+.quota-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quota-block + .quota-block {
+  margin-top: 10px;
+}
+
+.quota-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.quota-label {
+  font-size: 12px;
+  color: #3A4149;
+  line-height: 1.4;
+}
+
+.quota-values {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.quota-value {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.vacation-color { color: #41598A; }
+.sick-color { color: #8C4F86; }
+
+.quota-sub {
+  font-size: 10px;
+  color: #6B7379;
+  line-height: 1.4;
+}
+
+.quota-slider {
+  height: 16px;
+}
+
+/* ===== 调休补班 chips ===== */
+.holiday-scroll {
+  width: 100%;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.holiday-row {
+  display: flex;
+  flex-direction: row;
+  gap: 5px;
+  padding-bottom: 4px;
+}
+
+.holiday-chip {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F4F5F6;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.holiday-chip.active {
+  background: #E7F1EF;
+}
+
+.holiday-chip:active {
+  transform: scale(0.96);
+}
+
+.holiday-chip-text {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: #A3A9B0;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.holiday-chip.active .holiday-chip-text {
+  color: #0E6E62;
+  font-weight: 500;
+}
+
+.empty-hint {
+  padding: 20px 0;
+  text-align: center;
+  color: #ccc;
+  font-size: 12px;
+}
+
+/* ===== 语言卡 ===== */
+.language-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px 6px 13px;
+  min-height: 46px;
+  box-sizing: border-box;
+}
+
+.lang-segmented {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  width: 128px;
+  height: 34px;
+  padding: 3px;
+  background: #F2F4F6;
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+
+.lang-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.lang-option.active {
+  background: #FFFFFF;
+}
+
+.lang-option-text {
+  font-size: 10px;
+  font-weight: 500;
+  color: #6B737B;
+  line-height: 1.2;
+}
+
+.lang-option.active .lang-option-text {
+  color: #15181C;
+  font-weight: 600;
+}
+
+/* ===== ⓘ 底部弹层 ===== */
+.sheet-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(11, 14, 18, 0.55);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+}
+
+.sheet {
+  width: 100%;
+  box-sizing: border-box;
+  background: #FFFFFF;
+  border-radius: 20px 20px 0 0;
+  padding: 18px 20px calc(24px + env(safe-area-inset-bottom)) 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: sheet-up 0.25s ease;
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(40px); opacity: 0.4; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sheet-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #15181C;
+}
+
+.sheet-close {
+  font-size: 14px;
+  color: #9AA1A8;
+  padding: 4px;
+}
+
+.sheet-body {
+  font-size: 13px;
+  color: #3A4149;
+  line-height: 1.7;
+}
 </style>

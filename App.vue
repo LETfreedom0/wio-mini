@@ -48,4 +48,10 @@
 
 <style>
 	/*每个页面公共css */
+	/* 隐藏 H5 原生 tabBar，改用自定义胶囊 TabBar */
+	uni-tabbar,
+	.uni-tabbar,
+	.uni-app--showtabbar .uni-app__tabbar {
+		display: none !important;
+	}
 </style>

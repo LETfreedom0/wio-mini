@@ -1,23 +1,22 @@
 <template>
   <view class="container">
-    <CustomHeader />
-    
+    <!-- 首页用设计稿的「日期 + 问候」替代白色导航条 -->
+    <view class="status-bar-placeholder"></view>
+
     <view class="content-area">
       <HomeView ref="home" />
     </view>
-    
+
     <CustomTabBar current="home" />
   </view>
 </template>
 
 <script>
-import CustomHeader from '@/components/CustomHeader.vue'
 import HomeView from '@/components/HomeView.vue'
 import CustomTabBar from '@/components/CustomTabBar.vue'
 
 export default {
   components: {
-    CustomHeader,
     HomeView,
     CustomTabBar
   },
@@ -46,8 +45,14 @@ export default {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: #F8F9FA;
-  padding-bottom: calc(50px + env(safe-area-inset-bottom)); /* Make space for TabBar */
+  background-color: #F4F5F6;
+  padding-bottom: calc(86px + env(safe-area-inset-bottom)); /* Make space for floating TabBar */
+}
+
+.status-bar-placeholder {
+  height: var(--status-bar-height);
+  width: 100%;
+  flex-shrink: 0;
 }
 
 .content-area {
