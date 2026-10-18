@@ -402,15 +402,8 @@ export default {
   flex-direction: column;
   align-items: stretch;
   width: 100%;
-  max-width: 100vw;
   box-sizing: border-box;
   padding: 8px 20px 0 20px;
-}
-
-/* H5 端 scroll-view 内部子元素宽度约束 */
-.content-wrapper :deep(*) {
-  max-width: 100%;
-  box-sizing: border-box;
 }
 
 .header-row,
