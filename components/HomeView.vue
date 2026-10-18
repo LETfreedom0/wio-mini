@@ -22,20 +22,10 @@
     <scroll-view scroll-y="true" class="home-scroll" :show-scrollbar="false">
       <view class="content-wrapper">
 
-        <!-- ===== Header：日期 + 问候 + 设置 ===== -->
+        <!-- ===== Header：问候 + 日期（右侧） ===== -->
         <view class="header-row anim-entry" style="animation-delay: 0.05s;">
-          <view class="greeting-col">
-            <text class="date-text">{{ currentDateStr }}</text>
-            <text class="greeting-text">{{ greetingText }}</text>
-          </view>
-          <view class="settings-btn" @click="goProfile">
-            <svg class="gear-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"
-                    stroke="#15181C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a1.6 1.6 0 0 1 0 2.27 1.6 1.6 0 0 1-2.27 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a1.6 1.6 0 0 1-1.6 1.6 1.6 1.6 0 0 1-1.6-1.6v-.09A1.65 1.65 0 0 0 10.44 19a1.65 1.65 0 0 0-1.82.33l-.06.06a1.6 1.6 0 0 1-2.27 0 1.6 1.6 0 0 1 0-2.27l.06-.06A1.65 1.65 0 0 0 6.68 15a1.65 1.65 0 0 0-1.51-1H5.1a1.6 1.6 0 0 1-1.6-1.6 1.6 1.6 0 0 1 1.6-1.6h.09A1.65 1.65 0 0 0 6.7 9.8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a1.6 1.6 0 0 1 0-2.27 1.6 1.6 0 0 1 2.27 0l.06.06A1.65 1.65 0 0 0 10.46 6h.07A1.65 1.65 0 0 0 11.5 4.49V4.4A1.6 1.6 0 0 1 13.1 2.8a1.6 1.6 0 0 1 1.6 1.6v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a1.6 1.6 0 0 1 2.27 0 1.6 1.6 0 0 1 0 2.27l-.06.06a1.65 1.65 0 0 0-.33 1.82V10a1.65 1.65 0 0 0 1.51 1h.09a1.6 1.6 0 0 1 1.6 1.6 1.6 1.6 0 0 1-1.6 1.6h-.09a1.65 1.65 0 0 0-1.51 1Z"
-                    stroke="#15181C" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </view>
+          <text class="greeting-text">{{ greetingText }}</text>
+          <text class="date-text">{{ currentDateStr }}</text>
         </view>
 
         <!-- ===== 本月回公司率 ===== -->
@@ -97,25 +87,13 @@
           <text class="section-title">{{ i18n.home.todayTitle }}</text>
           <view class="choice-row">
             <view class="choice-card" :class="{ selected: location === 'company' }" @click="setStatus('company')">
-              <view class="choice-icon">
-                <svg viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M4.2 18.5V5.1c0-.6.5-1.1 1.1-1.1h6.4c.6 0 1.1.5 1.1 1.1v13.4M12.8 10.7h4c.6 0 1.1.5 1.1 1.1v6.7M2.6 18.5h16.8M7 6.9h3M7 9.8h3M7 12.7h3M15.4 13.6h1.2M15.4 16.1h1.2"
-                        :stroke="location === 'company' ? '#0E6E62' : '#9AA1A8'" stroke-width="1.5"
-                        stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </view>
+              <view class="choice-icon" :class="location === 'company' ? 'icon-company-on' : 'icon-company-off'"></view>
               <text class="choice-title">{{ i18n.home.workFromCompany }}</text>
               <text class="choice-state" :class="{ 'state-on': location === 'company' }">{{ location === 'company' ? i18n.home.recorded : i18n.home.tapToSwitch }}</text>
             </view>
 
             <view class="choice-card" :class="{ selected: location === 'home' }" @click="setStatus('home')">
-              <view class="choice-icon">
-                <svg viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3.6 9.6 11 3.6l7.4 6v8.2c0 .5-.4.9-.9.9h-3.9v-5.1H8.4v5.1H4.5c-.5 0-.9-.4-.9-.9V9.6Z"
-                        :stroke="location === 'home' ? '#B26B18' : '#9AA1A8'" stroke-width="1.5"
-                        stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </view>
+              <view class="choice-icon" :class="location === 'home' ? 'icon-home-on' : 'icon-home-off'"></view>
               <text class="choice-title">{{ i18n.home.workFromHome }}</text>
               <text class="choice-state" :class="{ 'state-on': location === 'home' }">{{ location === 'home' ? i18n.home.recorded : i18n.home.tapToSwitch }}</text>
             </view>
@@ -331,9 +309,6 @@ export default {
       wioService.saveEntry(this.todayStr, status)
       this.loadStats()
     },
-    goProfile() {
-      uni.switchTab({ url: '/pages/profile/index' })
-    },
     goCalendar() {
       uni.switchTab({ url: '/pages/calendar/index' })
     },
@@ -417,15 +392,9 @@ export default {
 /* ===== Header ===== */
 .header-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   margin-bottom: 12px;
-}
-
-.greeting-col {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 .date-text {
@@ -439,22 +408,6 @@ export default {
   font-weight: 700;
   color: #15181C;
   line-height: 1.35;
-}
-
-.settings-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 20px;
-  background: #FFFFFF;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.gear-svg {
-  width: 20px;
-  height: 20px;
 }
 
 /* ===== 本月回公司率卡（低于目标 = 红卡） ===== */
@@ -727,11 +680,27 @@ export default {
 .choice-icon {
   width: 22px;
   height: 22px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
 }
 
-.choice-icon svg {
-  width: 22px;
-  height: 22px;
+/* 图标用 data-URI 背景（小程序真机不支持内联 <svg>） */
+.icon-company-on {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22' fill='none'%3E%3Cpath d='M4.2 18.5V5.1c0-.6.5-1.1 1.1-1.1h6.4c.6 0 1.1.5 1.1 1.1v13.4M12.8 10.7h4c.6 0 1.1.5 1.1 1.1v6.7M2.6 18.5h16.8M7 6.9h3M7 9.8h3M7 12.7h3M15.4 13.6h1.2M15.4 16.1h1.2' stroke='%230E6E62' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.icon-home-on {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22' fill='none'%3E%3Cpath d='M3.6 9.6 11 3.6l7.4 6v8.2c0 .5-.4.9-.9.9h-3.9v-5.1H8.4v5.1H4.5c-.5 0-.9-.4-.9-.9V9.6Z' stroke='%23B26B18' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.icon-off,
+.icon-company-off {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22' fill='none'%3E%3Cpath d='M4.2 18.5V5.1c0-.6.5-1.1 1.1-1.1h6.4c.6 0 1.1.5 1.1 1.1v13.4M12.8 10.7h4c.6 0 1.1.5 1.1 1.1v6.7M2.6 18.5h16.8M7 6.9h3M7 9.8h3M7 12.7h3M15.4 13.6h1.2M15.4 16.1h1.2' stroke='%239AA1A8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.icon-home-off {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22' fill='none'%3E%3Cpath d='M3.6 9.6 11 3.6l7.4 6v8.2c0 .5-.4.9-.9.9h-3.9v-5.1H8.4v5.1H4.5c-.5 0-.9-.4-.9-.9V9.6Z' stroke='%239AA1A8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 .choice-title {

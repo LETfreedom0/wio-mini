@@ -56,6 +56,7 @@ export default {
   flex-direction: column;
   height: 100vh;
   background-color: #F4F5F6;
+  padding-bottom: calc(86px + constant(safe-area-inset-bottom));
   padding-bottom: calc(86px + env(safe-area-inset-bottom)); /* Make space for floating TabBar */
 }
 

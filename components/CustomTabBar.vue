@@ -99,7 +99,10 @@ export default {
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 12px 21px calc(12px + env(safe-area-inset-bottom)) 21px;
+  /* 适配全面屏 Home Indicator：constant() 兜底老 iOS，env() 为标准写法 */
+  padding: 12px 21px 12px 21px;
+  padding-bottom: calc(12px + constant(safe-area-inset-bottom));
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
   z-index: 999;
   pointer-events: none; /* 外层不拦截点击 */
 }

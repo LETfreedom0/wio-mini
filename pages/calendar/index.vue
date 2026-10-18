@@ -577,6 +577,7 @@ export default {
 .container {
   min-height: 100vh;
   background-color: #F4F5F6;
+  padding-bottom: calc(98px + constant(safe-area-inset-bottom));
   padding-bottom: calc(98px + env(safe-area-inset-bottom));
 }
 
