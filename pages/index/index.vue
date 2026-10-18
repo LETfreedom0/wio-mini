@@ -1,7 +1,7 @@
 <template>
   <view class="container">
-    <!-- 首页用设计稿的「日期 + 问候」替代白色导航条 -->
-    <view class="status-bar-placeholder"></view>
+    <!-- 首页用设计稿的「日期 + 问候」替代白色导航条；占位高度按状态栏+胶囊实测 -->
+    <view class="status-bar-placeholder" :style="{ height: topSafeHeight + 'px' }"></view>
 
     <view class="content-area">
       <HomeView ref="home" />
@@ -14,11 +14,21 @@
 <script>
 import HomeView from '@/components/HomeView.vue'
 import CustomTabBar from '@/components/CustomTabBar.vue'
+import { getTopSafeArea } from '@/utils/safeArea.js'
 
 export default {
   components: {
     HomeView,
     CustomTabBar
+  },
+  data() {
+    return {
+      topSafeHeight: 0
+    }
+  },
+  onLoad() {
+    // 状态栏 + 胶囊按钮区域，避免自定义头部与手机导航栏重叠
+    this.topSafeHeight = getTopSafeArea().totalHeight;
   },
   onShow() {
     // Refresh data in HomeView if needed
@@ -50,7 +60,6 @@ export default {
 }
 
 .status-bar-placeholder {
-  height: var(--status-bar-height);
   width: 100%;
   flex-shrink: 0;
 }

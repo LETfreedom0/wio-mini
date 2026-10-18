@@ -1,6 +1,6 @@
 <template>
   <view class="container" @touchmove="onTouchMove" @touchend="onTouchEnd">
-    <view class="status-bar-placeholder"></view>
+    <view class="status-bar-placeholder" :style="{ height: topSafeHeight + 'px' }"></view>
 
     <view class="page-head">
       <text class="page-title">{{ i18n.calendar.pageTitle }}</text>
@@ -150,6 +150,7 @@
 import CustomTabBar from '@/components/CustomTabBar.vue'
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
+import { getTopSafeArea } from '@/utils/safeArea.js'
 
 const holidayNameMap = {
   '元旦': 'New Year\'s',
@@ -168,6 +169,7 @@ export default {
   data() {
     return {
       currentDate: new Date(),
+      topSafeHeight: 0,
       entries: {},
       overtimeEntries: {},
       settings: {},
@@ -339,6 +341,10 @@ export default {
     return {
       title: title
     }
+  },
+  onLoad() {
+    // 状态栏 + 胶囊按钮区域，避免页面标题与手机导航栏重叠
+    this.topSafeHeight = getTopSafeArea().totalHeight;
   },
   onShow() {
     this.loadData();
@@ -575,7 +581,6 @@ export default {
 }
 
 .status-bar-placeholder {
-  height: var(--status-bar-height);
   width: 100%;
 }
 

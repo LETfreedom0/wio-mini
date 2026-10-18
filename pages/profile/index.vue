@@ -1,6 +1,6 @@
 <template>
   <view class="container">
-    <view class="status-bar-placeholder"></view>
+    <view class="status-bar-placeholder" :style="{ height: topSafeHeight + 'px' }"></view>
 
     <view class="page-head">
       <text class="page-title">{{ pageTitle }}</text>
@@ -19,6 +19,7 @@ import ProfileView from '@/components/ProfileView.vue'
 import CustomTabBar from '@/components/CustomTabBar.vue'
 import { locales } from '@/utils/locales.js'
 import wioService from '@/utils/wioService.js'
+import { getTopSafeArea } from '@/utils/safeArea.js'
 
 export default {
   components: {
@@ -27,7 +28,8 @@ export default {
   },
   data() {
     return {
-      language: 'zh-CN'
+      language: 'zh-CN',
+      topSafeHeight: 0
     }
   },
   computed: {
@@ -35,6 +37,10 @@ export default {
       const localesMap = locales[this.language] || locales['zh-CN'];
       return localesMap.profile.pageTitle;
     }
+  },
+  onLoad() {
+    // 状态栏 + 胶囊按钮区域，避免页面标题与手机导航栏重叠
+    this.topSafeHeight = getTopSafeArea().totalHeight;
   },
   onShow() {
     this.language = wioService.getSettings().language || 'zh-CN';
@@ -63,7 +69,6 @@ export default {
 }
 
 .status-bar-placeholder {
-  height: var(--status-bar-height);
   width: 100%;
   flex-shrink: 0;
 }

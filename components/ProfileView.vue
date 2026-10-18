@@ -614,6 +614,14 @@ export default {
   margin-top: 2px;
 }
 
+/* 隐藏横向滚动条 */
+.holiday-scroll ::-webkit-scrollbar,
+.holiday-scroll ::v-deep ::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .holiday-row {
   display: flex;
   flex-direction: row;
