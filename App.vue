@@ -1,9 +1,14 @@
 <script>
+	import { init as cloudInit, flush as cloudFlush } from './utils/syncService.js'
+
 	export default {
 		onLaunch: function() {
 			console.log('App Launch')
 			uni.hideTabBar()
-			
+
+			// 云同步：登录用户启动时拉取云端比对合并（静默，失败不打扰）
+			cloudInit().catch(() => {})
+
 			//#ifdef MP-WEIXIN || MP-ALIPAY || MP-BAIDU || MP-TOUTIAO
 			// 检查小程序更新（仅小程序端支持）
 			if (typeof uni.getUpdateManager === 'function') {
@@ -42,6 +47,8 @@
 		},
 		onHide: function() {
 			console.log('App Hide')
+			// 云同步：切后台前把未推送的本地变更推上去
+			cloudFlush().catch(() => {})
 		}
 	}
 </script>

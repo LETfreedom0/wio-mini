@@ -1,4 +1,5 @@
 import { holidays2026 } from './holidays.js';
+import { markDirty } from './syncService.js';
 
 const KEY_SETTINGS = 'wio_settings';
 const KEY_ENTRIES = 'wio_entries';
@@ -36,6 +37,7 @@ export default {
   saveSettings(settings) {
     try {
       uni.setStorageSync(KEY_SETTINGS, JSON.stringify(settings));
+      markDirty();
     } catch (e) {
       console.error('Error saving settings', e);
     }
@@ -70,6 +72,7 @@ export default {
         delete entries[dateStr];
       }
       uni.setStorageSync(KEY_ENTRIES, JSON.stringify(entries));
+      markDirty();
     } catch (e) {
       console.error('Error saving entry', e);
     }
@@ -102,6 +105,7 @@ export default {
         delete entries[dateStr];
       }
       uni.setStorageSync(KEY_OVERTIME, JSON.stringify(entries));
+      markDirty();
     } catch (e) {
       console.error('Error saving overtime entry', e);
     }
