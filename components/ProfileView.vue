@@ -11,7 +11,7 @@
         </view>
         <view class="account-info">
           <text class="account-name">{{ accountName }}</text>
-          <text class="account-sub">{{ accountSub }}</text>
+          <text v-if="accountSub" class="account-sub">{{ accountSub }}</text>
         </view>
         <view v-if="!isLogin" class="account-login-btn" @click.stop="openAuthSheet('login')">
           <text class="account-login-btn-text">{{ i18n.profile.loginAction }}</text>
@@ -493,9 +493,8 @@ export default {
     },
     accountSub() {
       if (!this.isLogin) return this.i18n.profile.accountLoginHint;
-      return this.isPro
-        ? this.i18n.profile.accountBound
-        : this.i18n.profile.syncAfterLogin;
+      // 登录后不再展示「登录后可用」；仅订阅时显示绑定标识
+      return this.isPro ? this.i18n.profile.accountBound : '';
     },
     avatarSrc() {
       if (!this.isLogin) return '';
