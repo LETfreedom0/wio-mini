@@ -19,68 +19,48 @@
         <text v-else class="account-chevron">›</text>
       </view>
 
-      <!-- 数据同步 -->
-      <view class="settings-card">
-        <view class="card-header-row">
-          <text class="card-title">{{ i18n.profile.syncTitle }}</text>
-          <view v-if="!isLogin" class="sync-pill sync-pill-off">
-            <text class="sync-pill-text">{{ i18n.profile.syncOff }}</text>
+      <!-- PRO 专属卡：云端同步 / 多语言 / 高级统计 统一收口 -->
+      <view class="settings-card pro-card" :class="{ 'pro-card-locked': !isPro }">
+        <!-- 卡头 -->
+        <view class="pro-card-head">
+          <view class="pro-card-title-group">
+            <text class="pro-card-title">{{ i18n.profile.proCardTitle }}</text>
+            <text class="pro-card-sub">{{ isPro ? i18n.profile.proCardSubOn : i18n.profile.proCardSubOff }}</text>
           </view>
-          <view v-else-if="!isPro" class="pro-badge">
+          <view v-if="isPro" class="pro-card-badge-on">
+            <text class="pro-card-badge-on-text">{{ i18n.profile.proCardUnlocked }}</text>
+          </view>
+          <view v-else class="pro-badge">
             <text class="pro-badge-text">PRO</text>
-          </view>
-          <view v-else class="sync-pill sync-pill-on">
-            <text class="sync-pill-text sync-pill-on-text">✓ {{ i18n.profile.synced }}</text>
           </view>
         </view>
 
-        <!-- 未登录：锁定态 -->
-        <template v-if="!isLogin">
-          <view class="sync-lock-row">
-            <text class="sync-lock-icon">🔒</text>
-            <text class="sync-lock-text">{{ i18n.profile.syncNeedLogin }}</text>
+        <!-- 云端同步 -->
+        <view class="pro-feature-row">
+          <view class="pro-feature-text">
+            <text class="pro-feature-title">{{ i18n.profile.benefitSync }}</text>
+            <text class="pro-feature-sub">{{ syncRowSub }}</text>
           </view>
-          <text class="sync-hint">{{ i18n.profile.syncNeedLoginSub }}</text>
-        </template>
-
-        <!-- 已登录未订阅：PRO 推广态 -->
-        <template v-else-if="!isPro">
-          <text class="sync-benefit">{{ i18n.profile.syncProBenefit }}</text>
-          <view class="sync-upgrade-btn" @click="showPaywall = true">
-            <text class="sync-upgrade-btn-text">{{ i18n.profile.upgradePro }}</text>
-          </view>
-          <text class="sync-hint">{{ i18n.profile.syncProNote }}</text>
-        </template>
-
-        <!-- 已订阅：完整同步态 -->
-        <template v-else>
-          <view class="sync-status-row">
-            <text class="sync-time">{{ i18n.profile.lastSync }}：{{ lastSyncText }}</text>
-            <text class="sync-detail-link" @click="onSyncNow">{{ i18n.profile.syncNow }}</text>
-          </view>
-          <view class="sync-divider"></view>
-          <view class="sync-auto-row">
-            <view class="sync-auto-info">
-              <text class="sync-auto-title">{{ i18n.profile.autoSyncLabel }}</text>
-              <text class="sync-auto-sub">{{ i18n.profile.autoSyncSub }}</text>
-            </view>
-            <view class="toggle-switch" @click="toggleAutoSync">
-              <view class="switch-track" :class="{ on: settings.autoSync }">
-                <view class="switch-thumb"></view>
-              </view>
+          <view v-if="isLogin && isPro" class="toggle-switch" @click="toggleAutoSync">
+            <view class="switch-track" :class="{ on: settings.autoSync }">
+              <view class="switch-thumb"></view>
             </view>
           </view>
-          <text class="sync-hint">{{ i18n.profile.syncScope }}</text>
-        </template>
-      </view>
+          <text v-else class="pro-feature-locked">{{ isLogin ? i18n.profile.proLockedShort : i18n.profile.proLoginShort }}</text>
+        </view>
+        <view v-if="isLogin && isPro" class="pro-sync-status">
+          <text class="pro-sync-time">{{ i18n.profile.lastSync }}：{{ lastSyncText }}</text>
+          <text class="pro-sync-now" @click="onSyncNow">{{ i18n.profile.syncNow }}</text>
+        </view>
+        <view class="pro-divider"></view>
 
-      <!-- 语言（多语言为 PRO 专属） -->
-      <view class="settings-card language-card" :class="{ 'language-card-pro': !isPro }">
-        <view class="card-header-row">
-          <text class="card-title">{{ i18n.profile.language }}</text>
-          <view v-if="!isPro" class="pro-badge" @click="showPaywall = true">
-            <text class="pro-badge-text">PRO</text>
+        <!-- 多语言 -->
+        <view class="pro-feature-row">
+          <view class="pro-feature-text">
+            <text class="pro-feature-title">{{ i18n.profile.proLangTitle }}</text>
+            <text class="pro-feature-sub">{{ i18n.profile.benefitLangSub }}</text>
           </view>
+          <text v-if="!isPro" class="pro-feature-locked">{{ i18n.profile.proLockedShort }}</text>
         </view>
         <view class="lang-segmented">
           <view class="lang-option" :class="{ active: settings.language === 'zh-CN' }" @click="setLanguage('zh-CN')">
@@ -91,24 +71,21 @@
             <text v-if="!isPro" class="lang-lock-tag">PRO</text>
           </view>
         </view>
-        <view v-if="!isPro" class="lang-pro-hint" @click="showPaywall = true">
-          <text class="lang-pro-hint-text">{{ i18n.profile.langProHint }}</text>
-          <text class="lang-pro-hint-arrow">›</text>
-        </view>
-      </view>
+        <view class="pro-divider"></view>
 
-      <!-- 高级统计（PRO 专属，点击进入年度统计页） -->
-      <view class="settings-card stats-entry-card" @click="onStatsTap">
-        <view class="stats-entry-left">
-          <text class="stats-entry-title">{{ i18n.profile.statsEntry }}</text>
-          <text class="stats-entry-sub">{{ i18n.profile.statsEntrySub }}</text>
-        </view>
-        <view class="stats-entry-right">
-          <text v-if="isPro" class="stats-entry-open">{{ i18n.profile.statsEntryOpen }}</text>
-          <view v-else class="pro-badge">
-            <text class="pro-badge-text">PRO</text>
+        <!-- 高级统计 -->
+        <view class="pro-feature-row" @click="onStatsTap">
+          <view class="pro-feature-text">
+            <text class="pro-feature-title">{{ i18n.profile.statsEntry }}</text>
+            <text class="pro-feature-sub">{{ i18n.profile.statsEntrySub }}</text>
           </view>
-          <text class="stats-entry-arrow">›</text>
+          <text v-if="isPro" class="pro-status-on">{{ i18n.profile.statsEntryOpen }}</text>
+          <text v-else class="pro-feature-locked">{{ i18n.profile.proLockedShort }}</text>
+        </view>
+
+        <!-- 锁定态：升级按钮 -->
+        <view v-if="!isPro" class="pro-upgrade-cta" @click="showPaywall = true">
+          <text class="pro-upgrade-cta-text">{{ i18n.profile.upgradeProCta }}</text>
         </view>
       </view>
 
@@ -531,6 +508,12 @@ export default {
       if (!this.isLogin) return this.i18n.profile.accountLoginHint;
       // 登录后不再展示「登录后可用」；仅订阅时显示绑定标识
       return this.isPro ? this.i18n.profile.accountBound : '';
+    },
+    // PRO 卡「云端同步」行的说明文案（按登录/订阅状态切换）
+    syncRowSub() {
+      if (!this.isLogin) return this.i18n.profile.syncNeedLogin;
+      if (!this.isPro) return this.i18n.profile.syncProBenefit;
+      return this.i18n.profile.autoSyncSub;
     },
     avatarSrc() {
       if (!this.isLogin) return '';
@@ -1309,6 +1292,110 @@ export default {
   font-size: 16px;
   color: #C3C9CE;
   margin-left: 6px;
+}
+
+/* PRO 专属卡（同步/多语言/高级统计 统一收口） */
+.pro-card-locked {
+  background-color: #FFFDF8;
+  border: 1px solid rgba(192, 138, 45, 0.22);
+}
+.pro-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pro-card-title-group {
+  display: flex;
+  flex-direction: column;
+}
+.pro-card-title {
+  font-size: 15px;
+  font-weight: bold;
+  color: #18191C;
+}
+.pro-card-sub {
+  font-size: 11px;
+  color: #A9761F;
+  margin-top: 3px;
+}
+.pro-card-badge-on {
+  background-color: #C08A2D;
+  border-radius: 999px;
+  padding: 4px 11px;
+}
+.pro-card-badge-on-text {
+  color: #FFF9EE;
+  font-size: 10px;
+  font-weight: 600;
+}
+.pro-feature-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0 10px;
+}
+.pro-feature-row:active {
+  opacity: 0.85;
+}
+.pro-feature-text {
+  display: flex;
+  flex-direction: column;
+}
+.pro-feature-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #18191C;
+}
+.pro-feature-sub {
+  font-size: 10.5px;
+  color: #8A94A0;
+  margin-top: 3px;
+}
+.pro-feature-locked {
+  font-size: 11px;
+  color: #C0A46B;
+  font-weight: 500;
+}
+.pro-status-on {
+  font-size: 11px;
+  color: #0E6E62;
+  font-weight: 500;
+}
+.pro-sync-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 10px;
+}
+.pro-sync-time {
+  font-size: 10.5px;
+  color: #8A94A0;
+}
+.pro-sync-now {
+  font-size: 10.5px;
+  color: #0E6E62;
+  font-weight: 500;
+}
+.pro-divider {
+  height: 1px;
+  background-color: #F1EDE5;
+}
+.pro-upgrade-cta {
+  margin-top: 12px;
+  background-color: #C08A2D;
+  border-radius: 12px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pro-upgrade-cta:active {
+  opacity: 0.9;
+}
+.pro-upgrade-cta-text {
+  color: #FFF9EE;
+  font-size: 13px;
+  font-weight: bold;
 }
 
 /* 页面底部版本号 */
