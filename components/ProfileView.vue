@@ -326,31 +326,37 @@
     <view v-if="showPaywall" class="sheet-mask" @click="showPaywall = false">
       <view class="sheet-card" @click.stop>
         <view class="paywall-head">
-          <view class="paywall-crown">👑</view>
+          <view class="paywall-crown-medal">
+            <text class="paywall-crown">👑</text>
+          </view>
           <text class="paywall-title">{{ i18n.profile.paywallTitle }}</text>
           <text class="paywall-sub">{{ i18n.profile.paywallSub }}</text>
         </view>
 
         <view class="paywall-benefits">
           <view class="benefit-row">
+            <view class="benefit-check"><text class="benefit-check-text">✓</text></view>
             <view class="benefit-info">
               <text class="benefit-title">{{ i18n.profile.benefitSync }}</text>
               <text class="benefit-sub">{{ i18n.profile.benefitSyncSub }}</text>
             </view>
           </view>
           <view class="benefit-row">
+            <view class="benefit-check"><text class="benefit-check-text">✓</text></view>
             <view class="benefit-info">
               <text class="benefit-title">{{ i18n.profile.benefitBackup }}</text>
               <text class="benefit-sub">{{ i18n.profile.benefitBackupSub }}</text>
             </view>
           </view>
           <view class="benefit-row">
+            <view class="benefit-check"><text class="benefit-check-text">✓</text></view>
             <view class="benefit-info">
               <text class="benefit-title">{{ i18n.profile.benefitStats }}</text>
               <text class="benefit-sub">{{ i18n.profile.benefitStatsSub }}</text>
             </view>
           </view>
           <view class="benefit-row">
+            <view class="benefit-check"><text class="benefit-check-text">✓</text></view>
             <view class="benefit-info">
               <text class="benefit-title">{{ i18n.profile.benefitLang }}</text>
               <text class="benefit-sub">{{ i18n.profile.benefitLangSub }}</text>
@@ -373,6 +379,7 @@
               <text class="plan-price">¥6</text>
               <text class="plan-unit">/月</text>
             </view>
+            <text class="plan-sub">{{ i18n.profile.planMonthSub }}</text>
           </view>
           <view class="plan-card plan-card-year" :class="{ selected: payPlan === 'year' }" @click="payPlan = 'year'">
             <view class="plan-save-badge"><text class="plan-save-text">{{ i18n.profile.planSave }}</text></view>
@@ -381,6 +388,7 @@
               <text class="plan-price">¥48</text>
               <text class="plan-unit">/年</text>
             </view>
+            <text class="plan-sub">{{ i18n.profile.planYearSub }}</text>
           </view>
         </view>
 
@@ -2066,30 +2074,44 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+}
+
+.paywall-crown-medal {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #FFF4DC, #FFE7B8);
+  border: 1px solid #F1DDA9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
 }
 
 .paywall-crown {
-  font-size: 30px;
+  font-size: 24px;
   line-height: 1;
+  margin-top: -2px;
 }
 
 .paywall-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
   color: #15181C;
+  letter-spacing: 0.5px;
 }
 
 .paywall-sub {
-  font-size: 12px;
-  color: #9AA1A8;
+  font-size: 12.5px;
+  color: #8A94A0;
 }
 
 .paywall-benefits {
   margin-top: 18px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 13px;
   padding: 16px;
   background: #F8F9FA;
   border-radius: 14px;
@@ -2097,14 +2119,37 @@ export default {
 
 .benefit-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  gap: 10px;
 }
+
+/* 金色对勾锚点：强化「已包含权益」的确认感 */
+.benefit-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #D9A94F, #B07A22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.benefit-check-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: #FFFFFF;
+  line-height: 1;
+}
+
 /* 「更多会员功能」预告行：与权益行区分的弱化态 */
 .benefit-more-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 4px;
+  gap: 10px;
+  margin-top: 2px;
   padding: 10px 12px;
   background: #FFF9EE;
   border-radius: 10px;
@@ -2120,19 +2165,20 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
 }
 
 .benefit-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #15181C;
   line-height: 1.3;
 }
 
 .benefit-sub {
-  font-size: 11px;
+  font-size: 11.5px;
   color: #9AA1A8;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .plan-row {
@@ -2144,14 +2190,14 @@ export default {
 .plan-card {
   flex: 1;
   position: relative;
-  padding: 14px 12px;
+  padding: 15px 12px 13px;
   border-radius: 14px;
   border: 1.5px solid #EDEFF1;
   background: #FFFFFF;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
 }
 
 .plan-card.selected {
@@ -2179,7 +2225,8 @@ export default {
 }
 
 .plan-name {
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 500;
   color: #6B7379;
 }
 
@@ -2190,9 +2237,10 @@ export default {
 }
 
 .plan-price {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
   color: #15181C;
+  line-height: 1.1;
 }
 
 .plan-unit {
@@ -2200,11 +2248,22 @@ export default {
   color: #9AA1A8;
 }
 
+.plan-sub {
+  font-size: 10.5px;
+  color: #9AA1A8;
+  line-height: 1.3;
+}
+
+.plan-card.selected .plan-sub {
+  color: #B07A22;
+}
+
 .paywall-cta {
-  margin-top: 18px;
-  height: 46px;
-  border-radius: 14px;
+  margin-top: 20px;
+  height: 48px;
+  border-radius: 16px;
   background: linear-gradient(135deg, #C08A2D, #A9761F);
+  box-shadow: 0 6px 16px rgba(192, 138, 45, 0.32);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2215,9 +2274,10 @@ export default {
 }
 
 .paywall-cta-text {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   color: #FFFFFF;
+  letter-spacing: 0.5px;
 }
 
 .paywall-fine {
