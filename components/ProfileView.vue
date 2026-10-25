@@ -83,16 +83,6 @@
           <text v-else class="pro-feature-locked">{{ i18n.profile.proLockedShort }}</text>
         </view>
 
-        <!-- 更多会员功能（开发中预告） -->
-        <view class="pro-divider"></view>
-        <view class="pro-feature-row">
-          <view class="pro-feature-text">
-            <text class="pro-feature-title">{{ i18n.profile.benefitMore }}</text>
-            <text class="pro-feature-sub">{{ i18n.profile.benefitMoreSub }}</text>
-          </view>
-          <text class="pro-coming-soon">{{ i18n.profile.comingSoon }}</text>
-        </view>
-
         <!-- 续费行（仅 PRO） -->
         <template v-if="isPro">
           <view class="pro-divider"></view>
@@ -365,6 +355,14 @@
               <text class="benefit-title">{{ i18n.profile.benefitLang }}</text>
               <text class="benefit-sub">{{ i18n.profile.benefitLangSub }}</text>
             </view>
+          </view>
+          <!-- 更多会员功能预告 -->
+          <view class="benefit-more-row">
+            <view class="benefit-info">
+              <text class="benefit-title">{{ i18n.profile.benefitMore }}</text>
+              <text class="benefit-sub">{{ i18n.profile.benefitMoreSub }}</text>
+            </view>
+            <text class="coming-soon">{{ i18n.profile.comingSoon }}</text>
           </view>
         </view>
 
@@ -2100,6 +2098,22 @@ export default {
 .benefit-row {
   display: flex;
   align-items: center;
+}
+/* 「更多会员功能」预告行：与权益行区分的弱化态 */
+.benefit-more-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: #FFF9EE;
+  border-radius: 10px;
+}
+.coming-soon {
+  font-size: 10.5px;
+  color: #C08A2D;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .benefit-info {
