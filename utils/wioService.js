@@ -106,6 +106,69 @@ export default {
     return ratio;
   },
 
+  // --- 自定义假期（公司福利假，按日期区间配置） ---
+  // 结构：customLeaves: [{ id, name, color, start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' }]
+  // 口径：区间内的工作日计入 WIO 分母扣减（与年假/病假同向）；周末/节假日不扣；
+  //       用户手动标记的日期优先于自定义假期
+  CUSTOM_LEAVE_COLORS: ['#0E6E62', '#41598A', '#8C4F86', '#C08A2D', '#C25B6E', '#C97A3D'],
+
+  _isValidDateStr(str) {
+    return typeof str === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(str) && !isNaN(new Date(str + 'T00:00:00').getTime());
+  },
+
+  getCustomLeaves() {
+    const s = this.getSettings();
+    const list = Array.isArray(s.customLeaves) ? s.customLeaves : [];
+    return list
+      .filter(l => l && l.id && l.name && this._isValidDateStr(l.start) && this._isValidDateStr(l.end) && l.start <= l.end)
+      .map(l => ({ id: l.id, name: String(l.name).slice(0, 12), color: l.color || '#0E6E62', start: l.start, end: l.end }));
+  },
+
+  // 新增或编辑（带 id 即编辑）；校验失败返回 null
+  saveCustomLeave(leave) {
+    try {
+      const settings = this.getSettings();
+      const list = Array.isArray(settings.customLeaves) ? settings.customLeaves.filter(Boolean) : [];
+      const item = {
+        id: leave.id || ('cl_' + Date.now().toString(36)),
+        name: String(leave.name || '').trim().slice(0, 12),
+        color: leave.color || '#0E6E62',
+        start: leave.start,
+        end: leave.end
+      };
+      if (!item.name || !this._isValidDateStr(item.start) || !this._isValidDateStr(item.end) || item.start > item.end) {
+        return null;
+      }
+      const idx = list.findIndex(l => l && l.id === item.id);
+      if (idx >= 0) {
+        list[idx] = item;
+      } else {
+        list.push(item);
+      }
+      this.saveSettings({ ...settings, customLeaves: list });
+      return item;
+    } catch (e) {
+      console.error('saveCustomLeave error', e);
+      return null;
+    }
+  },
+
+  deleteCustomLeave(id) {
+    const settings = this.getSettings();
+    const list = (Array.isArray(settings.customLeaves) ? settings.customLeaves : []).filter(l => l && l.id !== id);
+    this.saveSettings({ ...settings, customLeaves: list });
+  },
+
+  // 某天命中的自定义假期（日历显示与统计扣减的数据源）
+  getCustomLeaveForDate(dateStr) {
+    if (!this._isValidDateStr(dateStr)) return null;
+    const list = this.getCustomLeaves();
+    for (const l of list) {
+      if (dateStr >= l.start && dateStr <= l.end) return l;
+    }
+    return null;
+  },
+
   // --- Entries (Date: Status) ---
   // Status types: 'company', 'home', 'vacation', 'sick', 'public', etc.
   getEntries() {
@@ -275,6 +338,7 @@ export default {
       comp_off: 0,
       public: 0,
       exclude_wio: 0,
+      custom: 0, // 自定义假期（区间内工作日）
       totalRecorded: 0,
       workingDays: 0, // Mon-Fri
       totalOvertime: 0 // New: Total overtime hours
@@ -324,6 +388,19 @@ export default {
       }
 
       // 2. Count Stats based on Entry OR Public Holiday default
+      // 2.0 自定义假期：仅在「无手动标记」的日期生效（手动标记优先）；
+      //     工作日 → 分母扣减项；非工作日 → 计入 weekendLeaves 防止误扣分母
+      if (!entryStatus) {
+        const customLeave = this.getCustomLeaveForDate(dateStr);
+        if (customLeave) {
+          if (isWorkingDay) {
+            stats.custom++;
+          } else {
+            if (!stats.weekendLeaves) stats.weekendLeaves = 0;
+            stats.weekendLeaves++;
+          }
+        }
+      }
       if (entryStatus) {
         // User manually marked this day
         if (stats.hasOwnProperty(entryStatus)) {
@@ -370,6 +447,7 @@ export default {
       compOffDays: stats.comp_off,
       publicDays: stats.public,
       excludeWioDays: stats.exclude_wio,
+      customLeaveDays: stats.custom,
       weekendLeaves: stats.weekendLeaves || 0, // Return the count of leaves on non-working days
       totalRecorded: stats.totalRecorded,
       workingDays: stats.workingDays,

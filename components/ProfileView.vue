@@ -205,6 +205,30 @@
         </view>
       </view>
 
+      <!-- 自定义假期（公司福利假，按日期区间配置） -->
+      <view class="settings-card">
+        <view class="card-header-row">
+          <text class="card-title">{{ i18n.profile.customLeaveTitle }}</text>
+          <text class="header-hint">{{ i18n.profile.customLeaveHint }}</text>
+        </view>
+
+        <view v-for="l in customLeaves" :key="l.id" class="custom-leave-row" @click="openCustomEdit(l)">
+          <view class="custom-dot" :style="{ background: l.color }"></view>
+          <text class="custom-leave-name">{{ l.name }}</text>
+          <text class="custom-leave-range">{{ fmtCustomRange(l) }}</text>
+          <text class="custom-leave-chevron">›</text>
+        </view>
+
+        <view v-if="customLeaves.length === 0" class="custom-empty">
+          <text class="custom-empty-text">{{ i18n.profile.customLeaveEmpty }}</text>
+        </view>
+
+        <view class="custom-add-btn" @click="openCustomAdd">
+          <text class="custom-add-text">{{ i18n.profile.customLeaveAdd }}</text>
+        </view>
+        <text class="card-foot-hint">{{ i18n.profile.customLeaveCounted }}</text>
+      </view>
+
       <!-- 调休补班 -->
       <view class="settings-card">
         <view class="card-header-row">
@@ -263,6 +287,60 @@
         <text class="modal-body">{{ i18n.profile.birthdaySheetBody }}</text>
         <view class="modal-btn" @click="showBirthdaySheet = false">
           <text class="modal-btn-text">{{ i18n.profile.gotIt }}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- ===== 自定义假期 添加/编辑（底部弹层） ===== -->
+    <view v-if="showCustomSheet" class="sheet-mask" @click="showCustomSheet = false">
+      <view class="sheet-card" @click.stop>
+        <text class="sheet-title">{{ customEditingId ? i18n.profile.customSheetEdit : i18n.profile.customSheetAdd }}</text>
+
+        <view class="custom-field-row">
+          <text class="custom-field-label">{{ i18n.profile.customFieldName }}</text>
+          <input class="custom-input" :value="customForm.name" :placeholder="i18n.profile.customNamePh" maxlength="12" @input="onCustomName" />
+        </view>
+
+        <view class="custom-field-row">
+          <text class="custom-field-label">{{ i18n.profile.customDateRange }}</text>
+          <view class="custom-date-row">
+            <picker class="custom-picker" mode="date" :value="customForm.start" @change="onCustomStart">
+              <view class="custom-date-box">
+                <text class="custom-date-text">{{ customForm.start }}</text>
+              </view>
+            </picker>
+            <text class="custom-date-sep">~</text>
+            <picker class="custom-picker" mode="date" :value="customForm.end" @change="onCustomEnd">
+              <view class="custom-date-box">
+                <text class="custom-date-text">{{ customForm.end }}</text>
+              </view>
+            </picker>
+          </view>
+        </view>
+
+        <view class="custom-field-row">
+          <text class="custom-field-label">{{ i18n.profile.customColorLabel }}</text>
+          <view class="custom-color-row">
+            <view
+              v-for="c in customColors"
+              :key="c"
+              class="custom-color-dot"
+              :class="{ selected: customForm.color === c }"
+              :style="{ background: c }"
+              @click="selectCustomColor(c)"
+            ></view>
+          </view>
+        </view>
+
+        <view class="custom-hint-wrap">
+          <text class="custom-hint-text">{{ i18n.profile.customLeaveCounted }}</text>
+        </view>
+
+        <view class="custom-save-btn" @click="saveCustom">
+          <text class="custom-save-text">{{ i18n.profile.customSave }}</text>
+        </view>
+        <view v-if="customEditingId" class="custom-delete-btn" @click="removeCustom">
+          <text class="custom-delete-text">{{ i18n.profile.customDelete }}</text>
         </view>
       </view>
     </view>
@@ -470,6 +548,12 @@ export default {
       holidayList: [], // 完整节日列表
       showRuleSheet: false,
       showBirthdaySheet: false,
+      // ===== 自定义假期 =====
+      customLeaves: [],
+      customColors: [],
+      showCustomSheet: false,
+      customEditingId: null, // null=新增，否则为编辑
+      customForm: { name: '', color: '#0E6E62', start: '', end: '' },
       // ===== 账号 / 同步 / 付费 =====
       session: null,           // { openid, user, subscription }
       showAuthSheet: false,
@@ -627,8 +711,88 @@ export default {
       if (!this.settings.language) {
           this.settings.language = 'zh-CN';
       }
+      this.customLeaves = wioService.getCustomLeaves();
+      if (!this.customColors || this.customColors.length === 0) {
+        this.customColors = wioService.CUSTOM_LEAVE_COLORS;
+      }
       const currentYear = new Date().getFullYear();
       this.yearStats = wioService.getYearStats(currentYear);
+    },
+    // ===== 自定义假期 =====
+    _todayStr() {
+      const n = new Date();
+      return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+    },
+    fmtCustomRange(l) {
+      // 03/02 ~ 03/08 紧凑展示
+      return `${l.start.slice(5).replace('-', '/')} ~ ${l.end.slice(5).replace('-', '/')}`;
+    },
+    openCustomAdd() {
+      const today = this._todayStr();
+      this.customEditingId = null;
+      this.customForm = { name: '', color: wioService.CUSTOM_LEAVE_COLORS[0], start: today, end: today };
+      this.showCustomSheet = true;
+    },
+    openCustomEdit(l) {
+      this.customEditingId = l.id;
+      this.customForm = { name: l.name, color: l.color, start: l.start, end: l.end };
+      this.showCustomSheet = true;
+    },
+    onCustomName(e) {
+      this.customForm.name = e.detail.value;
+    },
+    onCustomStart(e) {
+      this.customForm.start = e.detail.value;
+      // 结束早于开始时自动拉齐
+      if (this.customForm.end && this.customForm.end < e.detail.value) {
+        this.customForm.end = e.detail.value;
+      }
+    },
+    onCustomEnd(e) {
+      let v = e.detail.value;
+      if (this.customForm.start && v < this.customForm.start) {
+        v = this.customForm.start;
+        uni.showToast({ title: this.i18n.profile.customRangeFixed, icon: 'none', duration: 1500 });
+      }
+      this.customForm.end = v;
+    },
+    selectCustomColor(c) {
+      this.customForm.color = c;
+      uni.vibrateShort();
+    },
+    saveCustom() {
+      if (!this.customForm.name.trim()) {
+        uni.showToast({ title: this.i18n.profile.customNameRequired, icon: 'none', duration: 1500 });
+        return;
+      }
+      const saved = wioService.saveCustomLeave({
+        id: this.customEditingId || undefined,
+        name: this.customForm.name,
+        color: this.customForm.color,
+        start: this.customForm.start,
+        end: this.customForm.end
+      });
+      if (!saved) {
+        uni.showToast({ title: this.i18n.profile.customNameRequired, icon: 'none', duration: 1500 });
+        return;
+      }
+      this.showCustomSheet = false;
+      this.customLeaves = wioService.getCustomLeaves();
+      uni.showToast({ title: this.i18n.profile.customSaved, icon: 'success' });
+    },
+    removeCustom() {
+      uni.showModal({
+        title: this.i18n.profile.customDelete,
+        content: this.i18n.profile.customDeleteConfirm.replace('{n}', this.customForm.name),
+        success: (res) => {
+          if (res.confirm) {
+            wioService.deleteCustomLeave(this.customEditingId);
+            this.showCustomSheet = false;
+            this.customLeaves = wioService.getCustomLeaves();
+            uni.showToast({ title: this.i18n.profile.customDeleted, icon: 'none', duration: 1500 });
+          }
+        }
+      });
     },
     getUsagePercentage(used, total) {
       if (!total || total === 0) return 0;
@@ -1072,6 +1236,178 @@ export default {
   font-size: 11px;
   color: #C24A7E;
   font-weight: 500;
+}
+
+/* ===== 自定义假期卡 ===== */
+.custom-leave-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid #F2F4F5;
+}
+
+.custom-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.custom-leave-name {
+  font-size: 12.5px;
+  color: #3A4149;
+  flex: 1;
+}
+
+.custom-leave-range {
+  font-size: 10.5px;
+  color: #6B7379;
+}
+
+.custom-leave-chevron {
+  font-size: 13px;
+  color: #B5BBC1;
+}
+
+.custom-empty {
+  padding: 6px 0 2px;
+}
+
+.custom-empty-text {
+  font-size: 11px;
+  color: #9AA1A8;
+  line-height: 1.5;
+}
+
+.custom-add-btn {
+  margin-top: 8px;
+  height: 36px;
+  border-radius: 10px;
+  background: #EDF5F3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.custom-add-btn:active {
+  opacity: 0.85;
+}
+
+.custom-add-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: #0E6E62;
+}
+
+/* ===== 自定义假期弹层 ===== */
+.custom-field-row {
+  margin-top: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.custom-field-label {
+  font-size: 11px;
+  color: #9AA1A8;
+}
+
+.custom-input {
+  height: 42px;
+  border: 1px solid #E7E9EB;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 14px;
+  color: #15181C;
+  box-sizing: border-box;
+}
+
+.custom-date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.custom-picker {
+  flex: 1;
+}
+
+.custom-date-box {
+  height: 42px;
+  border: 1px solid #E7E9EB;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.custom-date-text {
+  font-size: 13px;
+  color: #15181C;
+}
+
+.custom-date-sep {
+  font-size: 12px;
+  color: #9AA1A8;
+}
+
+.custom-color-row {
+  display: flex;
+  gap: 12px;
+  padding: 4px 0 2px;
+}
+
+.custom-color-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+.custom-color-dot.selected {
+  box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 3.5px #0B5248;
+}
+
+.custom-hint-wrap {
+  margin-top: 12px;
+}
+
+.custom-hint-text {
+  font-size: 9px;
+  color: #9AA1A8;
+  line-height: 1.6;
+}
+
+.custom-save-btn {
+  margin-top: 14px;
+  height: 46px;
+  border-radius: 23px;
+  background: #0B5248;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.custom-save-btn:active {
+  opacity: 0.9;
+}
+
+.custom-save-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+.custom-delete-btn {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+  padding: 6px 0 2px;
+}
+
+.custom-delete-text {
+  font-size: 13px;
+  color: #C25B6E;
 }
 
 /* ===== 开关 ===== */

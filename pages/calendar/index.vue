@@ -82,7 +82,7 @@
           <view v-for="n in startEmptyDays" :key="'empty-'+n" class="day-cell empty"></view>
           
           <view v-for="day in daysInMonth" :key="day" class="day-cell" @click="onDayClick(day)" @longpress="onDayLongPress(day)">
-            <view class="day-content" :class="[getDayClass(day), { 'today-highlight': isToday(day) }]">
+            <view class="day-content" :class="[getDayClass(day), { 'today-highlight': isToday(day) }]" :style="getCustomStyle(day)">
               <text class="day-number">{{ day }}</text>
               <view v-if="getOvertimeDisplay(day)" class="overtime-badge">{{ getOvertimeDisplay(day) }}</view>
               <text v-if="getHolidayName(day)" class="holiday-text" :class="{'text-work': isHolidayWork(day), 'english': settings.language === 'en-US'}">{{ getHolidayDisplayName(day) }}</text>
@@ -105,7 +105,7 @@
         
         <view class="legend-grid">
           <view class="legend-item" v-for="(item, index) in filteredLegends" :key="index" @click="selectLegend(item)" :class="{ active: selectedStatus === item.value }">
-            <view class="legend-dot" :class="item.color"></view>
+            <view class="legend-dot" :class="item.color" :style="item.dotColor ? { background: item.dotColor } : null"></view>
             <text class="legend-label">{{ item.label }}</text>
           </view>
         </view>
@@ -168,6 +168,7 @@ export default {
       entries: {},
       overtimeEntries: {},
       settings: {},
+      customLeaves: [],
       yearStats: {
         vacationDaysUsed: 0,
         sickDaysUsed: 0,
@@ -251,7 +252,8 @@ export default {
                             + this.stats.sickDays 
                             + this.stats.unpaidDays 
                             + this.stats.compOffDays
-                            + this.stats.excludeWioDays;
+                            + this.stats.excludeWioDays
+                            + (this.stats.customLeaveDays || 0);
                             
       const effectiveDeductible = totalDeductible - (this.stats.weekendLeaves || 0);
 
@@ -281,6 +283,16 @@ export default {
         }
       }
       
+      // 自定义假期图例：仅显示与当前月有交集的，颜色用假期自带色
+      const daysInMonth = new Date(this.currentYear, this.currentMonth, 0).getDate();
+      const monthStart = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-01`;
+      const monthEnd = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+      (this.customLeaves || []).forEach(l => {
+        if (l.end >= monthStart && l.start <= monthEnd) {
+          result.push({ label: l.name, color: 'custom-dot', value: 'custom_' + l.id, dotColor: l.color, isCustom: true });
+        }
+      });
+      
       return result;
     },
     remainingVacationDays() {
@@ -296,7 +308,8 @@ export default {
                             + this.stats.sickDays 
                             + this.stats.unpaidDays 
                             + this.stats.compOffDays
-                            + this.stats.excludeWioDays;
+                            + this.stats.excludeWioDays
+                            + (this.stats.customLeaveDays || 0);
       const effectiveDeductible = totalDeductible - (this.stats.weekendLeaves || 0);
       const denominator = this.stats.workingDays - effectiveDeductible;
       if (denominator <= 0) return 0;
@@ -377,6 +390,7 @@ export default {
       this.settings = wioService.getSettings();
       this.entries = wioService.getEntries();
       this.overtimeEntries = wioService.getOvertimeEntries();
+      this.customLeaves = wioService.getCustomLeaves();
       this.yearStats = wioService.getYearStats(new Date().getFullYear());
       this.updateStats();
     },
@@ -397,6 +411,8 @@ export default {
              now.getFullYear() === this.currentDate.getFullYear();
     },
     selectLegend(item) {
+      // 自定义假期图例仅作展示，不支持点选标记（区间在设置中配置）
+      if (item.isCustom) return;
       uni.vibrateShort({
         success: function () {
             console.log('success');
@@ -549,6 +565,10 @@ export default {
       if (status === 'exclude_wio') return 'status-exclude-wio';
       
       if (!status) {
+        // 自定义假期区间：优先于法定节假日底色显示
+        if (this.getCustomLeaveInfo(day)) {
+          return 'status-custom';
+        }
         const holiday = this.getHolidayInfo(day);
         if (holiday && holiday.isOffDay) {
           return 'status-public';
@@ -560,6 +580,25 @@ export default {
       }
 
       return '';
+    },
+    // 自定义假期：取该日命中的假期（用于格子着色与图例）
+    getCustomLeaveInfo(day) {
+      const dateStr = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      return wioService.getCustomLeaveForDate(dateStr);
+    },
+    // 手动标记优先：有手动状态的日期不套自定义假期配色
+    getCustomStyle(day) {
+      const dateStr = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      if (this.entries[dateStr]) return null;
+      const cl = wioService.getCustomLeaveForDate(dateStr);
+      if (!cl) return null;
+      return { background: this.hexToRgba(cl.color, 0.16), color: cl.color };
+    },
+    hexToRgba(hex, alpha) {
+      const m = /^#?([0-9A-Fa-f]{6})$/.exec(hex || '');
+      if (!m) return '';
+      const n = parseInt(m[1], 16);
+      return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
     },
     hasBirthdayInMonth() {
       const prefix = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}`;
