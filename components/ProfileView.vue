@@ -333,28 +333,24 @@
 
         <view class="paywall-benefits">
           <view class="benefit-row">
-            <view class="benefit-icon"><text class="benefit-icon-text">☁️</text></view>
             <view class="benefit-info">
               <text class="benefit-title">{{ i18n.profile.benefitSync }}</text>
               <text class="benefit-sub">{{ i18n.profile.benefitSyncSub }}</text>
             </view>
           </view>
           <view class="benefit-row">
-            <view class="benefit-icon"><text class="benefit-icon-text">🛡️</text></view>
             <view class="benefit-info">
               <text class="benefit-title">{{ i18n.profile.benefitBackup }}</text>
               <text class="benefit-sub">{{ i18n.profile.benefitBackupSub }}</text>
             </view>
           </view>
           <view class="benefit-row">
-            <view class="benefit-icon"><text class="benefit-icon-text">📊</text></view>
             <view class="benefit-info">
               <text class="benefit-title">{{ i18n.profile.benefitStats }}</text>
               <text class="benefit-sub">{{ i18n.profile.benefitStatsSub }}</text>
             </view>
           </view>
           <view class="benefit-row">
-            <view class="benefit-icon"><text class="benefit-icon-text">🌐</text></view>
             <view class="benefit-info">
               <text class="benefit-title">{{ i18n.profile.benefitLang }}</text>
               <text class="benefit-sub">{{ i18n.profile.benefitLangSub }}</text>
@@ -2086,23 +2082,6 @@ export default {
 .benefit-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.benefit-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: #FFFFFF;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.benefit-icon-text {
-  font-size: 16px;
-  line-height: 1;
 }
 
 .benefit-info {
