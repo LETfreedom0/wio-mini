@@ -110,7 +110,16 @@ export default {
   // 结构：customLeaves: [{ id, name, color, start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' }]
   // 口径：区间内的工作日计入 WIO 分母扣减（与年假/病假同向）；周末/节假日不扣；
   //       用户手动标记的日期优先于自定义假期
-  CUSTOM_LEAVE_COLORS: ['#0E6E62', '#41598A', '#8C4F86', '#C08A2D', '#C25B6E', '#C97A3D'],
+  CUSTOM_LEAVE_COLORS: ['#0E6E62', '#41598A', '#8C4F86', '#C08A2D', '#C25B6E', '#C97A3D', '#6B7379'],
+
+  // 法定假期预设（婚假/产假/陪产假/丧假）：一键填充名称 + 推荐色
+  // 各地法定天数不同（如产假 158 天起、各省有差），本应用按日期区间配置，故不预填天数
+  CUSTOM_LEAVE_PRESETS: [
+    { name: '婚假', color: '#C25B6E' },
+    { name: '产假', color: '#41598A' },
+    { name: '陪产假', color: '#8C4F86' },
+    { name: '丧假', color: '#6B7379' }
+  ],
 
   _isValidDateStr(str) {
     return typeof str === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(str) && !isNaN(new Date(str + 'T00:00:00').getTime());

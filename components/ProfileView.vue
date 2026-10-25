@@ -296,6 +296,21 @@
       <view class="sheet-card" @click.stop>
         <text class="sheet-title">{{ customEditingId ? i18n.profile.customSheetEdit : i18n.profile.customSheetAdd }}</text>
 
+        <view v-if="!customEditingId" class="custom-field-row">
+          <text class="custom-field-label">{{ i18n.profile.customPresetLabel }}</text>
+          <view class="custom-preset-row">
+            <view
+              v-for="p in customPresets"
+              :key="p.name"
+              class="custom-preset-chip"
+              :class="{ active: customForm.name === p.name }"
+              @click="applyCustomPreset(p)"
+            >
+              <text class="custom-preset-text">{{ p.name }}</text>
+            </view>
+          </view>
+        </view>
+
         <view class="custom-field-row">
           <text class="custom-field-label">{{ i18n.profile.customFieldName }}</text>
           <input class="custom-input" :value="customForm.name" :placeholder="i18n.profile.customNamePh" maxlength="12" @input="onCustomName" />
@@ -550,6 +565,7 @@ export default {
       showBirthdaySheet: false,
       // ===== 自定义假期 =====
       customLeaves: [],
+      customPresets: [],
       customColors: [],
       showCustomSheet: false,
       customEditingId: null, // null=新增，否则为编辑
@@ -715,6 +731,9 @@ export default {
       if (!this.customColors || this.customColors.length === 0) {
         this.customColors = wioService.CUSTOM_LEAVE_COLORS;
       }
+      // 法定假期预设（名称随语言切换）
+      const presetNames = [this.i18n.profile.presetMarriage, this.i18n.profile.presetMaternity, this.i18n.profile.presetPaternity, this.i18n.profile.presetBereavement];
+      this.customPresets = wioService.CUSTOM_LEAVE_PRESETS.map((p, i) => ({ ...p, name: presetNames[i] || p.name }));
       const currentYear = new Date().getFullYear();
       this.yearStats = wioService.getYearStats(currentYear);
     },
@@ -758,6 +777,11 @@ export default {
     },
     selectCustomColor(c) {
       this.customForm.color = c;
+      uni.vibrateShort();
+    },
+    applyCustomPreset(p) {
+      this.customForm.name = p.name;
+      this.customForm.color = p.color;
       uni.vibrateShort();
     },
     saveCustom() {
@@ -1311,6 +1335,38 @@ export default {
 .custom-field-label {
   font-size: 11px;
   color: #9AA1A8;
+}
+
+.custom-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.custom-preset-chip {
+  padding: 0 14px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  border-radius: 100px;
+  background: #F3F5F6;
+  border: 1px solid #F3F5F6;
+}
+
+.custom-preset-chip.active {
+  background: #EAF3F1;
+  border-color: #0E6E62;
+}
+
+.custom-preset-text {
+  font-size: 11.5px;
+  color: #3C444B;
+  font-weight: 500;
+}
+
+.custom-preset-chip.active .custom-preset-text {
+  color: #0B5248;
+  font-weight: 600;
 }
 
 .custom-input {
