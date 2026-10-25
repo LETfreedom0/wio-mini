@@ -88,7 +88,8 @@
             :value="settings.targetPercentage"
             @change="onSliderChange($event, 'targetPercentage')"
             @changing="onSliderChanging($event, 'targetPercentage')"
-            min="0" max="100" step="10" activeColor="#0E6E62" backgroundColor="#ECEEEF" block-size="18" block-color="#ffffff" />
+            min="0" max="100" step="10" activeColor="#0E6E62" backgroundColor="#ECEEEF" block-size="18" block-color="#ffffff"
+            :aria-label="i18n.profile.wioTarget" />
         </view>
         <view class="tick-row">
           <text v-for="tick in targetTicks" :key="tick" class="tick-text" :class="{ 'tick-active': settings.targetPercentage === tick }">{{ tick }}%</text>
@@ -151,7 +152,8 @@
               :value="settings.vacationDays"
               @change="onSliderChange($event, 'vacationDays')"
               @changing="onSliderChanging($event, 'vacationDays')"
-              min="0" max="30" step="1" activeColor="#41598A" backgroundColor="#EAEFF6" block-size="14" block-color="#ffffff" />
+              min="0" max="30" step="1" activeColor="#41598A" backgroundColor="#EAEFF6" block-size="14" block-color="#ffffff"
+              :aria-label="i18n.profile.vacationDays" />
           </view>
         </view>
 
@@ -169,7 +171,8 @@
               :value="settings.sickDays"
               @change="onSliderChange($event, 'sickDays')"
               @changing="onSliderChanging($event, 'sickDays')"
-              min="0" max="30" step="1" activeColor="#8C4F86" backgroundColor="#F3EAF1" block-size="14" block-color="#ffffff" />
+              min="0" max="30" step="1" activeColor="#8C4F86" backgroundColor="#F3EAF1" block-size="14" block-color="#ffffff"
+              :aria-label="i18n.profile.sickDays" />
           </view>
         </view>
       </view>
