@@ -29,7 +29,10 @@ export default {
     try {
       const value = uni.getStorageSync(KEY_SETTINGS);
       if (value) {
-        return { ...DEFAULT_SETTINGS, ...JSON.parse(value) };
+        const s = { ...DEFAULT_SETTINGS, ...JSON.parse(value) };
+        // 自愈：历史脏数据可能把比例写成 0/非法值，读取时归一
+        s.targetPercentage = this._sanitizeRatio(s.targetPercentage, 40);
+        return s;
       }
     } catch (e) {
       console.error('Error getting settings', e);
@@ -37,28 +40,44 @@ export default {
     return DEFAULT_SETTINGS;
   },
 
+  // 合法比例：1~100 的数字，否则回退 fallback（fallback 可为 null 表示「无有效值」）
+  _sanitizeRatio(v, fallback) {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 1 && n <= 100 ? n : fallback;
+  },
+
   saveSettings(settings) {
     try {
-      // WIO 目标比例按月快照：改比例只影响「改动当月及之后」，
-      // 历史月份保留当时生效的比例（修复回看历史月份目标被追改的 bug）
+      // WIO 目标比例按月快照（口径：上线时以当月为准建立快照；以后按月保存；
+      // 未修改的月份沿用最近一次的比例；历史月份永不被追改）
       const existing = this.getSettings();
-      if (
-        existing.targetPercentage !== undefined &&
-        settings.targetPercentage !== undefined &&
-        settings.targetPercentage !== existing.targetPercentage
-      ) {
-        const now = new Date();
-        const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        const prev = settings.targetHistory && settings.targetHistory.changes
-          ? settings.targetHistory
-          : { baseline: existing.targetPercentage, changes: {} };
-        settings = {
-          ...settings,
-          targetHistory: {
-            baseline: prev.baseline,
-            changes: { ...prev.changes, [ym]: settings.targetPercentage }
+      // 快照历史一律以「已存储」为准，避免调用方传入不完整 settings 时丢失
+      let history =
+        existing.targetHistory && typeof existing.targetHistory.changes === 'object'
+          ? {
+              baseline: existing.targetHistory.baseline,
+              changes: { ...existing.targetHistory.changes }
+            }
+          : null;
+
+      const now = new Date();
+      const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const newVal = this._sanitizeRatio(settings.targetPercentage, null);
+      if (newVal !== null) {
+        const oldEffective = history
+          ? this.getTargetForMonth(now.getFullYear(), now.getMonth() + 1)
+          : this._sanitizeRatio(existing.targetPercentage, 40);
+        // 只有与「当月应生效比例」不同才记快照；首次改动建立 baseline（当月为准）
+        if (newVal !== oldEffective) {
+          if (!history) {
+            history = { baseline: this._sanitizeRatio(existing.targetPercentage, 40), changes: {} };
           }
-        };
+          history.changes[ym] = newVal;
+        }
+        settings = { ...settings, targetPercentage: newVal };
+      }
+      if (history) {
+        settings = { ...settings, targetHistory: history };
       }
       uni.setStorageSync(KEY_SETTINGS, JSON.stringify(settings));
       markDirty();
@@ -70,17 +89,19 @@ export default {
   // 取某个「年-月」当时生效的 WIO 目标比例
   // targetHistory 结构：{ baseline: 首次改动前的比例, changes: { 'YYYY-MM': 比例 } }
   // 查找规则：取所有 changes 中月份 <= 目标月的最后一次改动；改动之前用 baseline
+  // 非法值（如误存的 0）一律跳过，回退 baseline/当前设置——自愈历史脏数据
   getTargetForMonth(year, month) {
     const settings = this.getSettings();
-    const fallback = settings.targetPercentage || 40;
+    const fallback = this._sanitizeRatio(settings.targetPercentage, 40);
     const history = settings.targetHistory;
-    if (!history || !history.changes) return fallback;
-    let ratio = history.baseline != null ? history.baseline : fallback;
+    if (!history || typeof history.changes !== 'object') return fallback;
+    let ratio = history.baseline != null ? this._sanitizeRatio(history.baseline, fallback) : fallback;
     const ym = `${year}-${String(month).padStart(2, '0')}`;
     Object.keys(history.changes)
       .sort()
       .forEach(key => {
-        if (key <= ym) ratio = history.changes[key];
+        const v = this._sanitizeRatio(history.changes[key], null);
+        if (v !== null && key <= ym) ratio = v;
       });
     return ratio;
   },
