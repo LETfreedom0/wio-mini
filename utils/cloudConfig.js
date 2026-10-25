@@ -7,7 +7,7 @@
 
 export const CLOUD = {
   // 云开发环境 ID（开通云开发后创建）
-  CLOUDBASE_ENV: 'YOUR_CLOUDBASE_ENV_ID',
+  CLOUDBASE_ENV: 'prod-d1glr7pbd4f1ab2f5',
 
   // 虚拟支付（开通后从「虚拟支付 → 基本配置」获取）
   OFFER_ID: 'YOUR_OFFER_ID',
