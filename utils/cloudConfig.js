@@ -6,8 +6,8 @@
 
 export const CLOUD = {
   // Supabase Dashboard → Settings → API
-  SUPABASE_URL: 'https://YOUR-PROJECT-ref.supabase.co',
-  SUPABASE_ANON_KEY: 'YOUR_SUPABASE_ANON_KEY',
+  SUPABASE_URL: 'https://bpjtkzahmgbryojutivg.supabase.co',
+  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwanRremFobWdicnlvanV0aXZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4ODI2NzUsImV4cCI6MjEwODQ1ODY3NX0.ja0OrjDAcWcy8pZgQdyUfgxg9ENJ-esRG-5KQGvPzAM',
 
   // Edge Functions（supabase functions deploy 自动挂在项目域名下）
   EDGE: {

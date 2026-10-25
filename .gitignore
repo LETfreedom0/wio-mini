@@ -28,3 +28,4 @@ Thumbs.db
 .omo/
 .devtools/
 .playwright-mcp/
+supabase/.temp/
