@@ -261,8 +261,8 @@
             <text v-else class="auth-avatar-plus">＋</text>
           </view>
           <view class="auth-avatar-info">
-            <text class="auth-avatar-label">{{ i18n.profile.wechatAvatar }}</text>
-            <text class="auth-avatar-hint">{{ i18n.profile.wechatNickname }}</text>
+            <text class="auth-avatar-label">{{ i18n.profile.useAvatar }}</text>
+            <text class="auth-avatar-hint">{{ i18n.profile.nicknameTapHint }}</text>
           </view>
         </view>
         <button class="auth-avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar"></button>
@@ -274,7 +274,7 @@
             class="auth-input"
             type="nickname"
             :value="authForm.nickname"
-            placeholder="WIO"
+            :placeholder="i18n.profile.nicknamePlaceholder"
             @input="onNicknameInput"
             @blur="onNicknameBlur"
           />
@@ -659,6 +659,10 @@ export default {
     async onSubmitLogin() {
       if (!this.authForm.agreed) {
         uni.showToast({ title: t('profile.needAgree', this.settings.language), icon: 'none' });
+        return;
+      }
+      if (!this.authForm.nickname || !this.authForm.nickname.trim()) {
+        uni.showToast({ title: t('profile.nicknameRequired', this.settings.language), icon: 'none' });
         return;
       }
       uni.showLoading({ title: '' });
@@ -1485,10 +1489,10 @@ export default {
 
 /* --- 授权弹层 --- */
 .auth-avatar-row {
+  position: relative; /* 让透明 chooseAvatar 按钮相对本行定位，覆盖头像框 */
   display: flex;
   align-items: center;
   gap: 14px;
-  position: relative;
   padding: 6px 2px;
 }
 
@@ -1522,7 +1526,13 @@ export default {
   top: 0;
   width: 68px;
   height: 68px;
+  /* 抵消 button 默认边框，保持完全透明覆盖头像框 */
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
   opacity: 0;
+  z-index: 2;
 }
 
 .auth-avatar-info {
