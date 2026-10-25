@@ -260,12 +260,14 @@
             <image v-if="authForm.avatarTemp" class="auth-avatar-img" :src="authForm.avatarTemp" mode="aspectFill" />
             <text v-else class="auth-avatar-plus">＋</text>
           </view>
+          <!-- 按钮必须留在 row 内部：row 是 relative，按钮才能覆盖头像框；
+               放在外面会相对 fixed 遮罩定位，飘到屏幕左上角导致点击无效 -->
+          <button class="auth-avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar"></button>
           <view class="auth-avatar-info">
             <text class="auth-avatar-label">{{ i18n.profile.useAvatar }}</text>
             <text class="auth-avatar-hint">{{ i18n.profile.nicknameTapHint }}</text>
           </view>
         </view>
-        <button class="auth-avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar"></button>
 
         <!-- 昵称输入（合规：type=nickname） -->
         <view class="auth-input-row">
@@ -668,6 +670,7 @@ export default {
     },
     onChooseAvatar(e) {
       // 微信新规：chooseAvatar 返回临时文件，立即持久化到云存储
+      console.log('[auth] chooseAvatar detail:', e && e.detail);
       if (e && e.detail && e.detail.avatarUrl) {
         this.authForm.avatarTemp = e.detail.avatarUrl;
       }
@@ -680,20 +683,27 @@ export default {
     },
     async onSubmitLogin() {
       const isLoginMode = this.authMode === 'login';
-      // 一键登录：昵称/头像均可留空（云端默认「微信用户」+ 占位头像），随时回来完善
       if (isLoginMode && !this.authForm.agreed) {
         uni.showToast({ title: t('profile.needAgree', this.settings.language), icon: 'none' });
         return;
       }
+      if (!this.authForm.nickname || !this.authForm.nickname.trim()) {
+        uni.showToast({ title: t('profile.nicknameRequired', this.settings.language), icon: 'none' });
+        return;
+      }
       uni.showLoading({ title: '' });
       try {
-        // 头像有选择时先传云存储，拿到 fileID 再登录
+        // 头像有选择时先传云存储，拿到 fileID 再登录；失败则中断并明确提示
         let avatarFileId = '';
         if (this.authForm.avatarTemp) {
           try {
             avatarFileId = await uploadAvatar(this.authForm.avatarTemp);
+            console.log('[auth] avatar uploaded:', avatarFileId);
           } catch (err) {
-            console.warn('avatar upload failed, continue without avatar', err);
+            uni.hideLoading();
+            console.error('[auth] avatar upload failed:', err);
+            uni.showToast({ title: t('profile.avatarUploadFail', this.settings.language), icon: 'none' });
+            return;
           }
         }
         this.session = await login({
