@@ -186,7 +186,9 @@ export default {
       return hh.greetingEvening
     },
     targetPercentage() {
-      return this.settings.targetPercentage || 40
+      // 首页只看当月，取当月生效比例
+      const now = new Date()
+      return wioService.getTargetForMonth(now.getFullYear(), now.getMonth() + 1)
     },
     // 与日历页保持同一套回公司率公式
     wioPercentage() {

@@ -240,7 +240,8 @@ export default {
       return new Date(this.currentYear, this.currentMonth - 1, 1).getDay();
     },
     targetPercentage() {
-      return this.settings.targetPercentage || 40;
+      // 按所看月份取当时生效的比例（历史月份不再被追改）
+      return wioService.getTargetForMonth(this.currentYear, this.currentMonth);
     },
     wioPercentage() {
       const numerator = this.stats.companyDays;

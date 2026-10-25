@@ -37,11 +37,50 @@ export default {
 
   saveSettings(settings) {
     try {
+      // WIO 目标比例按月快照：改比例只影响「改动当月及之后」，
+      // 历史月份保留当时生效的比例（修复回看历史月份目标被追改的 bug）
+      const existing = this.getSettings();
+      if (
+        existing.targetPercentage !== undefined &&
+        settings.targetPercentage !== undefined &&
+        settings.targetPercentage !== existing.targetPercentage
+      ) {
+        const now = new Date();
+        const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const prev = settings.targetHistory && settings.targetHistory.changes
+          ? settings.targetHistory
+          : { baseline: existing.targetPercentage, changes: {} };
+        settings = {
+          ...settings,
+          targetHistory: {
+            baseline: prev.baseline,
+            changes: { ...prev.changes, [ym]: settings.targetPercentage }
+          }
+        };
+      }
       uni.setStorageSync(KEY_SETTINGS, JSON.stringify(settings));
       markDirty();
     } catch (e) {
       console.error('Error saving settings', e);
     }
+  },
+
+  // 取某个「年-月」当时生效的 WIO 目标比例
+  // targetHistory 结构：{ baseline: 首次改动前的比例, changes: { 'YYYY-MM': 比例 } }
+  // 查找规则：取所有 changes 中月份 <= 目标月的最后一次改动；改动之前用 baseline
+  getTargetForMonth(year, month) {
+    const settings = this.getSettings();
+    const fallback = settings.targetPercentage || 40;
+    const history = settings.targetHistory;
+    if (!history || !history.changes) return fallback;
+    let ratio = history.baseline != null ? history.baseline : fallback;
+    const ym = `${year}-${String(month).padStart(2, '0')}`;
+    Object.keys(history.changes)
+      .sort()
+      .forEach(key => {
+        if (key <= ym) ratio = history.changes[key];
+      });
+    return ratio;
   },
 
   // --- Entries (Date: Status) ---
