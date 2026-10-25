@@ -178,7 +178,8 @@ export const locales = {
       noCompOff: '无补班',
       noHoliday: '本年度无节日安排',
       saved: '已保存',
-      language: '语言'
+      language: '语言',
+      langProHint: '升级 PRO，解锁 English 界面'
     }
   },
   'en-US': {
@@ -359,7 +360,8 @@ export const locales = {
       noCompOff: 'No Comp Off',
       noHoliday: 'No holidays this year',
       saved: 'Saved',
-      language: 'Language'
+      language: 'Language',
+      langProHint: 'Upgrade to PRO to unlock English'
     }
   }
 };

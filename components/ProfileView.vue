@@ -75,7 +75,7 @@
       </view>
 
       <!-- 语言（多语言为 PRO 专属） -->
-      <view class="settings-card language-card">
+      <view class="settings-card language-card" :class="{ 'language-card-pro': !isPro }">
         <view class="card-header-row">
           <text class="card-title">{{ i18n.profile.language }}</text>
           <view v-if="!isPro" class="pro-badge" @click="showPaywall = true">
@@ -86,10 +86,14 @@
           <view class="lang-option" :class="{ active: settings.language === 'zh-CN' }" @click="setLanguage('zh-CN')">
             <text class="lang-option-text">简体中文</text>
           </view>
-          <view class="lang-option" :class="{ active: settings.language === 'en-US' }" @click="setLanguage('en-US')">
+          <view class="lang-option" :class="{ active: settings.language === 'en-US', locked: !isPro }" @click="setLanguage('en-US')">
             <text class="lang-option-text">English</text>
-            <text v-if="!isPro" class="lang-lock">🔒</text>
+            <text v-if="!isPro" class="lang-lock-tag">PRO</text>
           </view>
+        </view>
+        <view v-if="!isPro" class="lang-pro-hint" @click="showPaywall = true">
+          <text class="lang-pro-hint-text">{{ i18n.profile.langProHint }}</text>
+          <text class="lang-pro-hint-arrow">›</text>
         </view>
       </view>
 
@@ -1147,24 +1151,103 @@ export default {
 
 /* ===== 语言卡 ===== */
 .language-card {
+  display: block;
+  box-sizing: border-box;
+}
+
+/* 非 PRO：暖金渐变质感卡，与普通白卡区分，暗示付费权益 */
+.language-card-pro {
+  background: linear-gradient(150deg, #FFFDF8 0%, #FBF4E4 62%, #F6EBD3 100%);
+  border: 1px solid rgba(192, 138, 45, 0.22);
+  box-shadow: 0 2px 10px rgba(176, 122, 34, 0.08);
+}
+
+.card-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px 6px 13px;
-  min-height: 46px;
-  box-sizing: border-box;
 }
 
 .lang-segmented {
   display: flex;
   align-items: stretch;
-  gap: 2px;
-  width: 128px;
-  height: 34px;
-  padding: 3px;
-  background: #F2F4F6;
-  border-radius: 10px;
+  gap: 4px;
+  width: 100%;
+  height: 40px;
+  padding: 4px;
+  margin-top: 12px;
+  background: rgba(233, 225, 207, 0.55);
+  border-radius: 12px;
   box-sizing: border-box;
+}
+
+/* 非 PRO 时分段底槽带一点暖调，融入卡片质感 */
+.language-card-pro .lang-segmented {
+  background: rgba(226, 214, 188, 0.45);
+}
+
+.lang-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+}
+
+.lang-option.active {
+  background: #FFFFFF;
+  box-shadow: 0 2px 6px rgba(15, 35, 40, 0.1);
+}
+
+/* 锁定的 English 选项：微微降透明度示意不可用，点击仍拉起付费墙 */
+.lang-option.locked {
+  opacity: 0.85;
+}
+
+.lang-lock-tag {
+  font-size: 9px;
+  font-weight: 800;
+  color: #A9761F;
+  background: rgba(192, 138, 45, 0.14);
+  border-radius: 6px;
+  padding: 1px 5px;
+  margin-left: 5px;
+  letter-spacing: 0.5px;
+  line-height: 1.4;
+}
+
+.lang-option-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: #8A9098;
+  line-height: 1.2;
+}
+
+.lang-option.active .lang-option-text {
+  color: #15181C;
+  font-weight: 600;
+}
+
+/* 底部升级引导行：金色虚线分隔，点击直达付费墙 */
+.lang-pro-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(192, 138, 45, 0.3);
+}
+
+.lang-pro-hint-text {
+  font-size: 11px;
+  color: #A9761F;
+}
+
+.lang-pro-hint-arrow {
+  font-size: 14px;
+  color: #C08A2D;
+  font-weight: 600;
+  line-height: 1;
 }
 
 /* 页面底部版本号 */
@@ -1177,36 +1260,6 @@ export default {
 .version-text {
   font-size: 11px;
   color: #9AA1A8;
-}
-
-.lang-option {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-}
-
-/* PRO 锁定角标：非订阅时挂在 English 选项尾部 */
-.lang-lock {
-  font-size: 11px;
-  margin-left: 4px;
-}
-
-.lang-option.active {
-  background: #FFFFFF;
-}
-
-.lang-option-text {
-  font-size: 10px;
-  font-weight: 500;
-  color: #6B737B;
-  line-height: 1.2;
-}
-
-.lang-option.active .lang-option-text {
-  color: #15181C;
-  font-weight: 600;
 }
 
 /* ===== ⓘ 底部弹层 ===== */
@@ -1404,17 +1457,19 @@ export default {
   line-height: 1.4;
 }
 
+/* PRO 徽标：鎏金渐变 + 微投影，全页统一（同步卡 / 语言卡共用） */
 .pro-badge {
-  padding: 3px 10px;
-  border-radius: 10px;
-  background: #F7EFE2;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #D9A94F, #B07A22);
+  box-shadow: 0 2px 6px rgba(176, 122, 34, 0.28);
 }
 
 .pro-badge-text {
   font-size: 10px;
-  font-weight: 700;
-  color: #C08A2D;
-  letter-spacing: 1px;
+  font-weight: 800;
+  color: #FFF9EE;
+  letter-spacing: 1.5px;
 }
 
 .sync-lock-row {
