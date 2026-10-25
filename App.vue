@@ -1,10 +1,14 @@
 <script>
+	import { initCloud } from './utils/cloud.js'
 	import { init as cloudInit, flush as cloudFlush } from './utils/syncService.js'
 
 	export default {
 		onLaunch: function() {
 			console.log('App Launch')
 			uni.hideTabBar()
+
+			// 云开发初始化（仅微信小程序端生效）
+			initCloud()
 
 			// 云同步：登录用户启动时拉取云端比对合并（静默，失败不打扰）
 			cloudInit().catch(() => {})

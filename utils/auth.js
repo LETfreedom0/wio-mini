@@ -1,69 +1,29 @@
 // ============================================================
-// 微信登录 · 会话管理
-// 流程：uni.login 拿 code → 服务端 wx-login（code2session + 建用户）
-//      → 返回 { token, user, subscription } → 本地存 wio_auth
-// token 形如 "{userId}.{hmac签名}"，无状态，服务端可验证
+// 登录 · 会话管理（微信云开发版）
+//
+// 云函数 login 通过 getWXContext() 自动获取 openid——
+// 无需 AppSecret、无需 code2session、无需自定义 token
 // ============================================================
 
-import { CLOUD } from './cloudConfig.js'
+import { callCloud, isCloudAvailable } from './cloud.js'
 
 const KEY_AUTH = 'wio_auth'
 
 /**
- * 通用请求封装：自动带会话 token，统一错误处理
- * 服务端返回 4xx/5xx 时 reject(res.data)，业务码可从 e.conflict 等字段判断
+ * 登录 / 刷新会话
+ * @param {object} [profile] 可选的资料更新 { nickname, avatarFileID }
+ * @returns {Promise<{user, subscription}>}
  */
-export function request(path, { method = 'GET', data, auth = true } = {}) {
-  return new Promise((resolve, reject) => {
-    const header = { 'Content-Type': 'application/json' }
-    if (auth) {
-      const session = getAuth()
-      if (session && session.token) {
-        header.Authorization = `Bearer ${session.token}`
-      }
-    }
-    uni.request({
-      url: CLOUD.SUPABASE_URL + path,
-      method,
-      data,
-      header,
-      timeout: 15000,
-      success: (res) => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(res.data)
-        } else {
-          reject(res.data || { error: 'http_' + res.statusCode })
-        }
-      },
-      fail: (err) => reject({ error: 'network', detail: err })
-    })
-  })
+export async function login(profile = {}) {
+  if (!isCloudAvailable()) {
+    throw { error: 'cloud_unavailable', message: '云开发仅支持微信小程序端' }
+  }
+  const res = await callCloud('login', profile)
+  uni.setStorageSync(KEY_AUTH, JSON.stringify(res))
+  return res
 }
 
-/** 拉起微信登录（授权弹层的「授权并登录」按钮调用） */
-export function login() {
-  return new Promise((resolve, reject) => {
-    uni.login({
-      provider: 'weixin',
-      success: async ({ code }) => {
-        try {
-          const res = await request(CLOUD.EDGE.login, {
-            method: 'POST',
-            data: { code },
-            auth: false
-          })
-          uni.setStorageSync(KEY_AUTH, JSON.stringify(res))
-          resolve(res)
-        } catch (e) {
-          reject(e)
-        }
-      },
-      fail: (err) => reject({ error: 'uni_login_failed', detail: err })
-    })
-  })
-}
-
-/** 获取当前会话 { token, user:{id,nickname,avatarUrl}, subscription } */
+/** 获取当前会话 { user:{openid,nickname,avatarFileID}, subscription } */
 export function getAuth() {
   try {
     const raw = uni.getStorageSync(KEY_AUTH)
@@ -73,12 +33,16 @@ export function getAuth() {
   }
 }
 
+/**
+ * 是否已登录
+ * 注意：会话含 openid 即视为登录（openid 由云函数端鉴权，本地无法伪造价值）
+ */
 export function isLogin() {
   const session = getAuth()
-  return !!(session && session.token)
+  return !!(session && session.user && session.user.openid)
 }
 
-/** 更新本地缓存的用户资料（改昵称/头像后调用） */
+/** 更新本地缓存的用户资料 */
 export function updateCachedUser(patch) {
   const session = getAuth()
   if (!session) return
@@ -98,4 +62,25 @@ export function updateCachedSubscription(sub) {
 export function logout() {
   uni.removeStorageSync(KEY_AUTH)
   uni.removeStorageSync('wio_sync_state')
+}
+
+/**
+ * 上传头像到云存储，返回 fileID（cloud://）
+ * fileID 可直接用于 <image :src>，跨设备可用
+ * @param {string} tempFilePath chooseAvatar 返回的临时路径
+ */
+export function uploadAvatar(tempFilePath) {
+  if (!isCloudAvailable()) {
+    return Promise.reject({ error: 'cloud_unavailable' })
+  }
+  const ext = (tempFilePath.split('.').pop() || 'png').toLowerCase()
+  const cloudPath = `avatars/${Date.now()}-${Math.floor(Math.random() * 10000)}.${ext}`
+  return new Promise((resolve, reject) => {
+    wx.cloud.uploadFile({
+      cloudPath,
+      filePath: tempFilePath,
+      success: (res) => resolve(res.fileID),
+      fail: (err) => reject({ error: 'upload_failed', detail: err })
+    })
+  })
 }
