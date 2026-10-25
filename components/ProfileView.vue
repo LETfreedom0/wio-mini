@@ -83,6 +83,18 @@
           <text v-else class="pro-feature-locked">{{ i18n.profile.proLockedShort }}</text>
         </view>
 
+        <!-- 续费行（仅 PRO） -->
+        <template v-if="isPro">
+          <view class="pro-divider"></view>
+          <view class="pro-renew-row" @click="showPaywall = true">
+            <text class="pro-renew-title">{{ i18n.profile.renewValidUntil }} {{ renewDate }}</text>
+            <view class="pro-renew-action">
+              <text class="pro-renew-text">{{ i18n.profile.renewAction }}</text>
+              <text class="pro-renew-arrow">›</text>
+            </view>
+          </view>
+        </template>
+
         <!-- 锁定态：升级按钮 -->
         <view v-if="!isPro" class="pro-upgrade-cta" @click="showPaywall = true">
           <text class="pro-upgrade-cta-text">{{ i18n.profile.upgradeProCta }}</text>
@@ -509,6 +521,18 @@ export default {
       if (!this.isLogin) return this.i18n.profile.accountNotLogin;
       const u = this.session.user || {};
       return u.nickname || this.i18n.profile.defaultName;
+    },
+    // 会员到期日（登录订阅优先，兑换码试用兜底）
+    renewDate() {
+      const sub = this.session && this.session.subscription;
+      let exp = sub && (sub.expiresAt || sub.expires_at);
+      if (!exp || exp <= Date.now()) {
+        const trial = getTrial();
+        exp = trial && trial.expiresAt;
+      }
+      if (!exp) return '—';
+      const d = new Date(exp);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     },
     accountSub() {
       const lang = this.settings.language;
@@ -1044,21 +1068,21 @@ export default {
 }
 
 .switch-track {
-  width: 44px;
-  height: 26px;
-  border-radius: 13px;
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
   background-color: #ccc;
   position: relative;
   transition: background-color 0.3s;
 }
 
 .switch-track.on {
-  background-color: #0E6E62;
+  background-color: #C08A2D;
 }
 
 .switch-thumb {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background-color: #fff;
   position: absolute;
@@ -1069,7 +1093,7 @@ export default {
 }
 
 .switch-track.on .switch-thumb {
-  left: 21px;
+  left: 19px;
 }
 
 /* ===== 假期额度卡 ===== */
@@ -1358,7 +1382,8 @@ export default {
 .pro-card-badge-on {
   background-color: #C08A2D;
   border-radius: 999px;
-  padding: 4px 11px;
+  /* 高度对齐同卡开关（24px），视觉统一 */
+  padding: 5px 11px;
 }
 .pro-card-badge-on-text {
   color: #FFF9EE;
@@ -1416,6 +1441,35 @@ export default {
 .pro-divider {
   height: 1px;
   background-color: #F1EDE5;
+}
+/* 续费行（PRO 已解锁态） */
+.pro-renew-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0 4px;
+}
+.pro-renew-row:active {
+  opacity: 0.85;
+}
+.pro-renew-title {
+  font-size: 12px;
+  color: #A9761F;
+  font-weight: 500;
+}
+.pro-renew-action {
+  display: flex;
+  align-items: center;
+}
+.pro-renew-text {
+  font-size: 11px;
+  color: #A9761F;
+  font-weight: 500;
+}
+.pro-renew-arrow {
+  font-size: 14px;
+  color: #C08A2D;
+  line-height: 1;
 }
 .pro-upgrade-cta {
   margin-top: 12px;
