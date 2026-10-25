@@ -14,6 +14,8 @@ const DEFAULT_SETTINGS = {
   birthdayEnabled: false,
   birthdayMonth: '',
   autoSync: true,
+  // 每天往返通勤分钟数（用于年度统计「节约通勤」换算）
+  commuteMinutes: 90,
   // 调休配置规则 (Key: 节日名称, Value: boolean 是否调休)
   // 默认只有春节调休
   compOffRules: {
@@ -390,5 +392,87 @@ export default {
       sickDaysUsed: stats.sick,
       totalOvertime: parseFloat(stats.totalOvertime.toFixed(1))
     };
+  },
+
+  // 年度聚合（高级统计页用）
+  // - workingDays / companyDays / homeDays：12 个月累加
+  // - ratio：公司办公日占全年工作日的百分比
+  // - monthly[m-1].targetDays = 该月工作日 × 该月当期比例（getTargetForMonth，按月快照）
+  // - 节约通勤 = 居家日 × commuteMinutes / 60 小时，再按 8 小时/天折算
+  getAnnualStats(year) {
+    const leaves = this.getYearStats(year);
+    const settings = this.getSettings();
+
+    let workingDays = 0;
+    let companyDays = 0;
+    let homeDays = 0;
+    let overtimeHours = 0;
+    const monthly = [];
+
+    for (let m = 1; m <= 12; m++) {
+      const s = this.getMonthStats(year, m);
+      workingDays += s.workingDays;
+      companyDays += s.companyDays;
+      homeDays += s.homeDays;
+      overtimeHours += s.totalOvertime;
+
+      const ratio = this.getTargetForMonth(year, m);
+      monthly.push({
+        month: m,
+        companyDays: s.companyDays,
+        workingDays: s.workingDays,
+        // 目标线高度按「该月工作日 × 该月当期比例」，年内改过比例即呈阶梯状
+        targetDays: parseFloat((s.workingDays * ratio / 100).toFixed(1))
+      });
+    }
+
+    overtimeHours = parseFloat(overtimeHours.toFixed(1));
+    const commuteMinutes = settings.commuteMinutes || 90;
+    const commuteSavedHours = parseFloat((homeDays * commuteMinutes / 60).toFixed(1));
+
+    return {
+      year,
+      workingDays,
+      companyDays,
+      homeDays,
+      ratio: workingDays > 0 ? Math.round(companyDays / workingDays * 100) : 0,
+      overtimeHours,
+      overtimeDays: parseFloat((overtimeHours / 8).toFixed(1)),
+      commuteMinutes,
+      commuteSavedHours,
+      commuteSavedDays: parseFloat((commuteSavedHours / 8).toFixed(1)),
+      vacationDaysUsed: leaves.vacationDaysUsed,
+      birthdayDaysUsed: leaves.birthdayDaysUsed,
+      sickDaysUsed: leaves.sickDaysUsed,
+      vacationDaysTotal: settings.vacationDays || 20,
+      sickDaysTotal: settings.sickDays || 12,
+      birthdayEnabled: !!settings.birthdayEnabled,
+      monthly
+    };
+  },
+
+  // 生成年度 CSV 明细（导出用）：日期、星期、状态、加班小时
+  buildYearCsv(year) {
+    const entries = this.getEntries();
+    const overtimeEntries = this.getOvertimeEntries();
+    const statusKeys = {
+      company: '公司办公', home: '居家办公', vacation: '年假',
+      birthday: '生日假', sick: '病假', unpaid: '无薪假',
+      comp_off: '调休', exclude_wio: '不计入'
+    };
+    const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const rows = ['日期,星期,状态,加班(小时)'];
+    const start = `${year}-01-01`;
+    const end = `${year}-12-31`;
+    Object.keys(entries)
+      .filter(d => d >= start && d <= end)
+      .sort()
+      .forEach(dateStr => {
+        const wd = weekdays[new Date(dateStr + 'T00:00:00').getDay()];
+        const status = statusKeys[entries[dateStr]] || entries[dateStr];
+        const ot = overtimeEntries[dateStr] || '';
+        rows.push(`${dateStr},${wd},${status},${ot}`);
+      });
+    return rows.join('\n');
   }
 }

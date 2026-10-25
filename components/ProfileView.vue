@@ -97,6 +97,21 @@
         </view>
       </view>
 
+      <!-- 高级统计（PRO 专属，点击进入年度统计页） -->
+      <view class="settings-card stats-entry-card" @click="onStatsTap">
+        <view class="stats-entry-left">
+          <text class="stats-entry-title">{{ i18n.profile.statsEntry }}</text>
+          <text class="stats-entry-sub">{{ i18n.profile.statsEntrySub }}</text>
+        </view>
+        <view class="stats-entry-right">
+          <text v-if="isPro" class="stats-entry-open">{{ i18n.profile.statsEntryOpen }}</text>
+          <view v-else class="pro-badge">
+            <text class="pro-badge-text">PRO</text>
+          </view>
+          <text class="stats-entry-arrow">›</text>
+        </view>
+      </view>
+
       <!-- 月度回公司目标 -->
       <view class="settings-card">
         <view class="target-row">
@@ -229,7 +244,7 @@
         </view>
       </view>
 
-      <view class="version-row"><text class="version-text">WIO Tracker · v1.0.0</text></view>
+      <view class="version-row"><text class="version-text">WIO Tracker · v1.1.0</text></view>
 
     </view>
 
@@ -620,6 +635,14 @@ export default {
       this.settings.language = lang;
       uni.vibrateShort();
       this.save();
+    },
+    onStatsTap() {
+      uni.vibrateShort();
+      if (this.isPro) {
+        uni.navigateTo({ url: '/pages/stats/index' });
+      } else {
+        this.showPaywall = true;
+      }
     },
     toggleLanguage() {
       const newLang = this.settings.language === 'zh-CN' ? 'en-US' : 'zh-CN';
@@ -1248,6 +1271,44 @@ export default {
   color: #C08A2D;
   font-weight: 600;
   line-height: 1;
+}
+
+/* 高级统计入口卡 */
+.stats-entry-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.stats-entry-card:active {
+  opacity: 0.85;
+}
+.stats-entry-left {
+  display: flex;
+  flex-direction: column;
+}
+.stats-entry-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #18191C;
+}
+.stats-entry-sub {
+  font-size: 11px;
+  color: #8A94A0;
+  margin-top: 3px;
+}
+.stats-entry-right {
+  display: flex;
+  align-items: center;
+}
+.stats-entry-open {
+  font-size: 11px;
+  color: #0E6E62;
+  font-weight: 500;
+}
+.stats-entry-arrow {
+  font-size: 16px;
+  color: #C3C9CE;
+  margin-left: 6px;
 }
 
 /* 页面底部版本号 */
