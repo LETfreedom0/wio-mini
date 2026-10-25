@@ -74,6 +74,25 @@
         </template>
       </view>
 
+      <!-- 语言（多语言为 PRO 专属） -->
+      <view class="settings-card language-card">
+        <view class="card-header-row">
+          <text class="card-title">{{ i18n.profile.language }}</text>
+          <view v-if="!isPro" class="pro-badge" @click="showPaywall = true">
+            <text class="pro-badge-text">PRO</text>
+          </view>
+        </view>
+        <view class="lang-segmented">
+          <view class="lang-option" :class="{ active: settings.language === 'zh-CN' }" @click="setLanguage('zh-CN')">
+            <text class="lang-option-text">简体中文</text>
+          </view>
+          <view class="lang-option" :class="{ active: settings.language === 'en-US' }" @click="setLanguage('en-US')">
+            <text class="lang-option-text">English</text>
+            <text v-if="!isPro" class="lang-lock">🔒</text>
+          </view>
+        </view>
+      </view>
+
       <!-- 月度回公司目标 -->
       <view class="settings-card">
         <view class="target-row">
@@ -96,40 +115,6 @@
         </view>
       </view>
 
-      <!-- 生日假 -->
-      <view class="settings-card">
-        <view class="card-header-row">
-          <text class="card-title">{{ i18n.profile.birthdayLeave }}</text>
-          <view class="header-actions">
-            <view class="info-btn" @click="showBirthdaySheet = true">
-              <text class="info-icon">i</text>
-            </view>
-            <view class="toggle-switch" @click="toggleBirthdayEnabled">
-              <view class="switch-track" :class="{ 'on': settings.birthdayEnabled }">
-                <view class="switch-thumb"></view>
-              </view>
-            </view>
-          </view>
-        </view>
-
-        <view v-if="settings.birthdayEnabled" class="birthday-config">
-          <view class="month-options">
-            <view
-              v-for="month in monthOptions"
-              :key="month.value"
-              class="month-option"
-              :class="{ active: settings.birthdayMonth === month.value }"
-              @click="selectBirthdayMonth(month.value)"
-            >
-              <text class="month-text">{{ month.label }}</text>
-            </view>
-          </view>
-          <text class="card-foot-hint">{{ i18n.profile.birthdayCardHint }}</text>
-        </view>
-        <view v-else class="birthday-disabled-hint">
-          <text class="hint-text">{{ i18n.profile.birthdayEnableHint }}</text>
-        </view>
-      </view>
 
       <!-- 假期额度（年假 + 病假合并卡） -->
       <view class="settings-card">
@@ -177,6 +162,41 @@
         </view>
       </view>
 
+      <!-- 生日假 -->
+      <view class="settings-card">
+        <view class="card-header-row">
+          <text class="card-title">{{ i18n.profile.birthdayLeave }}</text>
+          <view class="header-actions">
+            <view class="info-btn" @click="showBirthdaySheet = true">
+              <text class="info-icon">i</text>
+            </view>
+            <view class="toggle-switch" @click="toggleBirthdayEnabled">
+              <view class="switch-track" :class="{ 'on': settings.birthdayEnabled }">
+                <view class="switch-thumb"></view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <view v-if="settings.birthdayEnabled" class="birthday-config">
+          <view class="month-options">
+            <view
+              v-for="month in monthOptions"
+              :key="month.value"
+              class="month-option"
+              :class="{ active: settings.birthdayMonth === month.value }"
+              @click="selectBirthdayMonth(month.value)"
+            >
+              <text class="month-text">{{ month.label }}</text>
+            </view>
+          </view>
+          <text class="card-foot-hint">{{ i18n.profile.birthdayCardHint }}</text>
+        </view>
+        <view v-else class="birthday-disabled-hint">
+          <text class="hint-text">{{ i18n.profile.birthdayEnableHint }}</text>
+        </view>
+      </view>
+
       <!-- 调休补班 -->
       <view class="settings-card">
         <view class="card-header-row">
@@ -205,24 +225,8 @@
         </view>
       </view>
 
-      <!-- 语言（多语言为 PRO 专属） -->
-      <view class="settings-card language-card">
-        <view class="card-header-row">
-          <text class="card-title">{{ i18n.profile.language }}</text>
-          <view v-if="!isPro" class="pro-badge" @click="showPaywall = true">
-            <text class="pro-badge-text">PRO</text>
-          </view>
-        </view>
-        <view class="lang-segmented">
-          <view class="lang-option" :class="{ active: settings.language === 'zh-CN' }" @click="setLanguage('zh-CN')">
-            <text class="lang-option-text">简体中文</text>
-          </view>
-          <view class="lang-option" :class="{ active: settings.language === 'en-US' }" @click="setLanguage('en-US')">
-            <text class="lang-option-text">English</text>
-            <text v-if="!isPro" class="lang-lock">🔒</text>
-          </view>
-        </view>
-      </view>
+      <view class="version-row"><text class="version-text">WIO Tracker · v1.0.0</text></view>
+
     </view>
 
     </scroll-view>
@@ -1161,6 +1165,18 @@ export default {
   background: #F2F4F6;
   border-radius: 10px;
   box-sizing: border-box;
+}
+
+/* 页面底部版本号 */
+.version-row {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 4px;
+}
+
+.version-text {
+  font-size: 11px;
+  color: #9AA1A8;
 }
 
 .lang-option {
