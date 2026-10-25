@@ -182,7 +182,7 @@
 import wioService from '@/utils/wioService.js'
 import { getTopSafeArea } from '@/utils/safeArea.js'
 import { getAuth, isTrialActive } from '@/utils/auth.js'
-import locales from '@/utils/locales.js'
+import { locales } from '@/utils/locales.js'
 
 const CHART_MAX_BAR = 90 // 柱状图柱子最大高度(px)
 const DAY_HOURS = 8      // OT / 通勤折算天数的基准
