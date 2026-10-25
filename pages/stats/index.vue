@@ -76,10 +76,18 @@
               class="chart-col"
               v-for="m in annual.monthly"
               :key="m.month"
+              @click="onBarTap(m)"
             >
               <view
+                v-if="selectedMonth === m.month && m.companyDays > 0"
+                class="bar-tip"
+                :style="{ bottom: barHeight(m.companyDays) + 6 + 'px' }"
+              >
+                <text class="bar-tip-text">{{ m.companyDays }} {{ i18n.profile.statsUnitDay }}</text>
+              </view>
+              <view
                 class="bar"
-                :class="{ 'bar-current': isCurrentMonth(m.month) }"
+                :class="{ 'bar-current': isCurrentMonth(m.month), 'bar-selected': selectedMonth === m.month && !isCurrentMonth(m.month) }"
                 :style="{ height: barHeight(m.companyDays) + 'px' }"
               ></view>
             </view>
@@ -87,7 +95,12 @@
           <view class="chart-baseline"></view>
         </view>
         <view class="month-labels">
-          <text v-for="m in annual.monthly" :key="m.month" class="month-label">{{ m.month }}</text>
+          <text
+            v-for="m in annual.monthly"
+            :key="m.month"
+            class="month-label"
+            :class="{ active: selectedMonth === m.month }"
+          >{{ m.month }}</text>
         </view>
         <view class="legend">
           <view class="legend-item">
@@ -182,7 +195,8 @@ export default {
         monthly: []
       },
       showCommuteEditor: false,
-      draftCommute: 90
+      draftCommute: 90,
+      selectedMonth: new Date().getMonth() + 1   // 柱状图默认选中当前月
     }
   },
   computed: {
@@ -255,6 +269,11 @@ export default {
     },
     barHeight(days) {
       return Math.round(days / this.chartMax * CHART_MAX_BAR)
+    },
+    // 点柱子：弹出/收起该月的回司天数气泡
+    onBarTap(m) {
+      uni.vibrateShort && uni.vibrateShort()
+      this.selectedMonth = this.selectedMonth === m.month ? null : m.month
     },
     leavePct(used, total) {
       if (!total) return 0
@@ -431,12 +450,12 @@ export default {
 .chart-area {
   display: flex;
   align-items: flex-end;
-  height: 100px;
+  height: 116px;
   position: relative;
 }
 .chart-col {
   flex: 1;
-  height: 100px;
+  height: 116px;
   position: relative;
   display: flex;
   align-items: flex-end;
@@ -449,6 +468,23 @@ export default {
   min-height: 0;
 }
 .bar-current { background-color: #C08A2D; }
+.bar-selected { background-color: #0B5248; }
+/* 点选柱子时弹出的天数气泡 */
+.bar-tip {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #151820;
+  border-radius: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  z-index: 2;
+}
+.bar-tip-text {
+  color: #FFFFFF;
+  font-size: 10px;
+  line-height: 1.4;
+}
 .chart-baseline {
   height: 1px;
   background-color: #E7EBED;
@@ -462,6 +498,10 @@ export default {
   text-align: center;
   font-size: 9.5px;
   color: #8A94A0;
+}
+.month-label.active {
+  color: #151820;
+  font-weight: 600;
 }
 .legend {
   display: flex;
