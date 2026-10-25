@@ -62,6 +62,62 @@ export function updateCachedSubscription(sub) {
 export function logout() {
   uni.removeStorageSync(KEY_AUTH)
   uni.removeStorageSync('wio_sync_state')
+  uni.removeStorageSync(KEY_TRIAL)
+}
+
+// ============================================================
+// 兑换码 · 本地试用订阅（测试用）
+//
+// 虚拟支付尚未接入前的过渡方案：兑换码在客户端本地核销，
+// 写入一份本地试用订阅。接入虚拟支付后，可把 redeemCode()
+// 换成调用 pay 云函数的 action=redeem 做服务端核销，
+// isPro() 的消费端逻辑不用动。
+// ============================================================
+
+const KEY_TRIAL = 'wio_pro_trial'
+
+/** 兑换码表：code → 有效天数（本地测试用，勿用于线上） */
+const REDEEM_CODES = {
+  'WIO-PRO-7': 7,
+  'WIO-PRO-30': 30,
+  'WIO-PRO-365': 365,
+}
+
+/** 读取本地试用订阅 { plan, source, redeemedAt, expiresAt } 或 null */
+export function getTrial() {
+  try {
+    const raw = uni.getStorageSync(KEY_TRIAL)
+    return raw ? JSON.parse(raw) : null
+  } catch (e) {
+    return null
+  }
+}
+
+/** 本地试用订阅是否有效 */
+export function isTrialActive() {
+  const t = getTrial()
+  return !!(t && t.expiresAt && t.expiresAt > Date.now())
+}
+
+/**
+ * 核销兑换码（本地）
+ * @param {string} code
+ * @returns {boolean} 是否核销成功
+ */
+export function redeemCode(code) {
+  const days = REDEEM_CODES[String(code || '').trim().toUpperCase()]
+  if (!days) return false
+  // 未过期的试用可叠加续期
+  const prev = getTrial()
+  const base = prev && prev.expiresAt > Date.now() ? prev.expiresAt : Date.now()
+  const trial = {
+    plan: 'trial',
+    source: 'redeem',
+    redeemedAt: Date.now(),
+    expiresAt: base + days * 24 * 60 * 60 * 1000,
+  }
+  uni.setStorageSync(KEY_TRIAL, JSON.stringify(trial))
+  return true
 }
 
 /**

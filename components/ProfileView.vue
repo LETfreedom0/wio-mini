@@ -372,6 +372,7 @@
           <text class="paywall-cta-text">{{ payPlan === 'year' ? i18n.profile.payCta : i18n.profile.payCtaMonth }}</text>
         </view>
         <text class="paywall-fine">{{ i18n.profile.payFine }}</text>
+        <text class="paywall-redeem" @click="onRedeemTap">{{ i18n.profile.redeemEntry }}</text>
       </view>
     </view>
 
@@ -411,7 +412,7 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
-import { login, getAuth, logout, updateCachedUser, uploadAvatar } from '@/utils/auth.js'
+import { login, getAuth, logout, updateCachedUser, uploadAvatar, getTrial, redeemCode } from '@/utils/auth.js'
 import * as syncService from '@/utils/syncService.js'
 
 const holidayNameMap = {
@@ -449,6 +450,7 @@ export default {
       session: null,           // { openid, user, subscription }
       showAuthSheet: false,
       showPaywall: false,
+      trialStamp: 0,       // 兑换码核销后 +1，触发 isPro 重算
       payPlan: 'year',
       conflictInfo: null,      // { localTime, cloudTime, cloudData, data_version }
       lastSyncAt: 0,
@@ -494,6 +496,10 @@ export default {
       return !!(this.session && this.session.user && this.session.user.openid);
     },
     isPro() {
+      // 兑换码写入的本地试用订阅优先（测试用）；trialStamp 仅用于触发重算
+      void this.trialStamp;
+      const trial = getTrial();
+      if (trial && trial.expiresAt && trial.expiresAt > Date.now()) return true;
       const sub = this.session && this.session.subscription;
       if (!sub) return false;
       const exp = sub.expiresAt || sub.expires_at;
@@ -807,6 +813,28 @@ export default {
     onPayTap() {
       // 虚拟支付开通前的占位：正式上线后接 pay 云函数 + wx.requestVirtualPayment
       uni.showToast({ title: t('profile.payComingSoon', this.settings.language), icon: 'none' });
+    },
+    onRedeemTap() {
+      const lang = this.settings.language;
+      uni.showModal({
+        title: t('profile.redeemTitle', lang),
+        editable: true,
+        placeholderText: t('profile.redeemPlaceholder', lang),
+        success: (res) => {
+          if (!res.confirm) return;
+          const ok = redeemCode(res.content);
+          if (!ok) {
+            uni.showToast({ title: t('profile.redeemFail', lang), icon: 'none' });
+            return;
+          }
+          this.trialStamp++;
+          const trial = getTrial();
+          const d = new Date(trial.expiresAt);
+          const until = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          this.showPaywall = false;
+          uni.showToast({ title: `${t('profile.redeemOk', lang)} ${until}`, icon: 'none', duration: 2500 });
+        },
+      });
     },
     formatTime(ts) {
       if (!ts) return '—';
@@ -2097,6 +2125,14 @@ export default {
   color: #B5BBC1;
   text-align: center;
   line-height: 1.5;
+}
+.paywall-redeem {
+  margin-top: 14px;
+  font-size: 11px;
+  color: #8A94A0;
+  text-align: center;
+  text-decoration: underline;
+  padding: 4px 0 2px;
 }
 
 /* ===== 冲突弹窗 ===== */
