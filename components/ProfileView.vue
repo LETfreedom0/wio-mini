@@ -5,13 +5,13 @@
 
       <!-- 账号 -->
       <view class="settings-card account-card" @click="onAccountCardTap">
-        <view class="account-avatar">
+        <view class="account-avatar" :class="{ 'account-avatar-pro': isPro }">
           <image v-if="avatarSrc" class="account-avatar-img" :src="avatarSrc" mode="aspectFill" />
           <text v-else class="account-avatar-placeholder">{{ isLogin ? 'W' : '?' }}</text>
         </view>
         <view class="account-info">
           <text class="account-name">{{ accountName }}</text>
-          <text v-if="accountSub" class="account-sub">{{ accountSub }}</text>
+          <text v-if="accountSub" class="account-sub" :class="{ 'account-sub-pro': isPro }">{{ accountSub }}</text>
         </view>
         <view v-if="!isLogin" class="account-login-btn" @click.stop="openAuthSheet('login')">
           <text class="account-login-btn-text">{{ i18n.profile.loginAction }}</text>
@@ -511,9 +511,18 @@ export default {
       return u.nickname || this.i18n.profile.defaultName;
     },
     accountSub() {
+      const lang = this.settings.language;
+      // PRO：金色「PRO 会员 · 年卡/月卡/体验会员」（兑换码试用未登录时也显示）
+      if (this.isPro) {
+        if (!this.isLogin) return t('profile.proMemTrial', lang);
+        const sub = this.session && this.session.subscription;
+        const plan = (sub && sub.plan) || 'trial';
+        return plan === 'year' ? t('profile.proMemYear', lang)
+          : plan === 'month' ? t('profile.proMemMonth', lang)
+          : t('profile.proMemTrial', lang);
+      }
       if (!this.isLogin) return this.i18n.profile.accountLoginHint;
-      // 登录后不再展示「登录后可用」；仅订阅时显示绑定标识
-      return this.isPro ? this.i18n.profile.accountBound : '';
+      return '';
     },
     // PRO 卡「云端同步」行的说明文案（按登录/订阅状态切换）
     syncRowSub() {
@@ -1550,6 +1559,27 @@ export default {
   flex-shrink: 0;
 }
 
+/* PRO 会员效果：鎏金渐变圆环包住头像（对齐设计稿 2:57） */
+.account-avatar-pro {
+  box-sizing: border-box;
+  padding: 3px;
+  background: linear-gradient(135deg, #D9A94F 0%, #B07A22 100%);
+}
+.account-avatar-pro .account-avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+.account-avatar-pro .account-avatar-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #F0F2F4;
+  font-size: 16px;
+  line-height: 40px;
+  text-align: center;
+}
+
 .account-avatar-img {
   width: 46px;
   height: 46px;
@@ -1559,6 +1589,12 @@ export default {
   font-size: 18px;
   font-weight: 600;
   color: #A3A9B0;
+}
+
+/* PRO 会员副标题：金色 */
+.account-sub-pro {
+  color: #A9761F;
+  font-weight: 500;
 }
 
 .account-info {
