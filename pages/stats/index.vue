@@ -24,7 +24,6 @@
       <view class="page-head">
         <view class="back-btn" @click="goBack"><text class="back-text">‹</text></view>
         <text class="page-title">{{ i18n.profile.statsTitle }}</text>
-        <view class="pro-pill"><text class="pro-pill-text">PRO</text></view>
       </view>
 
       <!-- 概览卡 -->
@@ -79,12 +78,6 @@
               :key="m.month"
             >
               <view
-                v-for="d in targetDashes(m)"
-                :key="d"
-                class="target-dash"
-                :style="{ bottom: d + 'px' }"
-              ></view>
-              <view
                 class="bar"
                 :class="{ 'bar-current': isCurrentMonth(m.month) }"
                 :style="{ height: barHeight(m.companyDays) + 'px' }"
@@ -104,10 +97,6 @@
           <view class="legend-item">
             <view class="legend-dot legend-dot-gold"></view>
             <text class="legend-text">{{ i18n.profile.statsLegendCurrent }}</text>
-          </view>
-          <view class="legend-item">
-            <view class="legend-dash"></view>
-            <text class="legend-text">{{ legendTargetText }}</text>
           </view>
         </view>
       </view>
@@ -138,14 +127,6 @@
         </view>
       </view>
 
-      <!-- 导出卡 -->
-      <view class="card export-card" @click="onExport">
-        <view class="export-text-group">
-          <text class="export-title">{{ i18n.profile.statsExportTitle }}</text>
-          <text class="export-sub">{{ exportSubText }}</text>
-        </view>
-        <text class="export-arrow">›</text>
-      </view>
     </template>
 
     <!-- 通勤时长编辑弹层 -->
@@ -235,17 +216,6 @@ export default {
       })
       return max
     },
-    // 图例上的目标百分比：取当前月份的当期比例（未改过即为设置值）
-    legendTargetRatio() {
-      const now = new Date()
-      const y = this.year === now.getFullYear() ? now.getMonth() + 1 : 12
-      const m = this.annual.monthly[y - 1]
-      if (!m || !m.workingDays) return 0
-      return Math.round(m.targetDays / m.workingDays * 100)
-    },
-    legendTargetText() {
-      return this.i18n.profile.statsLegendTarget.replace('{n}', this.legendTargetRatio)
-    },
     commuteDisplay() {
       const h = this.draftCommute / 60
       return `${parseFloat(h.toFixed(2))} ${this.i18n.profile.statsUnitHour}`
@@ -253,9 +223,6 @@ export default {
     commuteEstText() {
       return this.i18n.profile.statsCommuteEst
         .replace('{h}', parseFloat((this.annual.commuteMinutes / 60).toFixed(2)))
-    },
-    exportSubText() {
-      return this.i18n.profile.statsExportSub.replace('{year}', this.year)
     }
   },
   onLoad() {
@@ -289,13 +256,6 @@ export default {
     barHeight(days) {
       return Math.round(days / this.chartMax * CHART_MAX_BAR)
     },
-    // 目标虚线的分段位置：按「该月工作日 × 该月当期比例」，
-    // 年内改过比例时各月高度不同（阶梯），没改过则呈一条水平虚线
-    targetDashes(m) {
-      if (!m.targetDays) return []
-      const y = Math.round(m.targetDays / this.chartMax * CHART_MAX_BAR)
-      return [y, y + 3]
-    },
     leavePct(used, total) {
       if (!total) return 0
       return Math.min(100, Math.round(used / total * 100))
@@ -309,33 +269,6 @@ export default {
       wioService.saveSettings(settings)
       this.showCommuteEditor = false
       this.refresh()
-    },
-    async onExport() {
-      const csv = wioService.buildYearCsv(this.year)
-      if (!csv || csv.split('\n').length <= 1) {
-        uni.showToast({ title: this.i18n.profile.statsExportEmpty, icon: 'none' })
-        return
-      }
-      // 优先写文件后转发（微信）；失败则退化为复制到剪贴板
-      try {
-        const path = `${wx.env.USER_DATA_PATH}/wio_report_${this.year}.csv`
-        uni.getFileSystemManager().writeFileSync(path, '\ufeff' + csv, 'utf8')
-        await new Promise((resolve, reject) => {
-          wx.shareFileMessage({
-            filePath: path,
-            fileName: `WIO_${this.year}.csv`,
-            success: resolve,
-            fail: reject
-          })
-        })
-        uni.showToast({ title: this.i18n.profile.statsExportDone, icon: 'none' })
-      } catch (e) {
-        if (e && /cancel/.test(e.errMsg || '')) return
-        uni.setClipboardData({
-          data: csv,
-          success: () => uni.showToast({ title: this.i18n.profile.statsExportCopied, icon: 'none' })
-        })
-      }
     }
   }
 }
@@ -369,22 +302,12 @@ export default {
   line-height: 1;
 }
 .page-title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: bold;
   color: #151820;
   flex: 1;
 }
 .head-space { width: 28px; }
-.pro-pill {
-  background-color: #C08A2D;
-  border-radius: 999px;
-  padding: 4px 10px;
-}
-.pro-pill-text {
-  color: #FFFFFF;
-  font-size: 10px;
-  font-weight: bold;
-}
 
 /* ---- 卡片通用 ---- */
 .card {
@@ -526,14 +449,6 @@ export default {
   min-height: 0;
 }
 .bar-current { background-color: #C08A2D; }
-.target-dash {
-  position: absolute;
-  left: 15%;
-  width: 70%;
-  height: 1px;
-  background-color: #8A94A0;
-  opacity: 0.8;
-}
 .chart-baseline {
   height: 1px;
   background-color: #E7EBED;
@@ -561,11 +476,6 @@ export default {
 .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
 .legend-dot-green { background-color: #0E6E62; }
 .legend-dot-gold { background-color: #C08A2D; }
-.legend-dash {
-  width: 12px;
-  height: 2px;
-  background: repeating-linear-gradient(90deg, #8A94A0 0, #8A94A0 3px, transparent 3px, transparent 6px);
-}
 .legend-text { font-size: 10.5px; color: #6B737B; }
 
 /* ---- 假期卡 ---- */
@@ -601,17 +511,6 @@ export default {
   min-width: 44px;
   text-align: right;
 }
-
-/* ---- 导出卡 ---- */
-.export-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.export-text-group { display: flex; flex-direction: column; }
-.export-title { font-size: 13px; font-weight: 600; color: #151820; }
-.export-sub { font-size: 10.5px; color: #8A94A0; margin-top: 3px; }
-.export-arrow { font-size: 16px; color: #C3C9CE; }
 
 /* ---- 通勤编辑弹层 ---- */
 .editor-mask {
