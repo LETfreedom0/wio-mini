@@ -179,7 +179,7 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { getTopSafeArea } from '@/utils/safeArea.js'
-import { getAuth } from '@/utils/auth.js'
+import { getAuth, isTrialActive } from '@/utils/auth.js'
 import locales from '@/utils/locales.js'
 
 const CHART_MAX_BAR = 90 // 柱状图柱子最大高度(px)
@@ -213,6 +213,8 @@ export default {
       return getAuth()
     },
     isPro() {
+      // 兑换码写入的本地试用订阅优先（测试用），登录订阅兜底——与 ProfileView 口径一致
+      if (isTrialActive()) return true
       const sub = this.session && this.session.subscription
       if (!sub) return false
       const exp = sub.expiresAt || sub.expires_at
