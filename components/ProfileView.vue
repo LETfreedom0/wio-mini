@@ -8,6 +8,9 @@
         <view class="account-avatar" :class="{ 'account-avatar-pro': isPro }">
           <image v-if="avatarSrc" class="account-avatar-img" :src="avatarSrc" mode="aspectFill" />
           <text v-else class="account-avatar-placeholder">{{ isLogin ? 'W' : '?' }}</text>
+          <view v-if="isPro" class="account-avatar-crown">
+            <text class="account-avatar-crown-text">👑</text>
+          </view>
         </view>
         <view class="account-info">
           <text class="account-name">{{ accountName }}</text>
@@ -1607,6 +1610,7 @@ export default {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  position: relative;
 }
 
 /* PRO 会员效果：鎏金渐变圆环包住头像（对齐设计稿 2:57） */
@@ -1614,6 +1618,26 @@ export default {
   box-sizing: border-box;
   padding: 3px;
   background: linear-gradient(135deg, #D9A94F 0%, #B07A22 100%);
+  overflow: visible;
+}
+/* 头像右上角小皇冠（PRO 专属） */
+.account-avatar-crown {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #D9A94F 0%, #B07A22 100%);
+  border: 2px solid #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(176, 122, 34, 0.35);
+}
+.account-avatar-crown-text {
+  font-size: 9px;
+  line-height: 1;
 }
 .account-avatar-pro .account-avatar-img {
   width: 40px;
