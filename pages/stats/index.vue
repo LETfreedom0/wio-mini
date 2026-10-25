@@ -73,21 +73,23 @@
         <text class="section-sub">{{ i18n.profile.statsTrendSub }}</text>
         <view class="chart">
           <view class="chart-area">
-            <template v-for="m in annual.monthly">
-              <view class="chart-col" :key="m.month">
-                <view
-                  v-for="d in targetDashes(m)"
-                  :key="d"
-                  class="target-dash"
-                  :style="{ bottom: d + 'px' }"
-                ></view>
-                <view
-                  class="bar"
-                  :class="{ 'bar-current': isCurrentMonth(m.month) }"
-                  :style="{ height: barHeight(m.companyDays) + 'px' }"
-                ></view>
-              </view>
-            </template>
+            <view
+              class="chart-col"
+              v-for="m in annual.monthly"
+              :key="m.month"
+            >
+              <view
+                v-for="d in targetDashes(m)"
+                :key="d"
+                class="target-dash"
+                :style="{ bottom: d + 'px' }"
+              ></view>
+              <view
+                class="bar"
+                :class="{ 'bar-current': isCurrentMonth(m.month) }"
+                :style="{ height: barHeight(m.companyDays) + 'px' }"
+              ></view>
+            </view>
           </view>
           <view class="chart-baseline"></view>
         </view>
