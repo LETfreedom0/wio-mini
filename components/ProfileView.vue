@@ -205,15 +205,21 @@
         </view>
       </view>
 
-      <!-- 语言 -->
+      <!-- 语言（多语言为 PRO 专属） -->
       <view class="settings-card language-card">
-        <text class="card-title">{{ i18n.profile.language }}</text>
+        <view class="card-header-row">
+          <text class="card-title">{{ i18n.profile.language }}</text>
+          <view v-if="!isPro" class="pro-badge" @click="showPaywall = true">
+            <text class="pro-badge-text">PRO</text>
+          </view>
+        </view>
         <view class="lang-segmented">
           <view class="lang-option" :class="{ active: settings.language === 'zh-CN' }" @click="setLanguage('zh-CN')">
             <text class="lang-option-text">简体中文</text>
           </view>
           <view class="lang-option" :class="{ active: settings.language === 'en-US' }" @click="setLanguage('en-US')">
             <text class="lang-option-text">English</text>
+            <text v-if="!isPro" class="lang-lock">🔒</text>
           </view>
         </view>
       </view>
@@ -333,6 +339,13 @@
             <view class="benefit-info">
               <text class="benefit-title">{{ i18n.profile.benefitStats }}</text>
               <text class="benefit-sub">{{ i18n.profile.benefitStatsSub }}</text>
+            </view>
+          </view>
+          <view class="benefit-row">
+            <view class="benefit-icon"><text class="benefit-icon-text">🌐</text></view>
+            <view class="benefit-info">
+              <text class="benefit-title">{{ i18n.profile.benefitLang }}</text>
+              <text class="benefit-sub">{{ i18n.profile.benefitLangSub }}</text>
             </view>
           </view>
         </view>
@@ -591,6 +604,11 @@ export default {
         this.save();
     },
     setLanguage(lang) {
+      // 多语言为 PRO 专属权益：非 PRO 点击英文选项直接拉起付费墙
+      if (lang !== 'zh-CN' && !this.isPro) {
+        this.showPaywall = true;
+        return;
+      }
       this.settings.language = lang;
       uni.vibrateShort();
       this.save();
@@ -1151,6 +1169,12 @@ export default {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
+}
+
+/* PRO 锁定角标：非订阅时挂在 English 选项尾部 */
+.lang-lock {
+  font-size: 11px;
+  margin-left: 4px;
 }
 
 .lang-option.active {
