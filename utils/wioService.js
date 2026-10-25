@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS = {
   language: 'zh-CN',
   birthdayEnabled: false,
   birthdayMonth: '',
+  autoSync: true,
   // 调休配置规则 (Key: 节日名称, Value: boolean 是否调休)
   // 默认只有春节调休
   compOffRules: {
