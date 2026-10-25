@@ -13,7 +13,7 @@
           <text class="account-name">{{ accountName }}</text>
           <text class="account-sub">{{ accountSub }}</text>
         </view>
-        <view v-if="!isLogin" class="account-login-btn" @click.stop="openAuthSheet">
+        <view v-if="!isLogin" class="account-login-btn" @click.stop="openAuthSheet('login')">
           <text class="account-login-btn-text">{{ i18n.profile.loginAction }}</text>
         </view>
         <text v-else class="account-chevron">›</text>
@@ -252,7 +252,7 @@
     <!-- ===== 微信授权登录（底部弹层） ===== -->
     <view v-if="showAuthSheet" class="sheet-mask" @click="closeAuthSheet">
       <view class="sheet-card" @click.stop>
-        <text class="sheet-title">{{ i18n.profile.authSheetTitle }}</text>
+        <text class="sheet-title">{{ authMode === 'login' ? i18n.profile.authSheetTitle : i18n.profile.profileEditTitle }}</text>
 
         <!-- 头像选择（合规：open-type=chooseAvatar） -->
         <view class="auth-avatar-row">
@@ -280,8 +280,8 @@
           />
         </view>
 
-        <!-- 协议 -->
-        <view class="auth-agree-row" @click="authForm.agreed = !authForm.agreed">
+        <!-- 协议（仅首次登录需要） -->
+        <view v-if="authMode === 'login'" class="auth-agree-row" @click="authForm.agreed = !authForm.agreed">
           <view class="agree-check" :class="{ checked: authForm.agreed }">
             <text v-if="authForm.agreed" class="agree-check-icon">✓</text>
           </view>
@@ -294,7 +294,7 @@
         </view>
 
         <view class="auth-submit-btn" @click="onSubmitLogin">
-          <text class="auth-submit-text">{{ i18n.profile.authBtn }}</text>
+          <text class="auth-submit-text">{{ authMode === 'login' ? i18n.profile.authBtn : i18n.profile.authSave }}</text>
         </view>
         <view class="auth-cancel-btn" @click="closeAuthSheet">
           <text class="auth-cancel-text">{{ i18n.profile.cancel }}</text>
@@ -396,7 +396,7 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
-import { login, getAuth, updateCachedUser, uploadAvatar } from '@/utils/auth.js'
+import { login, getAuth, logout, updateCachedUser, uploadAvatar } from '@/utils/auth.js'
 import * as syncService from '@/utils/syncService.js'
 
 const holidayNameMap = {
@@ -437,6 +437,7 @@ export default {
       payPlan: 'year',
       conflictInfo: null,      // { localTime, cloudTime, cloudData, data_version }
       lastSyncAt: 0,
+      authMode: 'login', // 'login' 首次登录 | 'edit' 完善资料
       authForm: {
         nickname: '',
         avatarTemp: '',
@@ -486,7 +487,7 @@ export default {
     accountName() {
       if (!this.isLogin) return this.i18n.profile.accountNotLogin;
       const u = this.session.user || {};
-      return u.nickname || u.openid || 'WIO';
+      return u.nickname || this.i18n.profile.defaultName;
     },
     accountSub() {
       if (!this.isLogin) return this.i18n.profile.accountLoginHint;
@@ -628,15 +629,36 @@ export default {
     // ===== 账号卡 =====
     onAccountCardTap() {
       if (!this.isLogin) {
-        this.openAuthSheet();
+        this.openAuthSheet('login');
+        return;
       }
+      // 已登录：提供完善资料 / 退出登录入口
+      const lang = this.settings.language;
+      uni.showActionSheet({
+        itemList: [t('profile.accountEditProfile', lang), t('profile.accountLogout', lang)],
+        success: (res) => {
+          if (res.tapIndex === 0) {
+            this.openAuthSheet('edit');
+          } else if (res.tapIndex === 1) {
+            this.onLogout();
+          }
+        }
+      });
     },
-    // ===== 授权登录弹层 =====
-    openAuthSheet() {
+    onLogout() {
+      // 云端数据保留，仅清本地会话与同步状态
+      logout();
+      this.session = null;
+      uni.showToast({ title: t('profile.logoutSuccess', this.settings.language), icon: 'none' });
+    },
+    // ===== 授权登录 / 完善资料弹层 =====
+    openAuthSheet(mode = 'login') {
       const cached = this.session && this.session.user ? this.session.user : {};
+      this.authMode = mode;
       this.authForm = {
         nickname: cached.nickname || '',
-        avatarTemp: '',
+        // 编辑模式回显现有头像（cloud:// fileID 可直接作为 image src）
+        avatarTemp: mode === 'edit' ? (cached.avatarFileID || '') : '',
         agreed: false
       };
       this.showAuthSheet = true;
@@ -657,12 +679,10 @@ export default {
       this.authForm.nickname = e.detail.value || this.authForm.nickname;
     },
     async onSubmitLogin() {
-      if (!this.authForm.agreed) {
+      const isLoginMode = this.authMode === 'login';
+      // 一键登录：昵称/头像均可留空（云端默认「微信用户」+ 占位头像），随时回来完善
+      if (isLoginMode && !this.authForm.agreed) {
         uni.showToast({ title: t('profile.needAgree', this.settings.language), icon: 'none' });
-        return;
-      }
-      if (!this.authForm.nickname || !this.authForm.nickname.trim()) {
-        uni.showToast({ title: t('profile.nicknameRequired', this.settings.language), icon: 'none' });
         return;
       }
       uni.showLoading({ title: '' });
@@ -683,8 +703,10 @@ export default {
         uni.hideLoading();
         this.showAuthSheet = false;
         uni.showToast({ title: t('profile.loginSuccess', this.settings.language), icon: 'success' });
-        // 登录成功后自动拉一次云端数据
-        syncService.pull().catch(() => {});
+        // 首次登录成功后自动拉一次云端数据；完善资料模式无需
+        if (isLoginMode) {
+          syncService.pull().catch(() => {});
+        }
       } catch (err) {
         uni.hideLoading();
         console.error('login failed', err);
