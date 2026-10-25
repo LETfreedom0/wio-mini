@@ -291,13 +291,16 @@
       </view>
     </view>
 
-    <!-- ===== 自定义假期 添加/编辑（底部弹层） ===== -->
-    <view v-if="showCustomSheet" class="sheet-mask" @click="showCustomSheet = false">
-      <view class="sheet-card" @click.stop>
-        <text class="sheet-title">{{ customEditingId ? i18n.profile.customSheetEdit : i18n.profile.customSheetAdd }}</text>
+    <!-- ===== 自定义假期 添加/编辑（居中弹出卡片） ===== -->
+    <view v-if="showCustomSheet" class="cl-modal-mask" @click="showCustomSheet = false">
+      <view class="cl-modal-card" @click.stop>
+        <view class="cl-modal-head">
+          <text class="cl-modal-title">{{ customEditingId ? i18n.profile.customSheetEdit : i18n.profile.customSheetAdd }}</text>
+          <view class="cl-pro-chip"><text class="cl-pro-chip-text">{{ i18n.profile.customProChip }}</text></view>
+        </view>
 
-        <view v-if="!customEditingId" class="custom-field-row">
-          <text class="custom-field-label">{{ i18n.profile.customPresetLabel }}</text>
+        <view v-if="!customEditingId" class="cl-field">
+          <text class="cl-field-label">{{ i18n.profile.customPresetLabel }}</text>
           <view class="custom-preset-row">
             <view
               v-for="p in customPresets"
@@ -311,30 +314,50 @@
           </view>
         </view>
 
-        <view class="custom-field-row">
-          <text class="custom-field-label">{{ i18n.profile.customFieldName }}</text>
+        <view class="cl-field">
+          <text class="cl-field-label">{{ i18n.profile.customFieldName }}</text>
           <input class="custom-input" :value="customForm.name" :placeholder="i18n.profile.customNamePh" maxlength="12" @input="onCustomName" />
         </view>
 
-        <view class="custom-field-row">
-          <text class="custom-field-label">{{ i18n.profile.customDateRange }}</text>
-          <view class="custom-date-row">
-            <picker class="custom-picker" mode="date" :value="customForm.start" @change="onCustomStart">
-              <view class="custom-date-box">
-                <text class="custom-date-text">{{ customForm.start }}</text>
+        <view class="cl-field">
+          <text class="cl-field-label">{{ i18n.profile.customDateRange }}</text>
+          <view class="cl-range-card">
+            <view class="cl-range-row">
+              <picker class="cl-range-side" mode="date" :value="customForm.start" @change="onCustomStart">
+                <view class="cl-date-block">
+                  <text class="cl-date-cap">{{ i18n.profile.customDateStart }}</text>
+                  <text class="cl-date-value">{{ fmtCustomMD(customForm.start) }}</text>
+                  <text class="cl-date-week">{{ fmtCustomYW(customForm.start) }}</text>
+                </view>
+              </picker>
+              <view class="cl-connector">
+                <view class="cl-conn-line"></view>
+                <view class="cl-duration-pill">
+                  <text class="cl-duration-text">{{ i18n.profile.customDaysText.replace('{n}', customDays) }}</text>
+                </view>
+                <view class="cl-conn-line"></view>
               </view>
-            </picker>
-            <text class="custom-date-sep">~</text>
-            <picker class="custom-picker" mode="date" :value="customForm.end" @change="onCustomEnd">
-              <view class="custom-date-box">
-                <text class="custom-date-text">{{ customForm.end }}</text>
+              <picker class="cl-range-side" mode="date" :value="customForm.end" @change="onCustomEnd">
+                <view class="cl-date-block end">
+                  <text class="cl-date-cap">{{ i18n.profile.customDateEnd }}</text>
+                  <text class="cl-date-value">{{ fmtCustomMD(customForm.end) }}</text>
+                  <text class="cl-date-week">{{ fmtCustomYW(customForm.end) }}</text>
+                </view>
+              </picker>
+            </view>
+            <view class="cl-week-strip">
+              <view v-for="d in customWeekStrip" :key="d.date" class="cl-week-cell">
+                <view class="cl-week-dot" :class="{ weekend: d.weekend }" :style="d.weekend ? '' : { background: customForm.color }">
+                  <text class="cl-week-num" :class="{ weekend: d.weekend }">{{ d.day }}</text>
+                </view>
               </view>
-            </picker>
+            </view>
+            <text class="cl-range-note">{{ i18n.profile.customRangeNote }}</text>
           </view>
         </view>
 
-        <view class="custom-field-row">
-          <text class="custom-field-label">{{ i18n.profile.customColorLabel }}</text>
+        <view class="cl-field">
+          <text class="cl-field-label">{{ i18n.profile.customColorLabel }}</text>
           <view class="custom-color-row">
             <view
               v-for="c in customColors"
@@ -345,10 +368,6 @@
               @click="selectCustomColor(c)"
             ></view>
           </view>
-        </view>
-
-        <view class="custom-hint-wrap">
-          <text class="custom-hint-text">{{ i18n.profile.customLeaveCounted }}</text>
         </view>
 
         <view class="custom-save-btn" @click="saveCustom">
@@ -615,6 +634,30 @@ export default {
     targetTicks() {
       return [0, 20, 40, 60, 80, 100];
     },
+    // ===== 自定义假期弹层 =====
+    customDays() {
+      const { start, end } = this.customForm;
+      if (!start || !end || end < start) return 1;
+      return Math.round((new Date(end + 'T00:00:00') - new Date(start + 'T00:00:00')) / 86400000) + 1;
+    },
+    customWeekStrip() {
+      // 起始日起最多 7 天的迷你预览：工作日用假期色，周末弱化（不扣分母的口径可视化）
+      const start = this.customForm.start;
+      if (!start) return [];
+      const base = new Date(start + 'T00:00:00');
+      const n = Math.min(this.customDays, 7);
+      const days = [];
+      for (let i = 0; i < n; i++) {
+        const d = new Date(base.getTime() + i * 86400000);
+        const wd = d.getDay();
+        days.push({
+          date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+          day: d.getDate(),
+          weekend: wd === 0 || wd === 6
+        });
+      }
+      return days;
+    },
     // ===== 账号 / 同步 =====
     isLogin() {
       return !!(this.session && this.session.user && this.session.user.openid);
@@ -745,6 +788,21 @@ export default {
     fmtCustomRange(l) {
       // 03/02 ~ 03/08 紧凑展示
       return `${l.start.slice(5).replace('-', '/')} ~ ${l.end.slice(5).replace('-', '/')}`;
+    },
+    fmtCustomMD(s) {
+      // 3月2日（英：3/2）
+      if (!s) return '--';
+      const [, m, d] = s.split('-');
+      return this.settings.language === 'en-US' ? `${+m}/${+d}` : `${+m}月${+d}日`;
+    },
+    fmtCustomYW(s) {
+      // 2026 · 周一（英：2026 · Mon）
+      if (!s) return '';
+      const d = new Date(s + 'T00:00:00');
+      if (isNaN(d.getTime())) return '';
+      const weekEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const wd = this.settings.language === 'en-US' ? weekEn[d.getDay()] : '周' + '日一二三四五六'[d.getDay()];
+      return `${d.getFullYear()} · ${wd}`;
     },
     openCustomAdd() {
       const today = this._todayStr();
@@ -1325,18 +1383,6 @@ export default {
 }
 
 /* ===== 自定义假期弹层 ===== */
-.custom-field-row {
-  margin-top: 13px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.custom-field-label {
-  font-size: 11px;
-  color: #9AA1A8;
-}
-
 .custom-preset-row {
   display: flex;
   flex-wrap: wrap;
@@ -1379,33 +1425,197 @@ export default {
   box-sizing: border-box;
 }
 
-.custom-date-row {
+/* --- 居中弹出卡片 --- */
+.cl-modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(11, 14, 18, 0.55);
+  z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  padding: 0 28px;
+  box-sizing: border-box;
 }
 
-.custom-picker {
+.cl-modal-card {
+  width: 100%;
+  box-sizing: border-box;
+  background: #FFFFFF;
+  border-radius: 20px;
+  padding: 20px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  animation: modal-pop 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+  max-height: 80vh;
+}
+
+.cl-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.cl-modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #15181C;
+}
+
+.cl-pro-chip {
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 100px;
+  background: linear-gradient(135deg, #D9A947, #A97A1F);
+  display: flex;
+  align-items: center;
+}
+
+.cl-pro-chip-text {
+  font-size: 9px;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: 1px;
+}
+
+.cl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.cl-field-label {
+  font-size: 11px;
+  color: #9AA1A8;
+}
+
+/* --- 鎏金日期范围卡 --- */
+.cl-range-card {
+  background: linear-gradient(180deg, #FFFAED, #FFF3DD);
+  border: 1px solid #F0DBA7;
+  border-radius: 14px;
+  padding: 13px 14px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.cl-range-row {
+  display: flex;
+  align-items: center;
+}
+
+.cl-range-side {
   flex: 1;
+  min-width: 0;
 }
 
-.custom-date-box {
-  height: 42px;
-  border: 1px solid #E7E9EB;
-  border-radius: 10px;
+.cl-date-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+}
+
+.cl-date-block.end {
+  align-items: flex-end;
+}
+
+.cl-date-cap {
+  font-size: 9.5px;
+  color: #B09E78;
+  letter-spacing: 0.5px;
+}
+
+.cl-date-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #15181C;
+}
+
+.cl-date-week {
+  font-size: 9px;
+  color: #9AA1A8;
+}
+
+.cl-connector {
+  width: 72px;
+  height: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.cl-conn-line {
+  flex: 1;
+  width: 100%;
+  min-height: 1px;
+  background: #E7D3A6;
+}
+
+.cl-duration-pill {
+  height: 21px;
+  padding: 0 10px;
+  border-radius: 100px;
+  background: linear-gradient(135deg, #D9A947, #A97A1F);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cl-duration-text {
+  font-size: 10px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.cl-week-strip {
+  display: flex;
+  gap: 5px;
+}
+
+.cl-week-cell {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.cl-week-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.custom-date-text {
-  font-size: 13px;
-  color: #15181C;
+.cl-week-dot.weekend {
+  background: #FFFFFF;
+  border: 1px solid #E0D5B7;
 }
 
-.custom-date-sep {
-  font-size: 12px;
-  color: #9AA1A8;
+.cl-week-num {
+  font-size: 10px;
+  font-weight: 500;
+  color: #FFFFFF;
+}
+
+.cl-week-num.weekend {
+  font-weight: 400;
+  color: #BCAE8C;
+}
+
+.cl-range-note {
+  font-size: 9.5px;
+  color: #B07A22;
+  text-align: center;
 }
 
 .custom-color-row {
@@ -1422,16 +1632,6 @@ export default {
 
 .custom-color-dot.selected {
   box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 3.5px #0B5248;
-}
-
-.custom-hint-wrap {
-  margin-top: 12px;
-}
-
-.custom-hint-text {
-  font-size: 9px;
-  color: #9AA1A8;
-  line-height: 1.6;
 }
 
 .custom-save-btn {
