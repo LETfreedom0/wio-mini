@@ -19,88 +19,17 @@
         <text v-else class="account-chevron">›</text>
       </view>
 
-      <!-- PRO 专属卡：云端同步 / 多语言 / 高级统计 统一收口 -->
-      <view class="settings-card pro-card" :class="{ 'pro-card-locked': !isPro }">
-        <!-- 卡头 -->
-        <view class="pro-card-head">
-          <view class="pro-card-title-group">
-            <text class="pro-card-title">{{ i18n.profile.proCardTitle }}</text>
-            <text class="pro-card-sub">{{ isPro ? i18n.profile.proCardSubOn : i18n.profile.proCardSubOff }}</text>
-          </view>
-          <view v-if="isPro" class="pro-card-badge-on">
-            <text class="pro-card-badge-on-text">{{ i18n.profile.proCardUnlocked }}</text>
-          </view>
-          <view v-else class="pro-badge">
-            <text class="pro-badge-text">PRO</text>
-          </view>
+      <!-- 会员入口：PRO 功能全部收口到「会员」Tab -->
+      <view class="settings-card member-entry" @click="goMember">
+        <view class="member-entry-badge" :class="{ on: isPro }">
+          <text class="member-entry-badge-text">PRO</text>
         </view>
-
-        <!-- 云端同步 -->
-        <view class="pro-feature-row">
-          <view class="pro-feature-text">
-            <text class="pro-feature-title">{{ i18n.profile.benefitSync }}</text>
-            <text class="pro-feature-sub">{{ syncRowSub }}</text>
-          </view>
-          <view v-if="isLogin && isPro" class="toggle-switch" @click="toggleAutoSync">
-            <view class="switch-track" :class="{ on: settings.autoSync }">
-              <view class="switch-thumb"></view>
-            </view>
-          </view>
-          <text v-else class="pro-feature-locked">{{ isLogin ? i18n.profile.proLockedShort : i18n.profile.proLoginShort }}</text>
+        <view class="member-entry-info">
+          <text class="member-entry-title">{{ i18n.profile.memberEntryTitle }}</text>
+          <text class="member-entry-sub" :class="{ on: isPro }">{{ isPro ? i18n.profile.memberEntrySubOn : i18n.profile.memberEntrySubOff }}</text>
         </view>
-        <view v-if="isLogin && isPro" class="pro-sync-status">
-          <text class="pro-sync-time">{{ i18n.profile.lastSync }}：{{ lastSyncText }}</text>
-          <text class="pro-sync-now" @click="onSyncNow">{{ i18n.profile.syncNow }}</text>
-        </view>
-        <view class="pro-divider"></view>
-
-        <!-- 多语言 -->
-        <view class="pro-feature-row">
-          <view class="pro-feature-text">
-            <text class="pro-feature-title">{{ i18n.profile.proLangTitle }}</text>
-            <text class="pro-feature-sub">{{ i18n.profile.benefitLangSub }}</text>
-          </view>
-          <text v-if="!isPro" class="pro-feature-locked">{{ i18n.profile.proLockedShort }}</text>
-        </view>
-        <view class="lang-segmented">
-          <view class="lang-option" :class="{ active: settings.language === 'zh-CN' }" @click="setLanguage('zh-CN')">
-            <text class="lang-option-text">简体中文</text>
-          </view>
-          <view class="lang-option" :class="{ active: settings.language === 'en-US', locked: !isPro }" @click="setLanguage('en-US')">
-            <text class="lang-option-text">English</text>
-            <text v-if="!isPro" class="lang-lock-tag">PRO</text>
-          </view>
-        </view>
-        <view class="pro-divider"></view>
-
-        <!-- 高级统计 -->
-        <view class="pro-feature-row" @click="onStatsTap">
-          <view class="pro-feature-text">
-            <text class="pro-feature-title">{{ i18n.profile.statsEntry }}</text>
-            <text class="pro-feature-sub">{{ i18n.profile.statsEntrySub }}</text>
-          </view>
-          <text v-if="isPro" class="pro-status-on">{{ i18n.profile.statsEntryOpen }}</text>
-          <text v-else class="pro-feature-locked">{{ i18n.profile.proLockedShort }}</text>
-        </view>
-
-        <!-- 续费行（仅 PRO） -->
-        <template v-if="isPro">
-          <view class="pro-divider"></view>
-          <view class="pro-renew-row" @click="showPaywall = true">
-            <text class="pro-renew-title">{{ i18n.profile.renewValidUntil }} {{ renewDate }}</text>
-            <view class="pro-renew-action">
-              <text class="pro-renew-text">{{ i18n.profile.renewAction }}</text>
-              <text class="pro-renew-arrow">›</text>
-            </view>
-          </view>
-        </template>
-
-        <!-- 锁定态：升级按钮 -->
-        <view v-if="!isPro" class="pro-upgrade-cta" @click="showPaywall = true">
-          <text class="pro-upgrade-cta-text">{{ i18n.profile.upgradeProCta }}</text>
-        </view>
+        <text class="member-entry-chevron">›</text>
       </view>
-
       <!-- 月度回公司目标 -->
       <view class="settings-card">
         <view class="target-row">
@@ -205,30 +134,6 @@
         </view>
       </view>
 
-      <!-- 自定义假期（公司福利假，按日期区间配置） -->
-      <view class="settings-card">
-        <view class="card-header-row">
-          <text class="card-title">{{ i18n.profile.customLeaveTitle }}</text>
-          <text class="header-hint">{{ i18n.profile.customLeaveHint }}</text>
-        </view>
-
-        <view v-for="l in customLeaves" :key="l.id" class="custom-leave-row" @click="openCustomEdit(l)">
-          <view class="custom-dot" :style="{ background: l.color }"></view>
-          <text class="custom-leave-name">{{ l.name }}</text>
-          <text class="custom-leave-range">{{ fmtCustomRange(l) }}</text>
-          <text class="custom-leave-chevron">›</text>
-        </view>
-
-        <view v-if="customLeaves.length === 0" class="custom-empty">
-          <text class="custom-empty-text">{{ i18n.profile.customLeaveEmpty }}</text>
-        </view>
-
-        <view class="custom-add-btn" @click="openCustomAdd">
-          <text class="custom-add-text">{{ i18n.profile.customLeaveAdd }}</text>
-        </view>
-        <text class="card-foot-hint">{{ i18n.profile.customLeaveCounted }}</text>
-      </view>
-
       <!-- 调休补班 -->
       <view class="settings-card">
         <view class="card-header-row">
@@ -292,92 +197,7 @@
     </view>
 
     <!-- ===== 自定义假期 添加/编辑（居中弹出卡片） ===== -->
-    <view v-if="showCustomSheet" class="cl-modal-mask" @click="showCustomSheet = false">
-      <view class="cl-modal-card" @click.stop>
-        <view class="cl-modal-head">
-          <text class="cl-modal-title">{{ customEditingId ? i18n.profile.customSheetEdit : i18n.profile.customSheetAdd }}</text>
-          <view class="cl-pro-chip"><text class="cl-pro-chip-text">{{ i18n.profile.customProChip }}</text></view>
-        </view>
-
-        <view v-if="!customEditingId" class="cl-field">
-          <text class="cl-field-label">{{ i18n.profile.customPresetLabel }}</text>
-          <view class="custom-preset-row">
-            <view
-              v-for="p in customPresets"
-              :key="p.name"
-              class="custom-preset-chip"
-              :class="{ active: customForm.name === p.name }"
-              @click="applyCustomPreset(p)"
-            >
-              <text class="custom-preset-text">{{ p.name }}</text>
-            </view>
-          </view>
-        </view>
-
-        <view class="cl-field">
-          <text class="cl-field-label">{{ i18n.profile.customFieldName }}</text>
-          <input class="custom-input" :value="customForm.name" :placeholder="i18n.profile.customNamePh" maxlength="12" @input="onCustomName" />
-        </view>
-
-        <view class="cl-field">
-          <text class="cl-field-label">{{ i18n.profile.customDateRange }}</text>
-          <view class="cl-range-card">
-            <view class="cl-range-row">
-              <picker class="cl-range-side" mode="date" :value="customForm.start" @change="onCustomStart">
-                <view class="cl-date-block">
-                  <text class="cl-date-cap">{{ i18n.profile.customDateStart }}</text>
-                  <text class="cl-date-value">{{ fmtCustomMD(customForm.start) }}</text>
-                  <text class="cl-date-week">{{ fmtCustomYW(customForm.start) }}</text>
-                </view>
-              </picker>
-              <view class="cl-connector">
-                <view class="cl-conn-line"></view>
-                <view class="cl-duration-pill">
-                  <text class="cl-duration-text">{{ i18n.profile.customDaysText.replace('{n}', customDays) }}</text>
-                </view>
-                <view class="cl-conn-line"></view>
-              </view>
-              <picker class="cl-range-side" mode="date" :value="customForm.end" @change="onCustomEnd">
-                <view class="cl-date-block end">
-                  <text class="cl-date-cap">{{ i18n.profile.customDateEnd }}</text>
-                  <text class="cl-date-value">{{ fmtCustomMD(customForm.end) }}</text>
-                  <text class="cl-date-week">{{ fmtCustomYW(customForm.end) }}</text>
-                </view>
-              </picker>
-            </view>
-            <view class="cl-week-strip">
-              <view v-for="d in customWeekStrip" :key="d.date" class="cl-week-cell">
-                <view class="cl-week-dot" :class="{ weekend: d.weekend }" :style="d.weekend ? '' : { background: customForm.color }">
-                  <text class="cl-week-num" :class="{ weekend: d.weekend }">{{ d.day }}</text>
-                </view>
-              </view>
-            </view>
-            <text class="cl-range-note">{{ i18n.profile.customRangeNote }}</text>
-          </view>
-        </view>
-
-        <view class="cl-field">
-          <text class="cl-field-label">{{ i18n.profile.customColorLabel }}</text>
-          <view class="custom-color-row">
-            <view
-              v-for="c in customColors"
-              :key="c"
-              class="custom-color-dot"
-              :class="{ selected: customForm.color === c }"
-              :style="{ background: c }"
-              @click="selectCustomColor(c)"
-            ></view>
-          </view>
-        </view>
-
-        <view class="custom-save-btn" @click="saveCustom">
-          <text class="custom-save-text">{{ i18n.profile.customSave }}</text>
-        </view>
-        <view v-if="customEditingId" class="custom-delete-btn" @click="removeCustom">
-          <text class="custom-delete-text">{{ i18n.profile.customDelete }}</text>
-        </view>
-      </view>
-    </view>
+    <CustomLeaveSheet :visible="showCustomSheet" :leave="customEditLeave" @close="showCustomSheet = false" @saved="onCustomSaved" />
 
     <!-- ===== 微信授权登录（底部弹层） ===== -->
     <view v-if="showAuthSheet" class="sheet-mask" @click="closeAuthSheet">
@@ -435,82 +255,7 @@
     </view>
 
     <!-- ===== PRO 付费墙（底部弹层） ===== -->
-    <view v-if="showPaywall" class="sheet-mask" @click="showPaywall = false">
-      <view class="sheet-card" @click.stop>
-        <view class="paywall-head">
-          <view class="paywall-crown-medal">
-            <text class="paywall-crown">👑</text>
-          </view>
-          <text class="paywall-title">{{ i18n.profile.paywallTitle }}</text>
-          <text class="paywall-sub">{{ i18n.profile.paywallSub }}</text>
-        </view>
-
-        <view class="paywall-benefits">
-          <view class="benefit-row">
-            <view class="benefit-check"><text class="benefit-check-text">✓</text></view>
-            <view class="benefit-info">
-              <text class="benefit-title">{{ i18n.profile.benefitSync }}</text>
-              <text class="benefit-sub">{{ i18n.profile.benefitSyncSub }}</text>
-            </view>
-          </view>
-          <view class="benefit-row">
-            <view class="benefit-check"><text class="benefit-check-text">✓</text></view>
-            <view class="benefit-info">
-              <text class="benefit-title">{{ i18n.profile.benefitBackup }}</text>
-              <text class="benefit-sub">{{ i18n.profile.benefitBackupSub }}</text>
-            </view>
-          </view>
-          <view class="benefit-row">
-            <view class="benefit-check"><text class="benefit-check-text">✓</text></view>
-            <view class="benefit-info">
-              <text class="benefit-title">{{ i18n.profile.benefitStats }}</text>
-              <text class="benefit-sub">{{ i18n.profile.benefitStatsSub }}</text>
-            </view>
-          </view>
-          <view class="benefit-row">
-            <view class="benefit-check"><text class="benefit-check-text">✓</text></view>
-            <view class="benefit-info">
-              <text class="benefit-title">{{ i18n.profile.benefitLang }}</text>
-              <text class="benefit-sub">{{ i18n.profile.benefitLangSub }}</text>
-            </view>
-          </view>
-          <!-- 更多会员功能预告 -->
-          <view class="benefit-more-row">
-            <view class="benefit-info">
-              <text class="benefit-title">{{ i18n.profile.benefitMore }}</text>
-              <text class="benefit-sub">{{ i18n.profile.benefitMoreSub }}</text>
-            </view>
-            <text class="coming-soon">{{ i18n.profile.comingSoon }}</text>
-          </view>
-        </view>
-
-        <view class="plan-row">
-          <view class="plan-card" :class="{ selected: payPlan === 'month' }" @click="payPlan = 'month'">
-            <text class="plan-name">{{ i18n.profile.planMonth }}</text>
-            <view class="plan-price-row">
-              <text class="plan-price">¥6</text>
-              <text class="plan-unit">/月</text>
-            </view>
-            <text class="plan-sub">{{ i18n.profile.planMonthSub }}</text>
-          </view>
-          <view class="plan-card plan-card-year" :class="{ selected: payPlan === 'year' }" @click="payPlan = 'year'">
-            <view class="plan-save-badge"><text class="plan-save-text">{{ i18n.profile.planSave }}</text></view>
-            <text class="plan-name">{{ i18n.profile.planYear }}</text>
-            <view class="plan-price-row">
-              <text class="plan-price">¥48</text>
-              <text class="plan-unit">/年</text>
-            </view>
-            <text class="plan-sub">{{ i18n.profile.planYearSub }}</text>
-          </view>
-        </view>
-
-        <view class="paywall-cta" @click="onPayTap">
-          <text class="paywall-cta-text">{{ payPlan === 'year' ? i18n.profile.payCta : i18n.profile.payCtaMonth }}</text>
-        </view>
-        <text class="paywall-fine">{{ i18n.profile.payFine }}</text>
-        <text class="paywall-redeem" @click="onRedeemTap">{{ i18n.profile.redeemEntry }}</text>
-      </view>
-    </view>
+    <PaywallSheet :visible="showPaywall" @close="showPaywall = false" @upgraded="onProUpgraded" />
 
     <!-- ===== 数据冲突弹窗（居中） ===== -->
     <view v-if="conflictInfo" class="modal-mask" @click.stop>
@@ -548,8 +293,10 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
-import { login, getAuth, logout, updateCachedUser, uploadAvatar, getTrial, redeemCode } from '@/utils/auth.js'
+import { login, getAuth, logout, updateCachedUser, uploadAvatar, getTrial } from '@/utils/auth.js'
 import * as syncService from '@/utils/syncService.js'
+import CustomLeaveSheet from '@/components/CustomLeaveSheet.vue'
+import PaywallSheet from '@/components/PaywallSheet.vue'
 
 const holidayNameMap = {
   '元旦': 'New Year\'s',
@@ -563,6 +310,7 @@ const holidayNameMap = {
 
 export default {
   name: 'ProfileView',
+  components: { CustomLeaveSheet, PaywallSheet },
   data() {
     return {
       settings: {
@@ -584,17 +332,13 @@ export default {
       showBirthdaySheet: false,
       // ===== 自定义假期 =====
       customLeaves: [],
-      customPresets: [],
-      customColors: [],
       showCustomSheet: false,
-      customEditingId: null, // null=新增，否则为编辑
-      customForm: { name: '', color: '#0E6E62', start: '', end: '' },
+      customEditLeave: null, // 传入弹层：null=新增，否则为编辑对象
       // ===== 账号 / 同步 / 付费 =====
       session: null,           // { openid, user, subscription }
       showAuthSheet: false,
       showPaywall: false,
       trialStamp: 0,       // 兑换码核销后 +1，触发 isPro 重算
-      payPlan: 'year',
       conflictInfo: null,      // { localTime, cloudTime, cloudData, data_version }
       lastSyncAt: 0,
       authMode: 'login', // 'login' 首次登录 | 'edit' 完善资料
@@ -633,30 +377,6 @@ export default {
     },
     targetTicks() {
       return [0, 20, 40, 60, 80, 100];
-    },
-    // ===== 自定义假期弹层 =====
-    customDays() {
-      const { start, end } = this.customForm;
-      if (!start || !end || end < start) return 1;
-      return Math.round((new Date(end + 'T00:00:00') - new Date(start + 'T00:00:00')) / 86400000) + 1;
-    },
-    customWeekStrip() {
-      // 起始日起最多 7 天的迷你预览：工作日用假期色，周末弱化（不扣分母的口径可视化）
-      const start = this.customForm.start;
-      if (!start) return [];
-      const base = new Date(start + 'T00:00:00');
-      const n = Math.min(this.customDays, 7);
-      const days = [];
-      for (let i = 0; i < n; i++) {
-        const d = new Date(base.getTime() + i * 86400000);
-        const wd = d.getDay();
-        days.push({
-          date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
-          day: d.getDate(),
-          weekend: wd === 0 || wd === 6
-        });
-      }
-      return days;
     },
     // ===== 账号 / 同步 =====
     isLogin() {
@@ -732,15 +452,17 @@ export default {
     this.holidayList = wioService.getHolidayInfoList();
     this.session = getAuth();
     this.lastSyncAt = syncService.getLastSyncTime();
-    uni.$on('wio:sync-conflict', this.onSyncConflict);
-    uni.$on('wio:data-restored', this.onDataRestored);
+    this.bindSync();
   },
   destroyed() {
-    uni.$off('wio:sync-conflict', this.onSyncConflict);
-    uni.$off('wio:data-restored', this.onDataRestored);
+    this.unbindSync();
   },
   onShow() {
     this.loadSettings();
+    this.bindSync();
+  },
+  onHide() {
+    this.unbindSync();
   },
   methods: {
     onScroll(e) {
@@ -771,110 +493,25 @@ export default {
           this.settings.language = 'zh-CN';
       }
       this.customLeaves = wioService.getCustomLeaves();
-      if (!this.customColors || this.customColors.length === 0) {
-        this.customColors = wioService.CUSTOM_LEAVE_COLORS;
-      }
-      // 法定假期预设（名称随语言切换）
-      const presetNames = [this.i18n.profile.presetMarriage, this.i18n.profile.presetMaternity, this.i18n.profile.presetPaternity, this.i18n.profile.presetBereavement];
-      this.customPresets = wioService.CUSTOM_LEAVE_PRESETS.map((p, i) => ({ ...p, name: presetNames[i] || p.name }));
       const currentYear = new Date().getFullYear();
       this.yearStats = wioService.getYearStats(currentYear);
     },
     // ===== 自定义假期 =====
-    _todayStr() {
-      const n = new Date();
-      return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
-    },
     fmtCustomRange(l) {
       // 03/02 ~ 03/08 紧凑展示
       return `${l.start.slice(5).replace('-', '/')} ~ ${l.end.slice(5).replace('-', '/')}`;
     },
-    fmtCustomMD(s) {
-      // 3月2日（英：3/2）
-      if (!s) return '--';
-      const [, m, d] = s.split('-');
-      return this.settings.language === 'en-US' ? `${+m}/${+d}` : `${+m}月${+d}日`;
-    },
-    fmtCustomYW(s) {
-      // 2026 · 周一（英：2026 · Mon）
-      if (!s) return '';
-      const d = new Date(s + 'T00:00:00');
-      if (isNaN(d.getTime())) return '';
-      const weekEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const wd = this.settings.language === 'en-US' ? weekEn[d.getDay()] : '周' + '日一二三四五六'[d.getDay()];
-      return `${d.getFullYear()} · ${wd}`;
-    },
     openCustomAdd() {
-      const today = this._todayStr();
-      this.customEditingId = null;
-      this.customForm = { name: '', color: wioService.CUSTOM_LEAVE_COLORS[0], start: today, end: today };
+      this.customEditLeave = null;
       this.showCustomSheet = true;
     },
     openCustomEdit(l) {
-      this.customEditingId = l.id;
-      this.customForm = { name: l.name, color: l.color, start: l.start, end: l.end };
+      this.customEditLeave = l;
       this.showCustomSheet = true;
     },
-    onCustomName(e) {
-      this.customForm.name = e.detail.value;
-    },
-    onCustomStart(e) {
-      this.customForm.start = e.detail.value;
-      // 结束早于开始时自动拉齐
-      if (this.customForm.end && this.customForm.end < e.detail.value) {
-        this.customForm.end = e.detail.value;
-      }
-    },
-    onCustomEnd(e) {
-      let v = e.detail.value;
-      if (this.customForm.start && v < this.customForm.start) {
-        v = this.customForm.start;
-        uni.showToast({ title: this.i18n.profile.customRangeFixed, icon: 'none', duration: 1500 });
-      }
-      this.customForm.end = v;
-    },
-    selectCustomColor(c) {
-      this.customForm.color = c;
-      uni.vibrateShort();
-    },
-    applyCustomPreset(p) {
-      this.customForm.name = p.name;
-      this.customForm.color = p.color;
-      uni.vibrateShort();
-    },
-    saveCustom() {
-      if (!this.customForm.name.trim()) {
-        uni.showToast({ title: this.i18n.profile.customNameRequired, icon: 'none', duration: 1500 });
-        return;
-      }
-      const saved = wioService.saveCustomLeave({
-        id: this.customEditingId || undefined,
-        name: this.customForm.name,
-        color: this.customForm.color,
-        start: this.customForm.start,
-        end: this.customForm.end
-      });
-      if (!saved) {
-        uni.showToast({ title: this.i18n.profile.customNameRequired, icon: 'none', duration: 1500 });
-        return;
-      }
+    onCustomSaved() {
       this.showCustomSheet = false;
       this.customLeaves = wioService.getCustomLeaves();
-      uni.showToast({ title: this.i18n.profile.customSaved, icon: 'success' });
-    },
-    removeCustom() {
-      uni.showModal({
-        title: this.i18n.profile.customDelete,
-        content: this.i18n.profile.customDeleteConfirm.replace('{n}', this.customForm.name),
-        success: (res) => {
-          if (res.confirm) {
-            wioService.deleteCustomLeave(this.customEditingId);
-            this.showCustomSheet = false;
-            this.customLeaves = wioService.getCustomLeaves();
-            uni.showToast({ title: this.i18n.profile.customDeleted, icon: 'none', duration: 1500 });
-          }
-        }
-      });
     },
     getUsagePercentage(used, total) {
       if (!total || total === 0) return 0;
@@ -1100,32 +737,27 @@ export default {
       this.lastSyncAt = syncService.getLastSyncTime();
       this.session = getAuth();
     },
-    // ===== 付费墙 =====
-    onPayTap() {
-      // 虚拟支付开通前的占位：正式上线后接 pay 云函数 + wx.requestVirtualPayment
-      uni.showToast({ title: t('profile.payComingSoon', this.settings.language), icon: 'none' });
+    // ===== 会员入口 =====
+    goMember() {
+      uni.vibrateShort();
+      uni.switchTab({ url: '/pages/member/index' });
     },
-    onRedeemTap() {
-      const lang = this.settings.language;
-      uni.showModal({
-        title: t('profile.redeemTitle', lang),
-        editable: true,
-        placeholderText: t('profile.redeemPlaceholder', lang),
-        success: (res) => {
-          if (!res.confirm) return;
-          const ok = redeemCode(res.content);
-          if (!ok) {
-            uni.showToast({ title: t('profile.redeemFail', lang), icon: 'none' });
-            return;
-          }
-          this.trialStamp++;
-          const trial = getTrial();
-          const d = new Date(trial.expiresAt);
-          const until = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-          this.showPaywall = false;
-          uni.showToast({ title: `${t('profile.redeemOk', lang)} ${until}`, icon: 'none', duration: 2500 });
-        },
-      });
+    // 同步事件绑定：仅当前可见页处理，避免会员页与我的页同时弹冲突窗
+    bindSync() {
+      uni.$off('wio:sync-conflict', this.onSyncConflict);
+      uni.$off('wio:data-restored', this.onDataRestored);
+      uni.$on('wio:sync-conflict', this.onSyncConflict);
+      uni.$on('wio:data-restored', this.onDataRestored);
+    },
+    unbindSync() {
+      uni.$off('wio:sync-conflict', this.onSyncConflict);
+      uni.$off('wio:data-restored', this.onDataRestored);
+    },
+    // ===== 付费墙 =====
+    onProUpgraded() {
+      // 兑换码核销成功：trialStamp 触发 isPro 重算
+      this.trialStamp++;
+      this.showPaywall = false;
     },
     formatTime(ts) {
       if (!ts) return '—';
@@ -1158,6 +790,75 @@ export default {
   padding: 16px;
   margin-bottom: 14px;
   box-shadow: 0 2px 10px rgba(15, 35, 40, 0.05);
+}
+
+/* ===== 会员入口卡 ===== */
+.member-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.member-entry:active {
+  opacity: 0.88;
+}
+
+.member-entry-badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: rgba(192, 138, 45, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* 已开通：金色渐变徽章 */
+.member-entry-badge.on {
+  background: linear-gradient(135deg, #D9A94F, #B07A22);
+}
+
+.member-entry-badge-text {
+  font-size: 10px;
+  font-weight: 800;
+  color: #A9761F;
+  letter-spacing: 0.6px;
+}
+
+.member-entry-badge.on .member-entry-badge-text {
+  color: #FFF9EE;
+}
+
+.member-entry-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.member-entry-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #18191C;
+}
+
+.member-entry-sub {
+  font-size: 10.5px;
+  color: #8A94A0;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+.member-entry-sub.on {
+  color: #A9761F;
+}
+
+.member-entry-chevron {
+  font-size: 16px;
+  color: #C3C9CE;
+  flex-shrink: 0;
 }
 
 .card-title {
@@ -1382,289 +1083,6 @@ export default {
   color: #0E6E62;
 }
 
-/* ===== 自定义假期弹层 ===== */
-.custom-preset-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.custom-preset-chip {
-  padding: 0 14px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  border-radius: 100px;
-  background: #F3F5F6;
-  border: 1px solid #F3F5F6;
-}
-
-.custom-preset-chip.active {
-  background: #EAF3F1;
-  border-color: #0E6E62;
-}
-
-.custom-preset-text {
-  font-size: 11.5px;
-  color: #3C444B;
-  font-weight: 500;
-}
-
-.custom-preset-chip.active .custom-preset-text {
-  color: #0B5248;
-  font-weight: 600;
-}
-
-.custom-input {
-  height: 42px;
-  border: 1px solid #E7E9EB;
-  border-radius: 10px;
-  padding: 0 12px;
-  font-size: 14px;
-  color: #15181C;
-  box-sizing: border-box;
-}
-
-/* --- 居中弹出卡片 --- */
-.cl-modal-mask {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(11, 14, 18, 0.55);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 28px;
-  box-sizing: border-box;
-}
-
-.cl-modal-card {
-  width: 100%;
-  box-sizing: border-box;
-  background: #FFFFFF;
-  border-radius: 20px;
-  padding: 20px 20px 16px;
-  display: flex;
-  flex-direction: column;
-  animation: modal-pop 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
-  max-height: 80vh;
-}
-
-.cl-modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.cl-modal-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: #15181C;
-}
-
-.cl-pro-chip {
-  height: 20px;
-  padding: 0 9px;
-  border-radius: 100px;
-  background: linear-gradient(135deg, #D9A947, #A97A1F);
-  display: flex;
-  align-items: center;
-}
-
-.cl-pro-chip-text {
-  font-size: 9px;
-  font-weight: 700;
-  color: #FFFFFF;
-  letter-spacing: 1px;
-}
-
-.cl-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.cl-field-label {
-  font-size: 11px;
-  color: #9AA1A8;
-}
-
-/* --- 鎏金日期范围卡 --- */
-.cl-range-card {
-  background: linear-gradient(180deg, #FFFAED, #FFF3DD);
-  border: 1px solid #F0DBA7;
-  border-radius: 14px;
-  padding: 13px 14px 11px;
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-}
-
-.cl-range-row {
-  display: flex;
-  align-items: center;
-}
-
-.cl-range-side {
-  flex: 1;
-  min-width: 0;
-}
-
-.cl-date-block {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  align-items: flex-start;
-}
-
-.cl-date-block.end {
-  align-items: flex-end;
-}
-
-.cl-date-cap {
-  font-size: 9.5px;
-  color: #B09E78;
-  letter-spacing: 0.5px;
-}
-
-.cl-date-value {
-  font-size: 16px;
-  font-weight: 600;
-  color: #15181C;
-}
-
-.cl-date-week {
-  font-size: 9px;
-  color: #9AA1A8;
-}
-
-.cl-connector {
-  width: 72px;
-  height: 40px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.cl-conn-line {
-  flex: 1;
-  width: 100%;
-  min-height: 1px;
-  background: #E7D3A6;
-}
-
-.cl-duration-pill {
-  height: 21px;
-  padding: 0 10px;
-  border-radius: 100px;
-  background: linear-gradient(135deg, #D9A947, #A97A1F);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.cl-duration-text {
-  font-size: 10px;
-  font-weight: 700;
-  color: #FFFFFF;
-}
-
-.cl-week-strip {
-  display: flex;
-  gap: 5px;
-}
-
-.cl-week-cell {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-}
-
-.cl-week-dot {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.cl-week-dot.weekend {
-  background: #FFFFFF;
-  border: 1px solid #E0D5B7;
-}
-
-.cl-week-num {
-  font-size: 10px;
-  font-weight: 500;
-  color: #FFFFFF;
-}
-
-.cl-week-num.weekend {
-  font-weight: 400;
-  color: #BCAE8C;
-}
-
-.cl-range-note {
-  font-size: 9.5px;
-  color: #B07A22;
-  text-align: center;
-}
-
-.custom-color-row {
-  display: flex;
-  gap: 12px;
-  padding: 4px 0 2px;
-}
-
-.custom-color-dot {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-}
-
-.custom-color-dot.selected {
-  box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 3.5px #0B5248;
-}
-
-.custom-save-btn {
-  margin-top: 14px;
-  height: 46px;
-  border-radius: 23px;
-  background: #0B5248;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.custom-save-btn:active {
-  opacity: 0.9;
-}
-
-.custom-save-text {
-  font-size: 15px;
-  font-weight: 600;
-  color: #FFFFFF;
-}
-
-.custom-delete-btn {
-  margin-top: 10px;
-  display: flex;
-  justify-content: center;
-  padding: 6px 0 2px;
-}
-
-.custom-delete-text {
-  font-size: 13px;
-  color: #C25B6E;
-}
 
 /* ===== 开关 ===== */
 .toggle-switch {
@@ -2661,232 +2079,6 @@ export default {
   color: #9AA1A8;
 }
 
-/* --- 付费墙 --- */
-.paywall-head {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.paywall-crown-medal {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #FFF4DC, #FFE7B8);
-  border: 1px solid #F1DDA9;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 2px;
-}
-
-.paywall-crown {
-  font-size: 24px;
-  line-height: 1;
-  margin-top: -2px;
-}
-
-.paywall-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: #15181C;
-  letter-spacing: 0.5px;
-}
-
-.paywall-sub {
-  font-size: 12.5px;
-  color: #8A94A0;
-}
-
-.paywall-benefits {
-  margin-top: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 13px;
-  padding: 16px;
-  background: #F8F9FA;
-  border-radius: 14px;
-}
-
-.benefit-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-/* 金色对勾锚点：强化「已包含权益」的确认感 */
-.benefit-check {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #D9A94F, #B07A22);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-.benefit-check-text {
-  font-size: 11px;
-  font-weight: 700;
-  color: #FFFFFF;
-  line-height: 1;
-}
-
-/* 「更多会员功能」预告行：与权益行区分的弱化态 */
-.benefit-more-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 2px;
-  padding: 10px 12px;
-  background: #FFF9EE;
-  border-radius: 10px;
-}
-.coming-soon {
-  font-size: 10.5px;
-  color: #C08A2D;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.benefit-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-}
-
-.benefit-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #15181C;
-  line-height: 1.3;
-}
-
-.benefit-sub {
-  font-size: 11.5px;
-  color: #9AA1A8;
-  line-height: 1.45;
-}
-
-.plan-row {
-  margin-top: 16px;
-  display: flex;
-  gap: 10px;
-}
-
-.plan-card {
-  flex: 1;
-  position: relative;
-  padding: 15px 12px 13px;
-  border-radius: 14px;
-  border: 1.5px solid #EDEFF1;
-  background: #FFFFFF;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-}
-
-.plan-card.selected {
-  border-color: #C08A2D;
-  background: #FDF9F1;
-}
-
-.plan-card-year {
-  overflow: hidden;
-}
-
-.plan-save-badge {
-  position: absolute;
-  top: 0;
-  right: 0;
-  padding: 2px 8px;
-  background: #C08A2D;
-  border-radius: 0 12px 0 10px;
-}
-
-.plan-save-text {
-  font-size: 9px;
-  font-weight: 600;
-  color: #FFFFFF;
-}
-
-.plan-name {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: #6B7379;
-}
-
-.plan-price-row {
-  display: flex;
-  align-items: baseline;
-  gap: 2px;
-}
-
-.plan-price {
-  font-size: 26px;
-  font-weight: 700;
-  color: #15181C;
-  line-height: 1.1;
-}
-
-.plan-unit {
-  font-size: 11px;
-  color: #9AA1A8;
-}
-
-.plan-sub {
-  font-size: 10.5px;
-  color: #9AA1A8;
-  line-height: 1.3;
-}
-
-.plan-card.selected .plan-sub {
-  color: #B07A22;
-}
-
-.paywall-cta {
-  margin-top: 20px;
-  height: 48px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #C08A2D, #A9761F);
-  box-shadow: 0 6px 16px rgba(192, 138, 45, 0.32);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.paywall-cta:active {
-  opacity: 0.9;
-}
-
-.paywall-cta-text {
-  font-size: 15px;
-  font-weight: 700;
-  color: #FFFFFF;
-  letter-spacing: 0.5px;
-}
-
-.paywall-fine {
-  margin-top: 10px;
-  font-size: 10px;
-  color: #B5BBC1;
-  text-align: center;
-  line-height: 1.5;
-}
-.paywall-redeem {
-  margin-top: 14px;
-  font-size: 11px;
-  color: #8A94A0;
-  text-align: center;
-  text-decoration: underline;
-  padding: 4px 0 2px;
-}
 
 /* ===== 冲突弹窗 ===== */
 .conflict-card {

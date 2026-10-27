@@ -9,6 +9,10 @@
         <image class="tab-icon-img" :src="current === 'calendar' ? icons.calendarActive : icons.calendar" />
         <text class="tab-text">{{ i18n.tabBar.calendar }}</text>
       </view>
+      <view class="tab-item" :class="{ active: current === 'member' }" @click="switchTab('/pages/member/index')">
+        <image class="tab-icon-img" :src="current === 'member' ? icons.memberActive : icons.member" />
+        <text class="tab-text">{{ i18n.tabBar.member }}</text>
+      </view>
       <view class="tab-item" :class="{ active: current === 'profile' }" @click="switchTab('/pages/profile/index')">
         <image class="tab-icon-img" :src="current === 'profile' ? icons.userActive : icons.user" />
         <text class="tab-text">{{ i18n.tabBar.profile }}</text>
@@ -39,6 +43,8 @@ export default {
     const pathCalendarFillReal = '<path d="M20 3h-1V1h-2v2H7V1H5v2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 18H4V8h16v13z"/>';
     const pathUser = '<path d="M12 6c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2m0 10c2.7 0 5.8 1.29 6 2H6c.23-.72 3.31-2 6-2m0-12C9.79 4 8 5.79 8 8s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 10c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>';
     const pathUserFill = '<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>';
+    const pathMember = '<path d="M9.68 13.69 12 11.93l2.31 1.76-.88-2.85L15.75 9h-2.84L12 6.19 11.09 9H8.25l2.31 1.84-.88 2.85zM20 10c0-4.42-3.58-8-8-8s-8 3.58-8 8c0 2.03.76 3.87 2 5.28V23l6-2 6 2v-7.72c1.24-1.41 2-3.25 2-5.28zm-8-6c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6 2.69-6 6-6z"/>';
+    const pathMemberFill = '<path d="M9.68 13.69 12 11.93l2.31 1.76-.88-2.85L15.75 9h-2.84L12 6.19 11.09 9H8.25l2.31 1.84-.88 2.85zM20 10c0-4.42-3.58-8-8-8s-8 3.58-8 8c0 2.03.76 3.87 2 5.28V23l6-2 6 2v-7.72c1.24-1.41 2-3.25 2-5.28z"/>';
 
     const svgPrefix = 'data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="';
 
@@ -49,6 +55,8 @@ export default {
         homeActive: `${svgPrefix}${colorActive}">${pathHomeFill}</svg>`,
         calendar: `${svgPrefix}${colorDefault}">${pathCalendar}</svg>`,
         calendarActive: `${svgPrefix}${colorActive}">${pathCalendarFillReal}</svg>`,
+        member: `${svgPrefix}${colorDefault}">${pathMember}</svg>`,
+        memberActive: `${svgPrefix}${colorActive}">${pathMemberFill}</svg>`,
         user: `${svgPrefix}${colorDefault}">${pathUser}</svg>`,
         userActive: `${svgPrefix}${colorActive}">${pathUserFill}</svg>`,
       }

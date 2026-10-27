@@ -16,6 +16,7 @@ export const locales = {
     tabBar: {
       home: '首页',
       calendar: '日历',
+      member: '会员',
       profile: '我的'
     },
     home: {
@@ -238,6 +239,17 @@ export const locales = {
       customSaved: '已保存',
       customDeleted: '已删除',
       customSave: '保存',
+      // ===== 会员页 =====
+      memberPageTitle: '会员',
+      memberSyncOk: '数据已是最新',
+      memberSyncGuest: '登录后可开启云端同步',
+      memberSignIn: '去登录',
+      memberNoAutoRenew: '到期不自动扣费',
+      memberStatsLink: '查看年度统计报告',
+      memberLangNote: '切换后文案立即生效',
+      memberEntryTitle: 'WIO PRO 会员',
+      memberEntrySubOn: '云端同步 · 高级统计 · 自定义假期',
+      memberEntrySubOff: '解锁云端同步、高级统计与自定义假期',
       payCta: '开通年卡 ¥48/年',
       payCtaMonth: '开通月卡 ¥6/月',
       payFine: '一次付费 · 到期不自动扣费 · 《会员服务协议》',
@@ -277,6 +289,7 @@ export const locales = {
     tabBar: {
       home: 'Home',
       calendar: 'Calendar',
+      member: 'Member',
       profile: 'Profile'
     },
     home: {
@@ -498,6 +511,17 @@ export const locales = {
       customSaved: 'Saved',
       customDeleted: 'Deleted',
       customSave: 'Save',
+      // ===== Member page =====
+      memberPageTitle: 'Member',
+      memberSyncOk: 'All up to date',
+      memberSyncGuest: 'Sign in to enable cloud sync',
+      memberSignIn: 'Sign in',
+      memberNoAutoRenew: 'No auto-renewal',
+      memberStatsLink: 'View annual report',
+      memberLangNote: 'Takes effect right away',
+      memberEntryTitle: 'WIO PRO',
+      memberEntrySubOn: 'Cloud sync · Advanced stats · Custom leave',
+      memberEntrySubOff: 'Unlock cloud sync, advanced stats and more',
       payCta: 'Get Yearly · ¥48/yr',
       payCtaMonth: 'Monthly ¥6/mo',
       payFine: 'One-time payment · No auto-renewal · Terms of Service',
