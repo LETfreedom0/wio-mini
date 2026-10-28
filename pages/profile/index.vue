@@ -1,9 +1,9 @@
 <template>
   <view class="container">
-    <view class="status-bar-placeholder" :style="{ height: topSafeHeight + 'px' }"></view>
-
+    <!-- 不再用固定的状态栏占位条：滚动区直接贯通到屏幕顶端，
+         安全区高度交给内容自己留（会随内容滚走），上滑时卡片滑出屏幕而不是被一条灰带截断 -->
     <view class="content-area">
-      <ProfileView ref="profileView" />
+      <ProfileView ref="profileView" :top-safe="topSafeHeight" />
     </view>
 
     <CustomTabBar current="profile" />
@@ -24,7 +24,8 @@ export default {
   data() {
     return {
       language: 'zh-CN',
-      topSafeHeight: 0
+      // 初始值同步取一次，避免首帧内容从屏幕顶端弹下来
+      topSafeHeight: getTopSafeArea().totalHeight
     }
   },
   onLoad() {
@@ -65,18 +66,15 @@ export default {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  box-sizing: border-box;
   background-color: #F4F5F6;
   padding-bottom: calc(86px + constant(safe-area-inset-bottom));
   padding-bottom: calc(86px + env(safe-area-inset-bottom));
-}
-
-.status-bar-placeholder {
-  width: 100%;
-  flex-shrink: 0;
+  /* 防止页面本身产生原生滚动，把滚动完全交给内部 scroll-view */
+  overflow: hidden;
 }
 
 .content-area {
-  padding-top: 10px;
   flex: 1;
   height: 0;
   /* ProfileView contains a scroll-view with height: 100% */

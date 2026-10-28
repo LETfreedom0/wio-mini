@@ -1,7 +1,7 @@
 <template>
   <view class="member-root">
     <scroll-view scroll-y="true" class="member-scroll" @scroll="onScroll" @touchmove="onTouchMove" @touchend="onTouchEnd">
-      <view class="member-head">
+      <view class="member-head" :style="{ paddingTop: topSafe + 4 + 'px' }">
         <view class="member-back" @click="goBack">
           <text class="member-back-icon">‹</text>
         </view>
@@ -165,6 +165,10 @@ import PaywallSheet from '@/components/PaywallSheet.vue'
 export default {
   name: 'MemberView',
   components: { CustomLeaveSheet, PaywallSheet },
+  props: {
+    // 顶部安全区（状态栏 + 胶囊行）像素高度，由页面容器测得
+    topSafe: { type: Number, default: 64 }
+  },
   data() {
     return {
       settings: { language: 'zh-CN', autoSync: true },
@@ -403,6 +407,7 @@ export default {
 .member-root {
   position: relative;
   height: 100%;
+  overflow: hidden;
 }
 
 .member-scroll {

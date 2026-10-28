@@ -1,7 +1,7 @@
 <template>
   <view class="profile-root">
     <scroll-view scroll-y="true" class="profile-scroll" @scroll="onScroll" @touchmove="onTouchMove" @touchend="onTouchEnd">
-    <view class="content">
+    <view class="content" :style="{ paddingTop: topSafe + 22 + 'px' }">
 
       <!-- 账号 -->
       <view class="settings-card account-card" @click="onAccountCardTap">
@@ -313,6 +313,10 @@ const holidayNameMap = {
 export default {
   name: 'ProfileView',
   components: { CustomLeaveSheet, PaywallSheet },
+  props: {
+    // 顶部安全区（状态栏 + 胶囊行）像素高度，由页面容器测得
+    topSafe: { type: Number, default: 64 }
+  },
   data() {
     return {
       settings: {
@@ -779,6 +783,7 @@ export default {
 .profile-root {
   position: relative;
   height: 100%;
+  overflow: hidden;
 }
 
 .profile-scroll {
@@ -786,7 +791,7 @@ export default {
 }
 
 .content {
-  padding: 12px 20px 0 20px;
+  padding: 0 20px 0 20px;
 }
 
 /* ===== 通用卡片 ===== */
