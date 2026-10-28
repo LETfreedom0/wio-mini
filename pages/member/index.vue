@@ -5,21 +5,17 @@
     <view class="content-area">
       <MemberView />
     </view>
-
-    <CustomTabBar current="member" />
   </view>
 </template>
 
 <script>
 import MemberView from '@/components/MemberView.vue'
-import CustomTabBar from '@/components/CustomTabBar.vue'
 import wioService from '@/utils/wioService.js'
 import { getTopSafeArea } from '@/utils/safeArea.js'
 
 export default {
   components: {
-    MemberView,
-    CustomTabBar
+    MemberView
   },
   data() {
     return {
@@ -54,8 +50,9 @@ export default {
   flex-direction: column;
   height: 100vh;
   background-color: #F4F5F6;
-  padding-bottom: calc(86px + constant(safe-area-inset-bottom));
-  padding-bottom: calc(86px + env(safe-area-inset-bottom));
+  /* 二级页面：不再有 TabBar，只留安全区呼吸位 */
+  padding-bottom: calc(12px + constant(safe-area-inset-bottom));
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
 }
 
 .status-bar-placeholder {

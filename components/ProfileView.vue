@@ -741,7 +741,8 @@ export default {
     // ===== 会员入口 =====
     goMember() {
       uni.vibrateShort();
-      uni.switchTab({ url: '/pages/member/index' });
+      // 会员页已不是 tab 页，改为普通页面栈跳转
+      uni.navigateTo({ url: '/pages/member/index' });
     },
     // 同步事件绑定：仅当前可见页处理，避免会员页与我的页同时弹冲突窗
     bindSync() {

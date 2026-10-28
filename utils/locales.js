@@ -16,7 +16,6 @@ export const locales = {
     tabBar: {
       home: '首页',
       calendar: '日历',
-      member: '会员',
       profile: '我的'
     },
     home: {
@@ -289,7 +288,6 @@ export const locales = {
     tabBar: {
       home: 'Home',
       calendar: 'Calendar',
-      member: 'Member',
       profile: 'Profile'
     },
     home: {

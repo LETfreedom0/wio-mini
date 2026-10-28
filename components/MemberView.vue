@@ -2,6 +2,9 @@
   <view class="member-root">
     <scroll-view scroll-y="true" class="member-scroll" @scroll="onScroll" @touchmove="onTouchMove" @touchend="onTouchEnd">
       <view class="member-head">
+        <view class="member-back" @click="goBack">
+          <text class="member-back-icon">‹</text>
+        </view>
         <text class="member-title">{{ i18n.profile.memberPageTitle }}</text>
       </view>
 
@@ -289,6 +292,16 @@ export default {
       this.trialStamp++
       this.showPaywall = false
     },
+    // ===== 返回 =====
+    goBack() {
+      const pages = getCurrentPages()
+      if (pages.length > 1) {
+        uni.navigateBack({ delta: 1 })
+      } else {
+        // 分享卡片/扫码直达时页面栈只有一层，退回「我的」页
+        uni.switchTab({ url: '/pages/profile/index' })
+      }
+    },
     // ===== 同步 =====
     onSyncCardTap() {
       if (!this.isPro) {
@@ -404,6 +417,25 @@ export default {
 
 .member-head {
   padding: 8px 20px 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.member-back {
+  width: 26px;
+  height: 26px;
+  margin-left: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.member-back-icon {
+  font-size: 24px;
+  line-height: 1;
+  color: #15181C;
 }
 
 .member-title {
@@ -414,7 +446,7 @@ export default {
 }
 
 .content {
-  padding: 0 20px 0 20px;
+  padding: 0 20px 24px 20px;
 }
 
 /* ===== 通用卡片（与「我的」页一致） ===== */

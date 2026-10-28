@@ -56,12 +56,6 @@
         "text": "日历"
       },
       {
-        "pagePath": "pages/member/index",
-        "iconPath": "static/tab-icon.png",
-        "selectedIconPath": "static/tab-icon.png",
-        "text": "会员"
-      },
-      {
         "pagePath": "pages/profile/index",
         "iconPath": "static/tab-icon.png",
         "selectedIconPath": "static/tab-icon.png",
