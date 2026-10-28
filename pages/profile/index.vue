@@ -68,9 +68,8 @@ export default {
   height: 100vh;
   box-sizing: border-box;
   background-color: #F4F5F6;
-  padding-bottom: calc(86px + constant(safe-area-inset-bottom));
-  padding-bottom: calc(86px + env(safe-area-inset-bottom));
-  /* 防止页面本身产生原生滚动，把滚动完全交给内部 scroll-view */
+  /* 不再为 TabBar 预留固定高度：滚动区贯通到屏幕底部，内容从毛玻璃 TabBar 后方穿过，
+     底部让位改由内容自身的内边距承担（会随内容滚走） */
   overflow: hidden;
 }
 

@@ -107,18 +107,42 @@ export default {
   pointer-events: none; /* 外层不拦截点击 */
 }
 
+/* 毛玻璃背板：内容从 TabBar 后方穿过时先渐隐、再被磨砂虚化，
+   避免出现一条实心色带把卡片硬切掉（顶部向上延伸出模糊区，边界落在透明处不产生硬边） */
+.tab-bar-area::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: -20px;
+  background: linear-gradient(180deg,
+    rgba(244, 245, 246, 0) 0%,
+    rgba(244, 245, 246, 0.55) 40%,
+    rgba(244, 245, 246, 0.94) 100%);
+  -webkit-backdrop-filter: blur(10px) saturate(150%);
+  backdrop-filter: blur(10px) saturate(150%);
+  pointer-events: none;
+}
+
+/* 胶囊本体：半透明 + 背景模糊。Android 部分机型不支持 backdrop-filter，
+   0.72 的白底仍能保证图标与文字的对比度 */
 .tab-bar {
   pointer-events: auto;
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: stretch;
   gap: 4px;
   height: 62px;
   padding: 4px;
   box-sizing: border-box;
-  background: #FFFFFF;
-  border: 1px solid #E9EBEC;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 36px;
-  box-shadow: 0 8px 24px rgba(15, 35, 40, 0.08);
+  box-shadow: 0 8px 24px rgba(15, 35, 40, 0.1);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
 }
 
 .tab-item {

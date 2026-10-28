@@ -1,0 +1,1 @@
+<view class="container data-v-1e7fa7bc"><view class="content-area data-v-1e7fa7bc"><profile-view wx:if="{{b}}" class="r data-v-1e7fa7bc" u-r="profileView" u-i="1e7fa7bc-0" bind:__l="__l" u-p="{{b}}"/></view><custom-tab-bar wx:if="{{c}}" class="data-v-1e7fa7bc" u-i="1e7fa7bc-1" bind:__l="__l" u-p="{{c}}"/></view>

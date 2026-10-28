@@ -1,0 +1,17 @@
+
+.container.data-v-1cf27b2a {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: #F4F5F6;
+  padding-bottom: calc(86px + constant(safe-area-inset-bottom));
+  padding-bottom: calc(86px + env(safe-area-inset-bottom)); /* Make space for floating TabBar */
+}
+.status-bar-placeholder.data-v-1cf27b2a {
+  width: 100%;
+  flex-shrink: 0;
+}
+.content-area.data-v-1cf27b2a {
+  flex: 1;
+  height: 0;
+}

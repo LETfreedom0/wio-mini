@@ -791,7 +791,11 @@ export default {
 }
 
 .content {
+  /* 左右 20；底部为毛玻璃 TabBar 让位（用内边距而不是页面 padding，
+     这样内容能滚到 TabBar 后方被磨砂虚化，滚到底时最后一项仍完整露出） */
   padding: 0 20px 0 20px;
+  padding-bottom: calc(96px + constant(safe-area-inset-bottom));
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
 }
 
 /* ===== 通用卡片 ===== */

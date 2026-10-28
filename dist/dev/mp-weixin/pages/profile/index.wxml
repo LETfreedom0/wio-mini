@@ -1,0 +1,1 @@
+<view class="container data-v-201c0da5"><view class="status-bar-placeholder data-v-201c0da5" style="{{'height:' + a}}"></view><view class="content-area data-v-201c0da5"><profile-view class="data-v-201c0da5" u-i="201c0da5-0" bind:__l="__l"/></view><custom-tab-bar wx:if="{{b}}" class="data-v-201c0da5" u-i="201c0da5-1" bind:__l="__l" u-p="{{b}}"/></view>
