@@ -30,7 +30,7 @@ export default {
     }
   },
   data() {
-    const colorDefault = '%239AA1A8';
+    const colorDefault = '%238A94A0';
     const colorActive = '%23FFFFFF';
 
     const pathHome = '<path d="M12 5.69l5 4.5V18h-2v-6H9v6H7v-7.81l5-4.5M12 3L2 12h3v8h6v-6h2v6h6v-8h3L12 3z"/>';
@@ -107,42 +107,31 @@ export default {
   pointer-events: none; /* 外层不拦截点击 */
 }
 
-/* 毛玻璃背板：内容从 TabBar 后方穿过时先渐隐、再被磨砂虚化，
-   避免出现一条实心色带把卡片硬切掉（顶部向上延伸出模糊区，边界落在透明处不产生硬边） */
-.tab-bar-area::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  top: -20px;
-  background: linear-gradient(180deg,
-    rgba(244, 245, 246, 0) 0%,
-    rgba(244, 245, 246, 0.55) 40%,
-    rgba(244, 245, 246, 0.94) 100%);
-  -webkit-backdrop-filter: blur(10px) saturate(150%);
-  backdrop-filter: blur(10px) saturate(150%);
-  pointer-events: none;
-}
-
-/* 胶囊本体：半透明 + 背景模糊。Android 部分机型不支持 backdrop-filter，
-   0.72 的白底仍能保证图标与文字的对比度 */
+/* 毛玻璃只做在胶囊本体上，不在底部铺任何背板/雾层：
+   铺背板会把整片区域压灰，和胶囊自身的模糊再叠一层，必然发脏 */
 .tab-bar {
   pointer-events: auto;
-  position: relative;
-  z-index: 1;
   display: flex;
   align-items: stretch;
   gap: 4px;
   height: 62px;
   padding: 4px;
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  /* 玻璃 = 半透明白底 + 顶部一层微光渐变（纯色没有厚度感） */
+  background-color: rgba(255, 255, 255, 0.72);
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0) 58%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
   border-radius: 36px;
-  box-shadow: 0 8px 24px rgba(15, 35, 40, 0.1);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
+  box-shadow:
+    0 12px 32px rgba(15, 35, 40, 0.10),
+    0 2px 8px rgba(15, 35, 40, 0.04),
+    0 0 0 0.5px rgba(15, 35, 40, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.45);
+  -webkit-backdrop-filter: blur(30px) saturate(190%);
+  backdrop-filter: blur(30px) saturate(190%);
 }
 
 .tab-item {
@@ -158,6 +147,8 @@ export default {
 
 .tab-item.active {
   background: #0C6D60;
+  /* 选中格嵌在玻璃里，也给一道内高光，避免看起来像贴上去的色块 */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 .tab-icon-img {
@@ -168,7 +159,8 @@ export default {
 .tab-text {
   font-size: 10px;
   font-weight: 500;
-  color: #9AA1A8;
+  /* 玻璃底会吃掉一点对比度，未选中文字比原来的 #9AA1A8 加深一档 */
+  color: #8A94A0;
   line-height: 1.2;
   transition: color 0.2s;
 }
