@@ -5,7 +5,6 @@
         <view class="member-back" @click="goBack">
           <text class="member-back-icon">‹</text>
         </view>
-        <text class="member-title">{{ i18n.profile.memberPageTitle }}</text>
       </view>
 
       <view class="content">
@@ -416,16 +415,16 @@ export default {
 }
 
 .member-head {
-  padding: 8px 20px 12px 20px;
+  padding: 4px 20px 8px 20px;
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .member-back {
-  width: 26px;
-  height: 26px;
-  margin-left: -6px;
+  width: 30px;
+  height: 30px;
+  margin-left: -8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -433,16 +432,9 @@ export default {
 }
 
 .member-back-icon {
-  font-size: 24px;
+  font-size: 25px;
   line-height: 1;
   color: #15181C;
-}
-
-.member-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: #15181C;
-  letter-spacing: 0.3px;
 }
 
 .content {
@@ -498,9 +490,14 @@ export default {
 }
 
 .badge-on {
+  /* 与「云端同步」开关同尺寸：40 × 24，圆角 12 */
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
   background: #C08A2D;
-  border-radius: 999px;
-  padding: 5px 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   margin-left: 8px;
 }
@@ -509,12 +506,20 @@ export default {
   font-size: 10px;
   font-weight: 600;
   color: #FFF9EE;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .badge-off {
-  border-radius: 999px;
-  padding: 4px 10px;
+  /* 未开通态同尺寸，保证两态切换时右上角视觉重量一致 */
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
   background: rgba(192, 138, 45, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   margin-left: 8px;
 }
@@ -523,6 +528,7 @@ export default {
   font-size: 10px;
   font-weight: 700;
   color: #A9761F;
+  line-height: 1;
   letter-spacing: 0.6px;
 }
 
