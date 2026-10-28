@@ -81,6 +81,13 @@ export default {
       }
       uni.setStorageSync(KEY_SETTINGS, JSON.stringify(settings));
       markDirty();
+      // 语言是全局偏好：从任一入口（我的 / 会员页）切换后广播，
+      // 让已挂载的视图立即刷新文案——组件的 onShow 不保证被触发，不能各自等重读
+      const prevLanguage = (existing && existing.language) || 'zh-CN';
+      const nextLanguage = settings.language || 'zh-CN';
+      if (nextLanguage !== prevLanguage) {
+        uni.$emit('wio:language-changed', nextLanguage);
+      }
     } catch (e) {
       console.error('Error saving settings', e);
     }

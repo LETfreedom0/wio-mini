@@ -454,17 +454,15 @@ export default {
     this.session = getAuth();
     this.lastSyncAt = syncService.getLastSyncTime();
     this.bindSync();
+    // 组件内的 onShow 不会被触发，语言切换靠全局广播兜住
+    uni.$on('wio:language-changed', this.onLanguageChanged);
   },
-  destroyed() {
+  beforeUnmount() {
     this.unbindSync();
+    uni.$off('wio:language-changed', this.onLanguageChanged);
   },
-  onShow() {
-    this.loadSettings();
-    this.bindSync();
-  },
-  onHide() {
-    this.unbindSync();
-  },
+  // 显示/隐藏由页面容器（pages/profile/index.vue）驱动：
+  // 子组件内的 onShow/onHide 在 Vue3 下不会被触发
   methods: {
     onScroll(e) {
       // 滚动位置映射为垂直视线：顶部=向上看，下滑=向下看
@@ -737,6 +735,13 @@ export default {
       this.loadSettings();
       this.lastSyncAt = syncService.getLastSyncTime();
       this.session = getAuth();
+    },
+    // ===== 语言同步 =====
+    // 会员页等处切换语言后由 wioService 广播，这里只更新语言字段，
+    // 不整页 reload，避免冲掉用户正在拖动的滑杆等未保存状态
+    onLanguageChanged(lang) {
+      if (!lang || lang === this.settings.language) return;
+      this.settings = { ...this.settings, language: lang };
     },
     // ===== 会员入口 =====
     goMember() {

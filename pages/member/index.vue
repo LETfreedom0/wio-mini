@@ -3,7 +3,7 @@
     <view class="status-bar-placeholder" :style="{ height: topSafeHeight + 'px' }"></view>
 
     <view class="content-area">
-      <MemberView />
+      <MemberView ref="memberView" />
     </view>
   </view>
 </template>
@@ -29,6 +29,16 @@ export default {
   },
   onShow() {
     this.language = wioService.getSettings().language || 'zh-CN';
+    // 子组件内部的 onShow 不生效，页面显示时由容器驱动刷新与事件绑定
+    const mv = this.$refs.memberView;
+    if (mv) {
+      if (typeof mv.load === 'function') mv.load();
+      if (typeof mv.bindSync === 'function') mv.bindSync();
+    }
+  },
+  onHide() {
+    const mv = this.$refs.memberView;
+    if (mv && typeof mv.unbindSync === 'function') mv.unbindSync();
   },
   onShareAppMessage(res) {
     return {

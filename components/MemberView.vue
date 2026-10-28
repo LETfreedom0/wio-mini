@@ -235,16 +235,11 @@ export default {
     this.load()
     this.bindSync()
   },
-  destroyed() {
+  beforeUnmount() {
     this.unbindSync()
   },
-  onShow() {
-    this.load()
-    this.bindSync()
-  },
-  onHide() {
-    this.unbindSync()
-  },
+  // 显示/隐藏由页面容器（pages/member/index.vue）驱动：
+  // 子组件内的 onShow/onHide 在 Vue3 下不会被触发
   methods: {
     // 同步事件绑定：仅当前可见页处理，避免与「我的」页同时弹冲突窗
     bindSync() {

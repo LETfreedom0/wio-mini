@@ -3,7 +3,7 @@
     <view class="status-bar-placeholder" :style="{ height: topSafeHeight + 'px' }"></view>
 
     <view class="content-area">
-      <ProfileView />
+      <ProfileView ref="profileView" />
     </view>
 
     <CustomTabBar current="profile" />
@@ -33,6 +33,18 @@ export default {
   },
   onShow() {
     this.language = wioService.getSettings().language || 'zh-CN';
+    // 子组件内部的 onShow 不生效，页面切回时由容器驱动刷新：
+    // 语言、会员状态、同步时间都可能在上一个页面被改过
+    const pv = this.$refs.profileView;
+    if (pv) {
+      if (typeof pv.loadSettings === 'function') pv.loadSettings();
+      // 重新接管同步事件，避免与会员页同时监听导致重复弹窗
+      if (typeof pv.bindSync === 'function') pv.bindSync();
+    }
+  },
+  onHide() {
+    const pv = this.$refs.profileView;
+    if (pv && typeof pv.unbindSync === 'function') pv.unbindSync();
   },
   onShareAppMessage(res) {
     return {
