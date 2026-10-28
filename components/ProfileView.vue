@@ -294,7 +294,8 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
-import { login, getAuth, logout, updateCachedUser, uploadAvatar, getTrial } from '@/utils/auth.js'
+import { login, getAuth, logout, updateCachedUser, uploadAvatar } from '@/utils/auth.js'
+import { isProUser, getProState, proExpireDate, PRO_CHANGED_EVENT } from '@/utils/pro.js'
 import * as syncService from '@/utils/syncService.js'
 import CustomLeaveSheet from '@/components/CustomLeaveSheet.vue'
 import PaywallSheet from '@/components/PaywallSheet.vue'
@@ -384,39 +385,27 @@ export default {
       return !!(this.session && this.session.user && this.session.user.openid);
     },
     isPro() {
-      // 兑换码写入的本地试用订阅优先（测试用）；trialStamp 仅用于触发重算
+      // 口径统一在 utils/pro.js：实时读存储，不用组件里的 session 快照
+      // （快照可能过期，正是「头像显示体验中但会员页 locked」的成因）
       void this.trialStamp;
-      const trial = getTrial();
-      if (trial && trial.expiresAt && trial.expiresAt > Date.now()) return true;
-      const sub = this.session && this.session.subscription;
-      if (!sub) return false;
-      const exp = sub.expiresAt || sub.expires_at;
-      return !!(exp && exp > Date.now());
+      return isProUser();
     },
     accountName() {
       if (!this.isLogin) return this.i18n.profile.accountNotLogin;
       const u = this.session.user || {};
       return u.nickname || this.i18n.profile.defaultName;
     },
-    // 会员到期日（登录订阅优先，兑换码试用兜底）
+    // 会员到期日（统一口径：云端订阅优先，本地试用兜底）
     renewDate() {
-      const sub = this.session && this.session.subscription;
-      let exp = sub && (sub.expiresAt || sub.expires_at);
-      if (!exp || exp <= Date.now()) {
-        const trial = getTrial();
-        exp = trial && trial.expiresAt;
-      }
-      if (!exp) return '—';
-      const d = new Date(exp);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      void this.trialStamp;
+      return proExpireDate();
     },
     accountSub() {
       const lang = this.settings.language;
       // PRO：金色「PRO 会员 · 年卡/月卡/体验会员」（兑换码试用未登录时也显示）
       if (this.isPro) {
         if (!this.isLogin) return t('profile.proMemTrial', lang);
-        const sub = this.session && this.session.subscription;
-        const plan = (sub && sub.plan) || 'trial';
+        const plan = getProState().plan || 'trial';
         return plan === 'year' ? t('profile.proMemYear', lang)
           : plan === 'month' ? t('profile.proMemMonth', lang)
           : t('profile.proMemTrial', lang);
@@ -456,10 +445,13 @@ export default {
     this.bindSync();
     // 组件内的 onShow 不会被触发，语言切换靠全局广播兜住
     uni.$on('wio:language-changed', this.onLanguageChanged);
+    // 登录 / 退出 / 核销 / 订阅刷新后重算 isPro
+    uni.$on(PRO_CHANGED_EVENT, this.onProChanged);
   },
   beforeUnmount() {
     this.unbindSync();
     uni.$off('wio:language-changed', this.onLanguageChanged);
+    uni.$off(PRO_CHANGED_EVENT, this.onProChanged);
   },
   // 显示/隐藏由页面容器（pages/profile/index.vue）驱动：
   // 子组件内的 onShow/onHide 在 Vue3 下不会被触发
@@ -742,6 +734,13 @@ export default {
     onLanguageChanged(lang) {
       if (!lang || lang === this.settings.language) return;
       this.settings = { ...this.settings, language: lang };
+    },
+    // 权益变化（登录 / 退出 / 核销 / 订阅刷新）：重算 isPro，并同步会话快照。
+    // 退出登录时语言也会在这里被 getSettings 降级回中文。
+    onProChanged() {
+      this.trialStamp++;
+      this.session = getAuth();
+      this.loadSettings();
     },
     // ===== 会员入口 =====
     goMember() {

@@ -175,7 +175,8 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { getTopSafeArea } from '@/utils/safeArea.js'
-import { getAuth, isTrialActive } from '@/utils/auth.js'
+import { getAuth } from '@/utils/auth.js'
+import { isProUser, PRO_CHANGED_EVENT } from '@/utils/pro.js'
 import { locales } from '@/utils/locales.js'
 
 const CHART_MAX_BAR = 90 // 柱状图柱子最大高度(px)
@@ -196,6 +197,7 @@ export default {
       },
       showCommuteEditor: false,
       draftCommute: 90,
+      proStamp: 0, // 仅用于让 isPro 在页面重新显示时重算
       selectedMonth: new Date().getMonth() + 1   // 柱状图默认选中当前月
     }
   },
@@ -210,12 +212,9 @@ export default {
       return getAuth()
     },
     isPro() {
-      // 兑换码写入的本地试用订阅优先（测试用），登录订阅兜底——与 ProfileView 口径一致
-      if (isTrialActive()) return true
-      const sub = this.session && this.session.subscription
-      if (!sub) return false
-      const exp = sub.expiresAt || sub.expires_at
-      return !!(exp && exp > Date.now())
+      // 与「我的」「会员」页同一口径（utils/pro.js）
+      void this.proStamp
+      return isProUser()
     },
     canGoPrev() {
       return this.year > 2000
@@ -243,6 +242,8 @@ export default {
     this.topSafeHeight = getTopSafeArea().totalHeight
   },
   onShow() {
+    // 权益可能在别的页面变过（开通 / 退出登录），每次显示都重算
+    this.proStamp++
     this.refresh()
   },
   methods: {

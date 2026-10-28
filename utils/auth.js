@@ -9,6 +9,18 @@ import { callCloud, isCloudAvailable } from './cloud.js'
 
 const KEY_AUTH = 'wio_auth'
 
+// 权益可能变化的时机统一广播，页面据此重算 isPro（口径见 utils/pro.js）
+// 这里用字面量而非 import pro.js，避免 auth ↔ pro 循环依赖
+const PRO_CHANGED_EVENT = 'wio:pro-changed'
+
+function notifyProChanged() {
+  try {
+    uni.$emit(PRO_CHANGED_EVENT)
+  } catch (e) {
+    // 构建期无 uni 环境，忽略
+  }
+}
+
 /**
  * 登录 / 刷新会话
  * @param {object} [profile] 可选的资料更新 { nickname, avatarFileID }
@@ -20,6 +32,7 @@ export async function login(profile = {}) {
   }
   const res = await callCloud('login', profile)
   uni.setStorageSync(KEY_AUTH, JSON.stringify(res))
+  notifyProChanged()
   return res
 }
 
@@ -56,13 +69,19 @@ export function updateCachedSubscription(sub) {
   if (!session) return
   session.subscription = sub
   uni.setStorageSync(KEY_AUTH, JSON.stringify(session))
+  notifyProChanged()
 }
 
-/** 退出登录（只清本地会话，云端数据保留） */
+/**
+ * 退出登录（只清本地会话与兑换码试用，云端数据保留）
+ * 退出后必须立刻失去 PRO 权益：订阅在会话里、试用在本地，一并清掉，
+ * 再广播一次让所有页面重算 isPro，避免残留「退了还能用」
+ */
 export function logout() {
   uni.removeStorageSync(KEY_AUTH)
   uni.removeStorageSync('wio_sync_state')
   uni.removeStorageSync(KEY_TRIAL)
+  notifyProChanged()
 }
 
 // ============================================================
@@ -117,6 +136,7 @@ export function redeemCode(code) {
     expiresAt: base + days * 24 * 60 * 60 * 1000,
   }
   uni.setStorageSync(KEY_TRIAL, JSON.stringify(trial))
+  notifyProChanged()
   return true
 }
 

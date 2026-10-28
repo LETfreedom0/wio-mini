@@ -115,7 +115,10 @@
             <text class="custom-leave-chevron">›</text>
           </view>
 
-          <view v-if="visibleLeaves.length === 0" class="custom-empty">
+          <view v-if="!isPro" class="custom-empty">
+            <text class="custom-empty-text">{{ i18n.profile.customLeaveLocked }}</text>
+          </view>
+          <view v-else-if="visibleLeaves.length === 0" class="custom-empty">
             <text class="custom-empty-text">{{ i18n.profile.customLeaveEmpty }}</text>
           </view>
 
@@ -153,7 +156,8 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
-import { getAuth, getTrial } from '@/utils/auth.js'
+import { getAuth } from '@/utils/auth.js'
+import { isProUser, getProState, proExpireDate, PRO_CHANGED_EVENT } from '@/utils/pro.js'
 import * as syncService from '@/utils/syncService.js'
 import CustomLeaveSheet from '@/components/CustomLeaveSheet.vue'
 import PaywallSheet from '@/components/PaywallSheet.vue'
@@ -182,14 +186,10 @@ export default {
       return !!(this.session && this.session.user && this.session.user.openid)
     },
     isPro() {
-      // 兑换码写入的本地试用订阅优先（测试用）；trialStamp 仅用于触发重算
+      // 与「我的」页同一口径（utils/pro.js）：实时读存储，
+      // 不再依赖本组件 data.session 快照，避免两页判定分叉
       void this.trialStamp
-      const trial = getTrial()
-      if (trial && trial.expiresAt && trial.expiresAt > Date.now()) return true
-      const sub = this.session && this.session.subscription
-      if (!sub) return false
-      const exp = sub.expiresAt || sub.expires_at
-      return !!(exp && exp > Date.now())
+      return isProUser()
     },
     // 未开通的 PRO 用户（兑换码）也要能编辑假期，这里按 isPro 判断
     visibleLeaves() {
@@ -206,23 +206,16 @@ export default {
       return this.i18n.profile.autoSyncSub
     },
     planLine() {
-      const sub = this.session && this.session.subscription
-      const plan = (sub && sub.plan) || 'trial'
+      void this.trialStamp
+      const plan = getProState().plan || 'trial'
       const name = plan === 'year' ? this.i18n.profile.planYear
         : plan === 'month' ? this.i18n.profile.planMonth
         : this.i18n.profile.proMemTrial
       return `${name} · ${this.i18n.profile.renewValidUntil} ${this.renewDate}`
     },
     renewDate() {
-      const sub = this.session && this.session.subscription
-      let exp = sub && (sub.expiresAt || sub.expires_at)
-      if (!exp || exp <= Date.now()) {
-        const trial = getTrial()
-        exp = trial && trial.expiresAt
-      }
-      if (!exp) return '—'
-      const d = new Date(exp)
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      void this.trialStamp
+      return proExpireDate()
     },
     lastSyncText() {
       if (!this.lastSyncAt) return '—'
@@ -234,9 +227,11 @@ export default {
   mounted() {
     this.load()
     this.bindSync()
+    uni.$on(PRO_CHANGED_EVENT, this.onProChanged)
   },
   beforeUnmount() {
     this.unbindSync()
+    uni.$off(PRO_CHANGED_EVENT, this.onProChanged)
   },
   // 显示/隐藏由页面容器（pages/member/index.vue）驱动：
   // 子组件内的 onShow/onHide 在 Vue3 下不会被触发
@@ -258,6 +253,11 @@ export default {
       this.customLeaves = wioService.getCustomLeaves()
       this.session = getAuth()
       this.lastSyncAt = syncService.getLastSyncTime()
+    },
+    // 权益变化（登录 / 退出 / 核销 / 过期）：重算 isPro 并刷新可见范围
+    onProChanged() {
+      this.trialStamp++
+      this.load()
     },
     onScroll(e) {
       // 滚动位置映射为垂直视线：顶部=向上看，下滑=向下看

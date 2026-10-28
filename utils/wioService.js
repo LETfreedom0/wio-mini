@@ -1,5 +1,6 @@
 import { holidays2026 } from './holidays.js';
 import { markDirty } from './syncService.js';
+import { isProUser } from './pro.js';
 
 const KEY_SETTINGS = 'wio_settings';
 const KEY_ENTRIES = 'wio_entries';
@@ -32,12 +33,29 @@ export default {
         const s = { ...DEFAULT_SETTINGS, ...JSON.parse(value) };
         // 自愈：历史脏数据可能把比例写成 0/非法值，读取时归一
         s.targetPercentage = this._sanitizeRatio(s.targetPercentage, 40);
+        // 多语言是 PRO 权益：权益失效（退出登录 / 到期）时读口降级回中文。
+        // 只降级读取值、不改存储，重新开通后自动恢复原语言偏好。
+        if (s.language && s.language !== 'zh-CN' && !isProUser()) {
+          s.language = 'zh-CN';
+        }
         return s;
       }
     } catch (e) {
       console.error('Error getting settings', e);
     }
     return DEFAULT_SETTINGS;
+  },
+
+  // 存储里未经降级的语言原文（用于避免把语言偏好写坏）
+  _rawStoredLanguage() {
+    try {
+      const raw = uni.getStorageSync(KEY_SETTINGS);
+      if (!raw) return '';
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return (parsed && parsed.language) || '';
+    } catch (e) {
+      return '';
+    }
   },
 
   // 合法比例：1~100 的数字，否则回退 fallback（fallback 可为 null 表示「无有效值」）
@@ -79,12 +97,21 @@ export default {
       if (history) {
         settings = { ...settings, targetHistory: history };
       }
+      // 无权益时 getSettings 会把语言降级成中文；若调用方只是改了别的设置
+      // （拖动目标比例等），这里按存储原文保留语言偏好，避免被降级值覆盖。
+      if (!isProUser()) {
+        const rawLang = this._rawStoredLanguage();
+        if (rawLang && rawLang !== 'zh-CN' && (!settings.language || settings.language === 'zh-CN')) {
+          settings = { ...settings, language: rawLang };
+        }
+      }
       uni.setStorageSync(KEY_SETTINGS, JSON.stringify(settings));
       markDirty();
       // 语言是全局偏好：从任一入口（我的 / 会员页）切换后广播，
       // 让已挂载的视图立即刷新文案——组件的 onShow 不保证被触发，不能各自等重读
       const prevLanguage = (existing && existing.language) || 'zh-CN';
-      const nextLanguage = settings.language || 'zh-CN';
+      // 广播的必须是「实际生效」的语言：无权益时恒为中文
+      const nextLanguage = isProUser() ? (settings.language || 'zh-CN') : 'zh-CN';
       if (nextLanguage !== prevLanguage) {
         uni.$emit('wio:language-changed', nextLanguage);
       }
@@ -132,7 +159,11 @@ export default {
     return typeof str === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(str) && !isNaN(new Date(str + 'T00:00:00').getTime());
   },
 
+  // 自定义假期是 PRO 权益：权益失效时消费端拿不到任何条目
+  // （日历不再上色、不再扣分母，会员页列表变空），但存储里的原始数据保留，
+  // 重新开通后原样恢复，不会因为退出登录丢配置。
   getCustomLeaves() {
+    if (!isProUser()) return [];
     const s = this.getSettings();
     const list = Array.isArray(s.customLeaves) ? s.customLeaves : [];
     return list
@@ -140,9 +171,11 @@ export default {
       .map(l => ({ id: l.id, name: String(l.name).slice(0, 12), color: l.color || '#0E6E62', start: l.start, end: l.end }));
   },
 
-  // 新增或编辑（带 id 即编辑）；校验失败返回 null
+  // 新增或编辑（带 id 即编辑）；校验失败或无权返回 null
   saveCustomLeave(leave) {
     try {
+      // 写入端同样校验权益：UI 被绕过（返回键/脚本）也写不进去
+      if (!isProUser()) return null;
       const settings = this.getSettings();
       const list = Array.isArray(settings.customLeaves) ? settings.customLeaves.filter(Boolean) : [];
       const item = {
