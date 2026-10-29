@@ -147,6 +147,9 @@ export default {
         else if (code === 'ios_version' || code === 'base_lib' || code === 'not_weixin') {
           msg = t('profile.payUnsupported', lang)
         }
+        // 测试期把微信原始错误码带出来（-15014 道具未生效 / -15013 金额不符 / -15006 签名错），
+        // 方便一眼定位；上线前可去掉这段拼接。
+        if (e && e.errCode) msg = msg + ' (' + e.errCode + ')'
         uni.showToast({ title: msg, icon: 'none' })
         console.warn('[pay] 支付未完成', e)
       } finally {
