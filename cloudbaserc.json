@@ -11,7 +11,10 @@
       "memorySize": 256,
       "installDependency": true,
       "envVariables": {
-        "VIRTUAL_PAY_APPKEY": "{{env.VIRTUAL_PAY_APPKEY}}"
+        "VIRTUAL_PAY_APPKEY": "{{env.VIRTUAL_PAY_APPKEY}}",
+        "WX_APP_SECRET": "{{env.WX_APP_SECRET}}",
+        "VIRTUAL_PAY_ITEM_MONTH": "{{env.VIRTUAL_PAY_ITEM_MONTH}}",
+        "VIRTUAL_PAY_ITEM_YEAR": "{{env.VIRTUAL_PAY_ITEM_YEAR}}"
       }
     },
     {

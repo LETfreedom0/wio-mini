@@ -182,6 +182,35 @@ async function deliver(openid, order, wxOrderId) {
 // ---------------- 主流程 ----------------
 
 exports.main = async (event) => {
+  // 部署自检：只回报配置是否齐全、凭证能否换取，绝不返回密钥本身。
+  // 传 { action:'diag', code:'<wx.login 的 code>' } 可顺带验证 session_key。
+  if (event && event.action === 'diag') {
+    const r = {
+      appKey: !!APP_KEY,
+      appSecret: !!APP_SECRET,
+      itemMonth: ITEM.month,
+      itemYear: ITEM.year,
+      accessToken: 'skip',
+      sessionKey: 'skip'
+    }
+    try { await ensureCollections() } catch (e) { /* 忽略 */ }
+    if (APP_SECRET) {
+      try {
+        r.accessToken = (await getAccessToken()) ? 'ok' : 'empty'
+      } catch (e) {
+        r.accessToken = 'fail: ' + (e && e.message ? e.message : e)
+      }
+    }
+    if (event.code) {
+      try {
+        r.sessionKey = (await code2SessionKey(event.code)) ? 'ok' : 'empty'
+      } catch (e) {
+        r.sessionKey = 'fail: ' + (e && e.message ? e.message : e)
+      }
+    }
+    return r
+  }
+
   const { OPENID } = cloud.getWXContext()
   if (!OPENID) return { ok: false, code: 'no_openid', message: '无法获取用户身份' }
 
