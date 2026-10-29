@@ -133,6 +133,10 @@ export async function purchase(plan = 'year') {
 
   // 云函数下单（签名全部在服务端完成）
   const order = await callCloud('pay', { action: 'create', plan, code })
+  // 云函数的所有失败都带 code，原样透传，否则 not_configured 会被吞成“下单失败”
+  if (order && order.ok === false && order.code) {
+    throw { code: order.code, message: order.message || order.code }
+  }
   if (!order || !order.signData) throw { code: 'create_failed', message: '下单失败' }
 
   await requestVirtualPayment(order)

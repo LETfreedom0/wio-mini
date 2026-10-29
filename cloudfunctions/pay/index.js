@@ -26,6 +26,22 @@ const https = require('https')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 
+// 微信云开发的集合必须先存在才能读写；首次调用时自动建，避免控制台漏建导致下单直接失败。
+// 用实例级 Set 缓存，冷启动只付一次开销。
+const ensured = new Set()
+async function ensureCollections() {
+  const need = ['payment_orders', 'subscriptions', 'sys_cache']
+  for (const name of need) {
+    if (ensured.has(name)) continue
+    try {
+      await db.createCollection(name)
+    } catch (e) {
+      // -501001 / 已存在 都会抛错，忽略即可
+    }
+    ensured.add(name)
+  }
+}
+
 // AppID / OfferID 不是密钥，可明文写死
 const APPID = 'wx9e594322f0cef94f'
 const OFFER_ID = '1450683826'
@@ -179,6 +195,8 @@ exports.main = async (event) => {
   }
 
   try {
+    await ensureCollections()
+
     // ---------- 下单 ----------
     if (event.action === 'create') {
       const plan = event.plan === 'month' ? 'month' : 'year'

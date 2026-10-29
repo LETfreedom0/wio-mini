@@ -16,6 +16,18 @@ const cloud = require('wx-server-sdk')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 
+// 集合不存在时读写会直接报错，首次触发时自动补建（实例内只做一次）
+let ensured = false
+async function ensureCollections() {
+  if (ensured) return
+  for (const name of ['payment_orders', 'subscriptions']) {
+    try {
+      await db.createCollection(name)
+    } catch (e) { /* 已存在 */ }
+  }
+  ensured = true
+}
+
 const PLAN_DAYS = { month: 31, year: 366 }
 
 const REPLY_OK = '<xml><ErrCode>0</ErrCode><ErrMsg><![CDATA[success]]></ErrMsg></xml>'
@@ -76,6 +88,8 @@ async function handlePush(xml) {
 
   if (!openid || !outTradeNo) return replyFail('missing openid or outTradeNo')
 
+  await ensureCollections()
+
   const order = (await db.collection('payment_orders')
     .where({ openid, out_trade_no: outTradeNo }).limit(1).get()).data[0]
   if (!order) return replyFail('order not found')
@@ -90,6 +104,19 @@ async function handlePush(xml) {
 }
 
 exports.main = async (event) => {
+  const q = (event && event.queryStringParameters) || {}
+
+  // MP 后台「消息推送」保存 URL 时会先发一次 GET 校验：
+  //   ?signature=..&timestamp=..&nonce=..&echostr=..
+  // 必须原样回显 echostr（纯文本），否则后台保存不了这个地址。
+  if (event && event.httpMethod === 'GET' && q.echostr) {
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'text/plain' },
+      body: String(q.echostr)
+    }
+  }
+
   // HTTP 访问服务触发时 body 在 event.body；普通调用时直接是字符串
   let raw = ''
   if (event && typeof event.body === 'string') {

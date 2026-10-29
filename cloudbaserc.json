@@ -1,0 +1,26 @@
+{
+  "version": "2.0",
+  "envId": "prod-d1glr7pbd4f1ab2f5",
+  "functionRoot": "./cloudfunctions",
+  "functions": [
+    {
+      "name": "pay",
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "timeout": 20,
+      "memorySize": 256,
+      "installDependency": true,
+      "envVariables": {
+        "VIRTUAL_PAY_APPKEY": "{{env.VIRTUAL_PAY_APPKEY}}"
+      }
+    },
+    {
+      "name": "xpaynotify",
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "timeout": 20,
+      "memorySize": 256,
+      "installDependency": true
+    }
+  ]
+}
