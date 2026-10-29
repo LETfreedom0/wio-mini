@@ -55,7 +55,7 @@ const ITEM = {
 
 // 金额单位一律「分」，与后台道具价格必须完全一致，否则报 -15013
 const PRICE_FEN = { month: 600, year: 4800 }
-const PLAN_DAYS = { month: 31, year: 366 }
+const PLAN_DAYS = { month: 30, year: 366 }
 
 // ---------------- 基础工具 ----------------
 
