@@ -179,6 +179,31 @@ async function deliver(openid, order, wxOrderId) {
   return { already: false, plan: order.plan, expiresAt }
 }
 
+/**
+ * 向平台反查订单状态，确认已支付才发货。
+ * 唯一的发货依据：前端回调、推送通知都不可信，只有平台说付了才算。
+ */
+async function queryOrderAndDeliver(openid, order) {
+  const bodyStr = JSON.stringify({ openid, env: 0, order_id: order.out_trade_no })
+  const paySig = hmacHex('/xpay/query_order&' + bodyStr, APP_KEY)
+  const token = await getAccessToken()
+  const r = await httpsRequest(
+    'POST',
+    `https://api.weixin.qq.com/xpay/query_order?access_token=${token}&pay_sig=${paySig}`,
+    bodyStr
+  )
+
+  if (r.errcode) return { ok: false, code: 'query_failed', message: r.errmsg || String(r.errcode) }
+
+  // status: 2 已支付待发货 / 4 已发货 / 5 已退款 / 7 退款失败 / 8 用户退款完成
+  const st = r.order && Number(r.order.status)
+  if (st !== 2 && st !== 4) return { ok: true, paid: false, status: st }
+
+  const wxOrderId = (r.order && r.order.wx_order_id) || ''
+  const rec = await deliver(openid, order, wxOrderId)
+  return { ok: true, paid: true, already: rec.already, plan: rec.plan, expiresAt: rec.expiresAt }
+}
+
 // ---------------- 主流程 ----------------
 
 exports.main = async (event) => {
@@ -211,9 +236,6 @@ exports.main = async (event) => {
     return r
   }
 
-  const { OPENID } = cloud.getWXContext()
-  if (!OPENID) return { ok: false, code: 'no_openid', message: '无法获取用户身份' }
-
   const missing = []
   if (!APP_KEY) missing.push('VIRTUAL_PAY_APPKEY')
   if (!APP_SECRET) missing.push('WX_APP_SECRET')
@@ -222,6 +244,33 @@ exports.main = async (event) => {
   if (missing.length) {
     return { ok: false, code: 'not_configured', message: '云函数环境变量缺失: ' + missing.join(', ') }
   }
+
+  // ---------- 反查（服务端之间调用，不依赖调用者身份） ----------
+  // 发货推送只是「通知」，不能作为发货依据：谁拿到 outTradeNo 都能伪造一条推送。
+  // 所以一律拿 openid + outTradeNo 去 /xpay/query_order 问平台，确认真的付了才入账。
+  if (event && event.action === 'verify') {
+    const openid = event.openid
+    const outTradeNo = event.outTradeNo
+    if (!openid || !outTradeNo) return { ok: false, code: 'bad_request', message: '缺少 openid 或 outTradeNo' }
+
+    try {
+      await ensureCollections()
+      const order = (await db.collection('payment_orders')
+        .where({ openid, out_trade_no: outTradeNo }).limit(1).get()).data[0]
+      if (!order) return { ok: false, code: 'order_not_found' }
+
+      // 推送里带的道具必须与下单时一致，防止低价道具冒充
+      if (event.productId && order.product_id && event.productId !== order.product_id) {
+        return { ok: false, code: 'product_mismatch' }
+      }
+      return await queryOrderAndDeliver(openid, order)
+    } catch (e) {
+      return { ok: false, code: 'internal', message: String(e && e.message ? e.message : e) }
+    }
+  }
+
+  const { OPENID } = cloud.getWXContext()
+  if (!OPENID) return { ok: false, code: 'no_openid', message: '无法获取用户身份' }
 
   try {
     await ensureCollections()
@@ -292,26 +341,7 @@ exports.main = async (event) => {
         return { ok: true, paid: true, plan: order.plan, expiresAt: sub ? sub.expires_at : null }
       }
 
-      const bodyStr = JSON.stringify({ openid: OPENID, env: 0, order_id: outTradeNo })
-      const paySig = hmacHex('/xpay/query_order&' + bodyStr, APP_KEY)
-      const token = await getAccessToken()
-      const r = await httpsRequest(
-        'POST',
-        `https://api.weixin.qq.com/xpay/query_order?access_token=${token}&pay_sig=${paySig}`,
-        bodyStr
-      )
-
-      if (r.errcode) return { ok: false, code: 'query_failed', message: r.errmsg || String(r.errcode) }
-
-      // status: 2 已支付待发货 / 4 已发货 / 5 已退款 / 7 退款失败 / 8 用户退款完成
-      const st = r.order && Number(r.order.status)
-      if (st !== 2 && st !== 4) {
-        return { ok: true, paid: false, status: st }
-      }
-
-      const wxOrderId = (r.order && r.order.wx_order_id) || ''
-      const rec = await deliver(OPENID, order, wxOrderId)
-      return { ok: true, paid: true, already: rec.already, plan: rec.plan, expiresAt: rec.expiresAt }
+      return await queryOrderAndDeliver(OPENID, order)
     }
 
     return { ok: false, code: 'bad_action', message: '未知 action' }
