@@ -1,9 +1,2 @@
-
-	/*每个页面公共css */
-	/* 隐藏 H5 原生 tabBar，改用自定义胶囊 TabBar */
-uni-tabbar,
-	.uni-tabbar,
-	.uni-app--showtabbar .uni-app__tabbar {
-		display: none !important;
-}
-page{--status-bar-height:25px;--top-window-height:0px;--window-top:0px;--window-bottom:0px;--window-left:0px;--window-right:0px;--window-magin:0px}[data-c-h="true"]{display: none !important;}
+uni-tabbar,.uni-tabbar,.uni-app--showtabbar .uni-app__tabbar{display:none!important}
+page::after{position:fixed;content:'';left:-1000px;top:-1000px;-webkit-animation:shadow-preload .1s;-webkit-animation-delay:3s;animation:shadow-preload .1s;animation-delay:3s}@-webkit-keyframes shadow-preload{0%{background-image:url(https://cdn1.dcloud.net.cn/4e304a47516b49785243556c643367355a5455354e444d794d6d59775932566d4f54526d/img/shadow-grey.png)}100%{background-image:url(https://cdn1.dcloud.net.cn/4e304a47516b49785243556c643367355a5455354e444d794d6d59775932566d4f54526d/img/shadow-grey.png)}}@keyframes shadow-preload{0%{background-image:url(https://cdn1.dcloud.net.cn/4e304a47516b49785243556c643367355a5455354e444d794d6d59775932566d4f54526d/img/shadow-grey.png)}100%{background-image:url(https://cdn1.dcloud.net.cn/4e304a47516b49785243556c643367355a5455354e444d794d6d59775932566d4f54526d/img/shadow-grey.png)}}page{--status-bar-height:25px;--top-window-height:0px;--window-top:0px;--window-bottom:0px;--window-left:0px;--window-right:0px;--window-magin:0px}[data-c-h="true"]{display: none !important;}

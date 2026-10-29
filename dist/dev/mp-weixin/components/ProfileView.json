@@ -1,4 +1,7 @@
 {
   "component": true,
-  "usingComponents": {}
+  "usingComponents": {
+    "custom-leave-sheet": "./CustomLeaveSheet",
+    "paywall-sheet": "./PaywallSheet"
+  }
 }
