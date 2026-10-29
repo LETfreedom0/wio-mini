@@ -81,6 +81,7 @@
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
 import { getTrial, redeemCode } from '@/utils/auth.js'
+import { purchase } from '@/utils/pay.js'
 
 export default {
   name: 'PaywallSheet',
@@ -91,7 +92,8 @@ export default {
   data() {
     return {
       settings: { language: 'zh-CN' },
-      payPlan: 'year'
+      payPlan: 'year',
+      paying: false
     }
   },
   computed: {
@@ -112,8 +114,44 @@ export default {
   },
   methods: {
     onPayTap() {
-      // 虚拟支付开通前的占位：正式上线后接 pay 云函数 + wx.requestVirtualPayment
-      uni.showToast({ title: t('profile.payComingSoon', this.settings.language), icon: 'none' })
+      this.startPurchase()
+    },
+    async startPurchase() {
+      if (this.paying) return
+      const lang = this.settings.language
+      this.paying = true
+      uni.showLoading({ title: t('profile.payProcessing', lang), mask: true })
+
+      try {
+        // 签名全部由云函数 pay 完成，前端只负责拉起支付
+        const res = await purchase(this.payPlan)
+        uni.hideLoading()
+
+        if (res && res.pending) {
+          // 钱已付、服务端尚未确认发货：不提示失败，避免用户重复付费
+          this.$emit('close')
+          uni.showToast({ title: t('profile.payConfirming', lang), icon: 'none', duration: 3000 })
+          return
+        }
+
+        this.$emit('close')
+        this.$emit('upgraded')
+        uni.showToast({ title: t('profile.paySuccess', lang), icon: 'success' })
+      } catch (e) {
+        uni.hideLoading()
+        const code = (e && e.code) || 'pay_failed'
+        let msg = t('profile.payFailed', lang)
+        if (code === 'cancelled') msg = t('profile.payCancelled', lang)
+        else if (code === 'not_login') msg = t('profile.payNotLogin', lang)
+        else if (code === 'not_configured') msg = t('profile.payNotConfigured', lang)
+        else if (code === 'ios_version' || code === 'base_lib' || code === 'not_weixin') {
+          msg = t('profile.payUnsupported', lang)
+        }
+        uni.showToast({ title: msg, icon: 'none' })
+        console.warn('[pay] 支付未完成', e)
+      } finally {
+        this.paying = false
+      }
     },
     onRedeemTap() {
       const lang = this.settings.language

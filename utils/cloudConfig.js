@@ -10,7 +10,10 @@ export const CLOUD = {
   CLOUDBASE_ENV: 'prod-d1glr7pbd4f1ab2f5',
 
   // 虚拟支付（开通后从「虚拟支付 → 基本配置」获取）
-  OFFER_ID: 'YOUR_OFFER_ID',
-  PAY_MONTH_ITEM_ID: 'YOUR_MONTH_ITEM_ID',
-  PAY_YEAR_ITEM_ID: 'YOUR_YEAR_ITEM_ID'
+  // 注意：这些只是记录用途。前端不参与签名——
+  // OfferID / AppKey / 道具 ID / AppSecret 全部由云函数 pay 读取环境变量使用，
+  // AppKey 与 AppSecret 属于密钥，任何时候都不能写进前端代码。
+  OFFER_ID: '1450683826',
+  PAY_MONTH_ITEM_ID: '',
+  PAY_YEAR_ITEM_ID: ''
 }
