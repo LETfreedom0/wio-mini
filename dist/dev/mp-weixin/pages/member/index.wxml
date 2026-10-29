@@ -1,1 +1,0 @@
-<view class="container data-v-b8dbb7c8"><view class="content-area data-v-b8dbb7c8"><member-view wx:if="{{b}}" class="r data-v-b8dbb7c8" u-r="memberView" u-i="b8dbb7c8-0" bind:__l="__l" u-p="{{b}}"/></view></view>

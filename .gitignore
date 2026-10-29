@@ -1,7 +1,8 @@
 # 依赖
 node_modules/
 
-# 构建产物
+# 构建产物（dist 为 uni-app 输出，dev/build 两套目录都不入库，避免旧包被误跑）
+dist/
 unpackage/dist/
 
 # 临时文件

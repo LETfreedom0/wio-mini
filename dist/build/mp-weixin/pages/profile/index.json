@@ -1,7 +1,0 @@
-{
-  "navigationStyle": "custom",
-  "usingComponents": {
-    "profile-view": "../../components/ProfileView",
-    "custom-tab-bar": "../../components/CustomTabBar"
-  }
-}

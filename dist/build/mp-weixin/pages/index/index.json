@@ -1,7 +1,0 @@
-{
-  "navigationStyle": "custom",
-  "usingComponents": {
-    "home-view": "../../components/HomeView",
-    "custom-tab-bar": "../../components/CustomTabBar"
-  }
-}
