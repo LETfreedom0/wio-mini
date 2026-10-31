@@ -91,8 +91,13 @@ function requestVirtualPayment(payData) {
       success: (res) => resolve(res),
       fail: (err) => {
         const code = err && err.errCode
-        // -2 用户取消；其余按失败处理，原始错误码带出去便于排查
-        reject({ code: code === -2 ? 'cancelled' : 'pay_failed', errCode: code, message: (err && err.errMsg) || '' })
+        // -2 用户取消；其余按失败处理，原始错误码随 signData 一起带出去便于排查
+        reject({
+          code: code === -2 ? 'cancelled' : 'pay_failed',
+          errCode: code,
+          message: (err && err.errMsg) || '',
+          signData: payData.signData
+        })
       }
     })
     // #endif
