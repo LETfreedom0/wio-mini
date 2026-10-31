@@ -454,6 +454,8 @@ export default {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  /* 文字块比卡片略微内缩 4px：块面视觉更重，纯文字贴齐卡片左边缘反而显歪 */
+  padding: 0 4px;
   margin-bottom: 12px;
 }
 
@@ -716,6 +718,8 @@ export default {
   font-weight: 500;
   color: #15181C;
   line-height: 1.4;
+  /* 与 header-row 同一光学缩进，卡片本体不跟着动 */
+  margin-left: 4px;
 }
 
 .choice-row {
@@ -791,6 +795,7 @@ export default {
   font-size: 10px;
   color: #9AA1A8;
   line-height: 1.5;
+  margin-left: 4px;
 }
 
 /* ===== 最近记录 ===== */
@@ -804,6 +809,8 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* 标题与「查看全部」一起右落，与列表右边界 16px 更接近 */
+  padding: 0 4px;
 }
 
 .recent-all {
