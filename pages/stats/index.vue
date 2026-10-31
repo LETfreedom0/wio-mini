@@ -178,6 +178,7 @@ import { getTopSafeArea } from '@/utils/safeArea.js'
 import { getAuth } from '@/utils/auth.js'
 import { isProUser, PRO_CHANGED_EVENT } from '@/utils/pro.js'
 import { locales } from '@/utils/locales.js'
+import { tap as haptic } from '@/utils/haptic.js'
 
 const CHART_MAX_BAR = 90 // 柱状图柱子最大高度(px)
 const DAY_HOURS = 8      // OT / 通勤折算天数的基准
@@ -260,7 +261,7 @@ export default {
     changeYear(delta) {
       if (delta < 0 && !this.canGoPrev) return
       if (delta > 0 && !this.canGoNext) return
-      uni.vibrateShort && uni.vibrateShort()
+      haptic('light')
       this.year += delta
       this.refresh()
     },
@@ -273,7 +274,7 @@ export default {
     },
     // 点柱子：弹出/收起该月的回司天数气泡
     onBarTap(m) {
-      uni.vibrateShort && uni.vibrateShort()
+      haptic('light')
       this.selectedMonth = this.selectedMonth === m.month ? null : m.month
     },
     leavePct(used, total) {

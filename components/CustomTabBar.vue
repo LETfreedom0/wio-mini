@@ -20,6 +20,7 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { locales } from '@/utils/locales.js'
+import { tap as haptic } from '@/utils/haptic.js'
 
 export default {
   name: 'CustomTabBar',
@@ -84,6 +85,8 @@ export default {
   },
   methods: {
     switchTab(path) {
+      // tab 切换是最基础的点击，必须有触感反馈；点当前 tab 也回一下
+      haptic('light');
       uni.switchTab({
         url: path
       });

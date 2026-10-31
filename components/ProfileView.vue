@@ -67,7 +67,7 @@
             <text class="quota-label">{{ i18n.profile.vacationDays }}</text>
             <view class="quota-values">
               <text class="quota-value vacation-color">{{ settings.vacationDays }} {{ i18n.profile.quotaUnit }}</text>
-              <text class="quota-sub">{{ remainUsedText(yearStats.vacationDaysUsed, settings.vacationDays) }}</text>
+              <text class="quota-sub" :class="{ 'quota-empty': isQuotaFull(yearStats.vacationDaysUsed, settings.vacationDays) }">{{ remainUsedText(yearStats.vacationDaysUsed, settings.vacationDays) }}</text>
             </view>
           </view>
           <view class="slider-wrap quota-slider">
@@ -86,7 +86,7 @@
             <text class="quota-label">{{ i18n.profile.sickDays }}</text>
             <view class="quota-values">
               <text class="quota-value sick-color">{{ settings.sickDays }} {{ i18n.profile.quotaUnit }}</text>
-              <text class="quota-sub">{{ remainUsedText(yearStats.sickDaysUsed, settings.sickDays) }}</text>
+              <text class="quota-sub" :class="{ 'quota-empty': isQuotaFull(yearStats.sickDaysUsed, settings.sickDays) }">{{ remainUsedText(yearStats.sickDaysUsed, settings.sickDays) }}</text>
             </view>
           </view>
           <view class="slider-wrap quota-slider">
@@ -105,7 +105,7 @@
         <view class="card-header-row">
           <text class="card-title">{{ i18n.profile.birthdayLeave }}</text>
           <view class="header-actions">
-            <view class="info-btn" @click="showBirthdaySheet = true">
+            <view class="info-btn" @click="showBirthdayInfo">
               <text class="info-icon">i</text>
             </view>
             <view class="toggle-switch" @click="toggleBirthdayEnabled">
@@ -139,7 +139,7 @@
       <view class="settings-card">
         <view class="card-header-row">
           <text class="card-title">{{ i18n.profile.compOffSettings }}</text>
-          <view class="info-btn" @click="showRuleSheet = true">
+          <view class="info-btn" @click="showCompOffInfo">
             <text class="info-icon">i</text>
           </view>
         </view>
@@ -170,28 +170,28 @@
     </scroll-view>
 
     <!-- ===== 补班规则 ⓘ 弹窗 ===== -->
-    <view v-if="showRuleSheet" class="modal-mask" @click="showRuleSheet = false">
+    <view v-if="showRuleSheet" class="modal-mask" @click="closeInfoSheet">
       <view class="modal-card" @click.stop>
         <view class="modal-icon rule-icon">
           <text class="modal-icon-text">i</text>
         </view>
         <text class="modal-title">{{ i18n.profile.compOffSheetTitle }}</text>
         <text class="modal-body">{{ i18n.profile.compOffSheetBody }}</text>
-        <view class="modal-btn" @click="showRuleSheet = false">
+        <view class="modal-btn" @click="closeInfoSheet">
           <text class="modal-btn-text">{{ i18n.profile.gotIt }}</text>
         </view>
       </view>
     </view>
 
     <!-- ===== 生日假 ⓘ 弹窗 ===== -->
-    <view v-if="showBirthdaySheet" class="modal-mask" @click="showBirthdaySheet = false">
+    <view v-if="showBirthdaySheet" class="modal-mask" @click="closeInfoSheet">
       <view class="modal-card" @click.stop>
         <view class="modal-icon birthday-icon">
           <text class="modal-icon-text">i</text>
         </view>
         <text class="modal-title">{{ i18n.profile.birthdaySheetTitle }}</text>
         <text class="modal-body">{{ i18n.profile.birthdaySheetBody }}</text>
-        <view class="modal-btn" @click="showBirthdaySheet = false">
+        <view class="modal-btn" @click="closeInfoSheet">
           <text class="modal-btn-text">{{ i18n.profile.gotIt }}</text>
         </view>
       </view>
@@ -234,7 +234,7 @@
         </view>
 
         <!-- 协议（仅首次登录需要） -->
-        <view v-if="authMode === 'login'" class="auth-agree-row" @click="authForm.agreed = !authForm.agreed">
+        <view v-if="authMode === 'login'" class="auth-agree-row" @click="toggleAgree">
           <view class="agree-check" :class="{ checked: authForm.agreed }">
             <text v-if="authForm.agreed" class="agree-check-icon">✓</text>
           </view>
@@ -299,6 +299,7 @@ import { isProUser, getProState, proExpireDate, PRO_CHANGED_EVENT } from '@/util
 import * as syncService from '@/utils/syncService.js'
 import CustomLeaveSheet from '@/components/CustomLeaveSheet.vue'
 import PaywallSheet from '@/components/PaywallSheet.vue'
+import { tap as haptic } from '@/utils/haptic.js'
 
 const holidayNameMap = {
   '元旦': 'New Year\'s',
@@ -521,6 +522,10 @@ export default {
         .replace('{r}', remain)
         .replace('{u}', used || 0);
     },
+    // 额度已用尽（含「调低额度后低于已用天数」这种超额情况）：文案标红提醒
+    isQuotaFull(used, total) {
+      return (used || 0) > 0 && (used || 0) >= (total || 0);
+    },
     getCompOffStatus(name) {
         return !!this.settings.compOffRules[name];
     },
@@ -532,12 +537,15 @@ export default {
     },
     toggleCompOff(item) {
         if (!item.hasCompOff) {
+            // 没有补班的节日点不动：给一句提示，避免用户以为卡了
+            uni.showToast({ title: this.i18n.profile.noCompOff, icon: 'none' });
             return;
         }
+        haptic('light');
         const name = item.name;
         const current = this.getCompOffStatus(name);
         this.settings.compOffRules[name] = !current;
-        uni.vibrateShort();
+        haptic('light');
         this.save();
     },
     setLanguage(lang) {
@@ -547,11 +555,11 @@ export default {
         return;
       }
       this.settings.language = lang;
-      uni.vibrateShort();
+      haptic('light');
       this.save();
     },
     onStatsTap() {
-      uni.vibrateShort();
+      haptic('light');
       if (this.isPro) {
         uni.navigateTo({ url: '/pages/stats/index' });
       } else {
@@ -567,12 +575,12 @@ export default {
       if (!this.settings.birthdayEnabled) {
         this.settings.birthdayMonth = '';
       }
-      uni.vibrateShort();
+      haptic('light');
       this.save();
     },
     selectBirthdayMonth(value) {
       this.settings.birthdayMonth = value;
-      uni.vibrateShort();
+      haptic('light');
       this.save();
     },
     onSliderChange(e, key) {
@@ -581,7 +589,7 @@ export default {
     },
     onSliderChanging(e, key) {
       this.settings[key] = e.detail.value;
-      uni.vibrateShort(); 
+      haptic('light'); 
     },
     save() {
       wioService.saveSettings(this.settings);
@@ -592,6 +600,7 @@ export default {
     },
     // ===== 账号卡 =====
     onAccountCardTap() {
+      haptic('light');
       if (!this.isLogin) {
         this.openAuthSheet('login');
         return;
@@ -616,7 +625,26 @@ export default {
       uni.showToast({ title: t('profile.logoutSuccess', this.settings.language), icon: 'none' });
     },
     // ===== 授权登录 / 完善资料弹层 =====
+    // 说明弹层与勾选等轻交互也统一给触感，避免有的地方震有的不震
+    showBirthdayInfo() {
+      haptic('light');
+      this.showBirthdaySheet = true;
+    },
+    showCompOffInfo() {
+      haptic('light');
+      this.showRuleSheet = true;
+    },
+    closeInfoSheet() {
+      haptic('light');
+      this.showBirthdaySheet = false;
+      this.showRuleSheet = false;
+    },
+    toggleAgree() {
+      haptic('light');
+      this.authForm.agreed = !this.authForm.agreed;
+    },
     openAuthSheet(mode = 'login') {
+      haptic('light');
       const cached = this.session && this.session.user ? this.session.user : {};
       this.authMode = mode;
       this.authForm = {
@@ -628,6 +656,7 @@ export default {
       this.showAuthSheet = true;
     },
     closeAuthSheet() {
+      haptic('light');
       this.showAuthSheet = false;
     },
     onChooseAvatar(e) {
@@ -688,17 +717,27 @@ export default {
     // ===== 同步卡 =====
     toggleAutoSync() {
       this.settings.autoSync = !this.settings.autoSync;
-      uni.vibrateShort();
+      haptic('light');
       this.save();
-      syncService.init();
+      // 只有开启时才立即对齐一次；关闭时不能还去拉云端覆盖本地
+      if (this.settings.autoSync) syncService.init();
     },
     async onSyncNow() {
+      haptic('light');
       uni.showLoading({ title: '' });
       try {
-        await syncService.syncNow();
+        // syncNow 内部已吞掉异常并返回结果，必须按返回值判断成败，
+        // 否则网络失败也会弹「同步成功」
+        const r = await syncService.syncNow();
         this.lastSyncAt = syncService.getLastSyncTime();
         uni.hideLoading();
-        uni.showToast({ title: t('profile.syncDone', this.settings.language), icon: 'success' });
+        if (r && r.ok) {
+          uni.showToast({ title: t('profile.syncDone', this.settings.language), icon: 'success' });
+        } else if (r && r.conflict) {
+          // 冲突由 wio:sync-conflict 事件拉起弹窗，这里不叠加提示
+        } else {
+          uni.showToast({ title: t('profile.syncFail', this.settings.language), icon: 'none' });
+        }
       } catch (err) {
         uni.hideLoading();
         console.error('sync failed', err);
@@ -711,6 +750,7 @@ export default {
       this.conflictInfo = info || null;
     },
     async onResolveLocal() {
+      haptic('medium');
       const info = this.conflictInfo;
       this.conflictInfo = null;
       try {
@@ -720,6 +760,7 @@ export default {
       }
     },
     async onResolveCloud() {
+      haptic('medium');
       const info = this.conflictInfo;
       this.conflictInfo = null;
       try {
@@ -750,7 +791,7 @@ export default {
     },
     // ===== 会员入口 =====
     goMember() {
-      uni.vibrateShort();
+      haptic('light');
       // 会员页已不是 tab 页，改为普通页面栈跳转
       uni.navigateTo({ url: '/pages/member/index' });
     },
@@ -1186,6 +1227,12 @@ export default {
   font-size: 10px;
   color: #6B7379;
   line-height: 1.4;
+}
+
+/* 额度用尽 / 超额：标红，和「已用完不能再标记」的行为对应 */
+.quota-empty {
+  color: #A63A31;
+  font-weight: 500;
 }
 
 .quota-slider {

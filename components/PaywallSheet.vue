@@ -49,7 +49,7 @@
       </view>
 
       <view class="plan-row">
-        <view class="plan-card" :class="{ selected: payPlan === 'month' }" @click="payPlan = 'month'">
+        <view class="plan-card" :class="{ selected: payPlan === 'month' }" @click="selectPlan('month')">
           <text class="plan-name">{{ i18n.profile.planMonth }}</text>
           <view class="plan-price-row">
             <text class="plan-price">¥6</text>
@@ -57,7 +57,7 @@
           </view>
           <text class="plan-sub">{{ i18n.profile.planMonthSub }}</text>
         </view>
-        <view class="plan-card plan-card-year" :class="{ selected: payPlan === 'year' }" @click="payPlan = 'year'">
+        <view class="plan-card plan-card-year" :class="{ selected: payPlan === 'year' }" @click="selectPlan('year')">
           <view class="plan-save-badge"><text class="plan-save-text">{{ i18n.profile.planSave }}</text></view>
           <text class="plan-name">{{ i18n.profile.planYear }}</text>
           <view class="plan-price-row">
@@ -82,6 +82,7 @@ import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
 import { getTrial, redeemCode } from '@/utils/auth.js'
 import { purchase } from '@/utils/pay.js'
+import { tap as haptic } from '@/utils/haptic.js'
 
 export default {
   name: 'PaywallSheet',
@@ -113,7 +114,13 @@ export default {
     }
   },
   methods: {
+    selectPlan(plan) {
+      if (this.payPlan === plan) return
+      haptic('light')
+      this.payPlan = plan
+    },
     onPayTap() {
+      haptic('medium')
       this.startPurchase()
     },
     async startPurchase() {

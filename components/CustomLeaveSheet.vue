@@ -90,6 +90,7 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { locales } from '@/utils/locales.js'
+import { tap as haptic } from '@/utils/haptic.js'
 
 export default {
   name: 'CustomLeaveSheet',
@@ -200,14 +201,15 @@ export default {
     },
     selectColor(c) {
       this.form.color = c
-      uni.vibrateShort()
+      haptic('light')
     },
     applyPreset(p) {
       this.form.name = p.name
       this.form.color = p.color
-      uni.vibrateShort()
+      haptic('light')
     },
     save() {
+      haptic('medium')
       if (!this.form.name.trim()) {
         uni.showToast({ title: this.i18n.profile.customNameRequired, icon: 'none', duration: 1500 })
         return
@@ -239,6 +241,7 @@ export default {
       })
     },
     close() {
+      haptic('light')
       this.$emit('close')
     }
   }

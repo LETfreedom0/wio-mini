@@ -12,7 +12,8 @@
 // ============================================================
 
 import { callCloud, isCloudAvailable } from './cloud.js'
-import { isLogin } from './auth.js'
+import { isLogin, updateCachedSubscription } from './auth.js'
+import { isProUser } from './pro.js'
 
 const KEY_SYNC_STATE = 'wio_sync_state' // { dataVersion, dirty, lastSyncAt }
 const KEY_BACKUP = 'wio_backup'         // 覆盖本地前的备份，防误恢复
@@ -61,15 +62,25 @@ export function buildSnapshot() {
 // ---------- 写入钩子（由 wioService 的 saveXxx 调用） ----------
 
 export function markDirty() {
-  if (!isLogin()) return
+  // 未登录也要标脏：否则「没登录时补录了几个月的数据 → 再登录」会被云端
+  // 版本号直接覆盖，本地这些记录一条不剩。标脏后登录拉取会走 push/冲突弹窗，
+  // 数据至少不会静默丢失。
   const s = getSyncState()
   s.dirty = true
   setSyncState(s)
+  if (!isLogin() || !isAutoSyncOn()) return
   schedulePush()
 }
 
+/** 自动同步开关（设置里可关）。关掉后不再自动上传/覆盖本地，只保留手动同步 */
+function isAutoSyncOn() {
+  const s = readKey('wio_settings')
+  // 缺省视为开启，与 DEFAULT_SETTINGS.autoSync 一致
+  return !(s && s.autoSync === false)
+}
+
 export function schedulePush(delay = 3000) {
-  if (!isLogin()) return
+  if (!isLogin() || !isAutoSyncOn()) return
   if (pushTimer) clearTimeout(pushTimer)
   pushTimer = setTimeout(() => {
     push().catch(() => {})
@@ -126,12 +137,10 @@ export async function pull() {
   try {
     const res = await callCloud('sync', { action: 'pull' })
     if (res.subscription) {
-      // 顺带刷新订阅缓存
-      const session = getAuth()
-      if (session) {
-        session.subscription = res.subscription
-        uni.setStorageSync('wio_auth', JSON.stringify(session))
-      }
+      // 订阅真身在云端：拉到就写回本地会话并广播，会员标识立即跟着变
+      // （这里原来直接拼 session 且引用了未 import 的 getAuth，
+      //  只要云端返回订阅就抛 ReferenceError 让整个 pull 失败）
+      updateCachedSubscription(res.subscription)
     }
     if (!res.exists) {
       const s = getSyncState()
@@ -159,12 +168,21 @@ export async function applyCloud(res) {
     uni.setStorageSync(KEY_BACKUP, JSON.stringify(buildSnapshot()))
   } catch (e) { /* 备份失败不阻断 */ }
 
+  const prevLang = readKey('wio_settings').language || 'zh-CN'
   const d = res.data || {}
   if (d.settings) uni.setStorageSync('wio_settings', JSON.stringify(d.settings))
   if (d.entries) uni.setStorageSync('wio_entries', JSON.stringify(d.entries))
   if (d.overtime) uni.setStorageSync('wio_overtime', JSON.stringify(d.overtime))
 
   applyServerState(res)
+  // 语言偏好可能随快照一起被覆盖：广播一次，避免界面还停在旧语言
+  const nextRaw = readKey('wio_settings').language || 'zh-CN'
+  const nextLang = nextRaw !== 'zh-CN' && !isProUser() ? 'zh-CN' : nextRaw
+  if (nextLang !== prevLang) {
+    try {
+      uni.$emit('wio:language-changed', nextLang)
+    } catch (e) { /* 无监听者时忽略 */ }
+  }
   uni.$emit('wio:data-restored', {})
 }
 
@@ -208,6 +226,9 @@ export async function resolveConflict(choice, conflictInfo) {
 /** App.onLaunch 调用 */
 export function init() {
   if (!isLogin()) return Promise.resolve({ ok: false, reason: 'not_login' })
+  // 关掉自动同步就完全不自动动数据：既不推也不拉。
+  // 否则「关掉开关」只是心理安慰，本地照样被云端覆盖。
+  if (!isAutoSyncOn()) return Promise.resolve({ ok: false, reason: 'auto_sync_off' })
   return pull()
 }
 
@@ -215,6 +236,7 @@ export function init() {
 export function flush() {
   const s = getSyncState()
   if (!isLogin() || !s.dirty) return Promise.resolve({ ok: true })
+  if (!isAutoSyncOn()) return Promise.resolve({ ok: false, reason: 'auto_sync_off' })
   if (pushTimer) clearTimeout(pushTimer)
   return push(true)
 }

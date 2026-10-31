@@ -161,6 +161,7 @@ import { isProUser, getProState, proExpireDate, PRO_CHANGED_EVENT } from '@/util
 import * as syncService from '@/utils/syncService.js'
 import CustomLeaveSheet from '@/components/CustomLeaveSheet.vue'
 import PaywallSheet from '@/components/PaywallSheet.vue'
+import { tap as haptic } from '@/utils/haptic.js'
 
 export default {
   name: 'MemberView',
@@ -286,7 +287,7 @@ export default {
       setTimeout(() => { this.lastNx = 0 }, 600)
     },
     openPaywall() {
-      uni.vibrateShort()
+      haptic('light')
       this.showPaywall = true
     },
     onProUpgraded() {
@@ -295,6 +296,7 @@ export default {
     },
     // ===== 返回 =====
     goBack() {
+      haptic('light')
       const pages = getCurrentPages()
       if (pages.length > 1) {
         uni.navigateBack({ delta: 1 })
@@ -321,17 +323,25 @@ export default {
     },
     toggleAutoSync() {
       this.settings.autoSync = !this.settings.autoSync
-      uni.vibrateShort()
+      haptic('light')
       wioService.saveSettings(this.settings)
-      syncService.init()
+      // 关闭自动同步时不能还去拉云端覆盖本地
+      if (this.settings.autoSync) syncService.init()
     },
     async onSyncNow() {
       uni.showLoading({ title: '' })
       try {
-        await syncService.syncNow()
+        // 按返回值判断成败（syncNow 内部吞异常，不会 throw）
+        const r = await syncService.syncNow()
         this.lastSyncAt = syncService.getLastSyncTime()
         uni.hideLoading()
-        uni.showToast({ title: t('profile.syncDone', this.settings.language), icon: 'success' })
+        if (r && r.ok) {
+          uni.showToast({ title: t('profile.syncDone', this.settings.language), icon: 'success' })
+        } else if (r && r.conflict) {
+          // 冲突由 wio:sync-conflict 事件拉起弹窗
+        } else {
+          uni.showToast({ title: t('profile.syncFail', this.settings.language), icon: 'none' })
+        }
       } catch (err) {
         uni.hideLoading()
         console.error('sync failed', err)
@@ -360,7 +370,7 @@ export default {
     },
     // ===== 统计 / 语言 =====
     onStatsTap() {
-      uni.vibrateShort()
+      haptic('light')
       if (this.isPro) {
         uni.navigateTo({ url: '/pages/stats/index' })
       } else {
@@ -374,7 +384,7 @@ export default {
         return
       }
       this.settings.language = lang
-      uni.vibrateShort()
+      haptic('light')
       wioService.saveSettings(this.settings)
       uni.showToast({ title: t('profile.saved', lang), icon: 'none' })
     },
@@ -387,6 +397,7 @@ export default {
         this.openPaywall()
         return
       }
+      haptic('light')
       this.customEditLeave = null
       this.showCustomSheet = true
     },
@@ -395,6 +406,7 @@ export default {
         this.openPaywall()
         return
       }
+      haptic('light')
       this.customEditLeave = l
       this.showCustomSheet = true
     },

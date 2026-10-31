@@ -129,6 +129,8 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { locales, getMonthName, getWeekdayName } from '@/utils/locales.js'
+import { getAuth, isLogin } from '@/utils/auth.js'
+import { tap as haptic } from '@/utils/haptic.js'
 
 export default {
   name: 'HomeView',
@@ -136,6 +138,9 @@ export default {
     return {
       location: null, // 'home' | 'company' | null
       todayStr: '',
+      nickname: '',
+      entries: {},
+      nowStamp: 0,
       showConfetti: false,
       showRocket: false,
       confettiPieces: [],
@@ -165,6 +170,8 @@ export default {
       return locales[this.settings.language] || locales['zh-CN']
     },
     currentDateStr() {
+      // 依赖 nowStamp：页面停留跨天后 onShow 也要重新计算日期
+      void this.nowStamp
       const now = new Date()
       const month = now.getMonth() + 1
       const date = now.getDate()
@@ -176,14 +183,20 @@ export default {
       }
       return `${month}月${date}日 · 星期${day}`
     },
-    // 时段问候（无账号体系，不带用户名）
+    // 时段问候 + 已登录用户的昵称
+    // 凌晨 0-4 点用「夜深了」：5 点前说「早上好」明显不对，这是之前的 bug
     greetingText() {
+      void this.nowStamp
       const h = new Date().getHours()
-      const hh = this.i18n.home
-      if (h < 11) return hh.greetingMorning
-      if (h < 13) return hh.greetingNoon
-      if (h < 18) return hh.greetingAfternoon
-      return hh.greetingEvening
+      const u = this.i18n.home
+      let base
+      if (h < 5) base = u.greetingNight
+      else if (h < 11) base = u.greetingMorning
+      else if (h < 13) base = u.greetingNoon
+      else if (h < 18) base = u.greetingAfternoon
+      else base = u.greetingEvening
+      const name = this.nickname
+      return name ? base + u.greetingJoin + name : base
     },
     targetPercentage() {
       // 首页只看当月，取当月生效比例
@@ -224,8 +237,35 @@ export default {
     fillWidth() {
       return Math.max(0, Math.min(100, this.wioPercentage))
     },
+    // 距离月底还有多少个工作日（原实现是「本月的有效工作日里还有几天没记录」，
+    // 与用户想看的「还剩多少天可以冲目标」不是一回事）
+    // 口径：今天（含）到月末逐日判断，排除：
+    //   - 已标记的假期 / 不计入（那些天本来就不用来公司）
+    //   - 自定义假期区间
+    //   - 今天若已打卡（公司/居家），从明天算起——今天这一天已经用掉了
     remainWorkDays() {
-      return Math.max(0, this.denominator - this.stats.companyDays - this.stats.homeDays)
+      const now = new Date()
+      const y = now.getFullYear()
+      const m = now.getMonth() + 1
+      const today = now.getDate()
+      const daysInMonth = new Date(y, m, 0).getDate()
+      const entries = this.entries || {}
+      const leaveStatuses = ['vacation', 'birthday', 'sick', 'unpaid', 'comp_off', 'exclude_wio']
+      // 自定义假期只取一次，避免逐日重复读存储
+      const customLeaves = wioService.getCustomLeaves()
+      const inCustomLeave = (dateStr) => customLeaves.some(l => dateStr >= l.start && dateStr <= l.end)
+
+      let count = 0
+      for (let d = today; d <= daysInMonth; d++) {
+        const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+        const status = entries[dateStr]
+        if (d === today && (status === 'company' || status === 'home')) continue
+        if (status && leaveStatuses.indexOf(status) !== -1) continue
+        if (!status && inCustomLeave(dateStr)) continue
+        if (!wioService.isOfficialWorkingDay(new Date(y, m - 1, d))) continue
+        count++
+      }
+      return count
     },
     vacationTotal() {
       return this.settings.vacationDays || 0
@@ -243,23 +283,39 @@ export default {
   },
   mounted() {
     this.initData()
+    // 云端数据覆盖本地（同步恢复 / 冲突选云端）后，首页要立刻跟着变
+    uni.$on('wio:data-restored', this.onDataRestored)
   },
-  onShow() {
-    this.settings = wioService.getSettings()
-    this.loadStats()
+  beforeUnmount() {
+    uni.$off('wio:data-restored', this.onDataRestored)
   },
   methods: {
     initData() {
       this.settings = wioService.getSettings()
       this.todayStr = wioService.getTodayDateStr()
       this.location = wioService.getEntryForDate(this.todayStr)
+      // nowStamp 触发 greeting / 日期重新计算：computed 不感知时间流逝，
+      // 页面从后台切回来（跨时段/跨天）必须手动打点
+      this.nowStamp = Date.now()
+      this.nickname = this.resolveNickname()
       this.loadStats()
+    },
+    onDataRestored() {
+      this.initData()
+    },
+    // 已登录才显示昵称；未登录保持纯问候语
+    resolveNickname() {
+      if (!isLogin()) return ''
+      const session = getAuth()
+      const name = session && session.user && session.user.nickname
+      return name ? String(name).trim() : ''
     },
     // 只读本月统计 + 年度假期统计 + 最近记录（不改动存储结构）
     loadStats() {
       const now = new Date()
       const year = now.getFullYear()
       const month = now.getMonth() + 1
+      this.entries = wioService.getEntries() || {}
       try {
         this.stats = wioService.getMonthStats(year, month)
       } catch (e) {
@@ -302,8 +358,9 @@ export default {
       })
     },
     setStatus(status) {
+      // 点击就反馈，包括点已选中的卡片（重复点也要有回应，否则像没反应）
+      haptic('light')
       if (this.location !== status) {
-        uni.vibrateShort()
         if (status === 'home') this.triggerConfetti()
         else if (status === 'company') this.triggerRocket()
       }
@@ -312,6 +369,7 @@ export default {
       this.loadStats()
     },
     goCalendar() {
+      haptic('light')
       uni.switchTab({ url: '/pages/calendar/index' })
     },
     triggerConfetti() {
@@ -403,6 +461,7 @@ export default {
   font-size: 12px;
   color: #6B737B;
   line-height: 1.4;
+  flex-shrink: 0;
 }
 
 .greeting-text {
@@ -410,6 +469,11 @@ export default {
   font-weight: 700;
   color: #15181C;
   line-height: 1.35;
+  /* 昵称可能很长：单行省略，不能把右侧日期挤走或换行破版 */
+  max-width: 64%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ===== 本月回公司率卡（低于目标 = 红卡） ===== */

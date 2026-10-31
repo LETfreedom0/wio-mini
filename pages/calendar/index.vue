@@ -146,6 +146,7 @@ import CustomTabBar from '@/components/CustomTabBar.vue'
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
 import { getTopSafeArea } from '@/utils/safeArea.js'
+import { tap as haptic } from '@/utils/haptic.js'
 
 const holidayNameMap = {
   '元旦': 'New Year\'s',
@@ -354,6 +355,11 @@ export default {
   onLoad() {
     // 状态栏 + 胶囊按钮区域，避免页面标题与手机导航栏重叠
     this.topSafeHeight = getTopSafeArea().totalHeight;
+    // 云端数据覆盖本地（同步恢复）后要重算整月标记与统计
+    uni.$on('wio:data-restored', this.loadData);
+  },
+  onUnload() {
+    uni.$off('wio:data-restored', this.loadData);
   },
   onShow() {
     this.loadData();
@@ -398,7 +404,7 @@ export default {
       this.stats = wioService.getMonthStats(this.currentYear, this.currentMonth);
     },
     changeMonth(delta) {
-      uni.vibrateShort();
+      haptic('light');
       const newDate = new Date(this.currentDate);
       newDate.setMonth(newDate.getMonth() + delta);
       this.currentDate = newDate;
@@ -413,11 +419,7 @@ export default {
     selectLegend(item) {
       // 自定义假期图例仅作展示，不支持点选标记（区间在设置中配置）
       if (item.isCustom) return;
-      uni.vibrateShort({
-        success: function () {
-            console.log('success');
-        }
-      });
+      haptic('light');
       
       this.selectedStatus = item.value;
       if (item.value === 'clear') {
@@ -429,7 +431,7 @@ export default {
       }
     },
     selectBirthdayLegend() {
-      uni.vibrateShort();
+      haptic('light');
       this.selectedStatus = 'birthday';
       uni.showToast({
         title: this.i18n.calendar.clickDateToMark,
@@ -438,13 +440,12 @@ export default {
       });
     },
     onDayClick(day) {
-      uni.vibrateShort();
+      haptic('light');
       const currentTime = new Date().getTime();
       const dateStr = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
       if (this.lastClickDay === day && (currentTime - this.lastClickTime) < 300) {
         wioService.saveEntry(dateStr, null);
-        uni.vibrateShort();
         this.loadData();
         this.lastClickTime = 0;
         this.lastClickDay = null;
@@ -469,6 +470,17 @@ export default {
         }
       }
 
+      // 年假 / 病假：额度用满必须明确告知并拒绝，不能默默标上去
+      // （数据层 saveEntry 也会拦一道，这里负责把原因说清楚）
+      if (this.selectedStatus === 'vacation' || this.selectedStatus === 'sick') {
+        const alreadySame = this.entries[dateStr] === this.selectedStatus;
+        const quota = wioService.getLeaveQuota(this.selectedStatus, this.currentYear);
+        if (quota && quota.full && !alreadySame) {
+          this.showLeaveLimitModal(this.selectedStatus);
+          return;
+        }
+      }
+
       if (this.selectedStatus === 'clear') {
         wioService.saveEntry(dateStr, null);
       } else if (this.selectedStatus === 'overtime_record') {
@@ -486,10 +498,29 @@ export default {
         console.log('Modal state set to true');
         return;
       } else {
-        wioService.saveEntry(dateStr, this.selectedStatus);
+        // 数据层是最后一道闸：返回 false 说明额度已满（跨月/跨年统计口径
+        // 与 UI 预检不一致时会走到这里），必须把原因告知用户
+        const saved = wioService.saveEntry(dateStr, this.selectedStatus);
+        if (saved === false) {
+          this.showLeaveLimitModal(this.selectedStatus);
+          return;
+        }
       }
       
       this.loadData();
+    },
+    // 假期额度用满的统一提示
+    showLeaveLimitModal(status) {
+      const cal = this.i18n.calendar;
+      const isVacation = status === 'vacation';
+      const quota = wioService.getLeaveQuota(status, this.currentYear) || { total: 0 };
+      const body = (isVacation ? cal.vacationLimit : cal.sickLimit).replace('{total}', quota.total);
+      uni.showModal({
+        title: isVacation ? cal.legends.vacation : cal.legends.sick,
+        content: body + '\n' + cal.leaveLimitHint,
+        showCancel: false,
+        confirmText: this.i18n.common.confirm
+      });
     },
     changeOvertime(delta) {
       console.log('changeOvertime called', delta, 'current:', this.overtimeValue);
@@ -502,7 +533,7 @@ export default {
       console.log('new overtimeValue:', this.overtimeValue);
       
       this.saveOvertime();
-      uni.vibrateShort();
+      haptic('light');
     },
     saveOvertime() {
       const hours = this.overtimeValue;
@@ -528,7 +559,7 @@ export default {
     onDayLongPress(day) {
        const dateStr = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
        wioService.saveEntry(dateStr, null);
-       uni.vibrateShort();
+       haptic('medium');
        this.loadData();
     },
     getHolidayInfo(day) {

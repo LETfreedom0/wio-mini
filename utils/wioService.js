@@ -106,6 +106,10 @@ export default {
         }
       }
       uni.setStorageSync(KEY_SETTINGS, JSON.stringify(settings));
+      // 生日假配置（开关 / 月份）一旦变动，历史标记的生日假全部作废：
+      // 生日假是与「生日月份」绑定的福利，改了月份或关掉后旧标记既无意义，
+      // 还会继续扣减 WIO 分母、占用额度，必须清掉让用户在新月份重新标记。
+      this._clearBirthdayEntriesIfChanged(existing, settings);
       markDirty();
       // 语言是全局偏好：从任一入口（我的 / 会员页）切换后广播，
       // 让已挂载的视图立即刷新文案——组件的 onShow 不保证被触发，不能各自等重读
@@ -117,6 +121,29 @@ export default {
       }
     } catch (e) {
       console.error('Error saving settings', e);
+    }
+  },
+
+  // 生日假配置变动 → 清空所有已标记的生日假（见 saveSettings 调用处说明）
+  _clearBirthdayEntriesIfChanged(prev, next) {
+    if (!prev || !next) return;
+    const enabledChanged = !!next.birthdayEnabled !== !!prev.birthdayEnabled;
+    const monthChanged = String(next.birthdayMonth || '') !== String(prev.birthdayMonth || '');
+    if (!enabledChanged && !monthChanged) return;
+    try {
+      const entries = this.getEntries();
+      let removed = 0;
+      Object.keys(entries).forEach(d => {
+        if (entries[d] === 'birthday') {
+          delete entries[d];
+          removed++;
+        }
+      });
+      if (removed > 0) {
+        uni.setStorageSync(KEY_ENTRIES, JSON.stringify(entries));
+      }
+    } catch (e) {
+      console.error('clear birthday entries failed', e);
     }
   },
 
@@ -241,6 +268,15 @@ export default {
   saveEntry(dateStr, status) {
     try {
       const entries = this.getEntries();
+      // 额度硬约束（不只做 UI 提示）：年假 / 病假用满后不允许再标记。
+      // 放在数据层，返回键 / 脚本绕过 UI 时同样拦得住；清空操作始终放行。
+      // 同一天重复标记同一状态是幂等的，不能因为「已用满」而拦掉。
+      if (status === 'vacation' || status === 'sick') {
+        if (entries[dateStr] !== status) {
+          const quota = this.getLeaveQuota(status, String(dateStr).slice(0, 4));
+          if (quota && quota.full) return false;
+        }
+      }
       if (status) {
         entries[dateStr] = status;
       } else {
@@ -248,9 +284,29 @@ export default {
       }
       uni.setStorageSync(KEY_ENTRIES, JSON.stringify(entries));
       markDirty();
+      return true;
     } catch (e) {
       console.error('Error saving entry', e);
+      return false;
     }
+  },
+
+  // 年假 / 病假的年度额度（统计口径：全年所有该状态条目）
+  // 返回 null 表示该状态不受额度约束
+  getLeaveQuota(status, year) {
+    const keyMap = { vacation: 'vacationDays', sick: 'sickDays' };
+    const key = keyMap[status];
+    if (!key) return null;
+    const s = this.getSettings();
+    const total = Math.max(0, Number(s[key]) || 0);
+    let used = 0;
+    try {
+      const st = this.getYearStats(Number(year) || new Date().getFullYear());
+      used = status === 'vacation' ? st.vacationDaysUsed : st.sickDaysUsed;
+    } catch (e) {
+      used = 0;
+    }
+    return { total, used, left: Math.max(0, total - used), full: used >= total };
   },
 
   // --- Overtime (Date: Hours) ---

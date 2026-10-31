@@ -2,6 +2,10 @@
 	import { initCloud } from './utils/cloud.js'
 	import { init as cloudInit, flush as cloudFlush } from './utils/syncService.js'
 
+	// 首次 onShow 紧跟 onLaunch（那里已经 pull 过），避免启动时白拉两次；
+	// 之后每次从后台切回都补一次拉取，多设备改的数据才能及时合并进来
+	let hasShownOnce = false
+
 	export default {
 		onLaunch: function() {
 			console.log('App Launch')
@@ -48,6 +52,9 @@
 		onShow: function() {
 			console.log('App Show')
 			uni.hideTabBar()
+			// 从后台切回：云端可能有另一台设备的修改，补一次拉取比对
+			if (hasShownOnce) cloudInit().catch(() => {})
+			hasShownOnce = true
 		},
 		onHide: function() {
 			console.log('App Hide')
