@@ -61,9 +61,14 @@
       </view>
 
       <!-- Calendar Card -->
-      <view class="card calendar-card">
+      <view class="card calendar-card" @touchstart="onCardTouchStart" @touchend="onCardTouchEnd">
         <view class="calendar-header">
-          <text class="month-year">{{ monthYearText }}</text>
+          <view class="month-group">
+            <text class="month-year">{{ monthYearText }}</text>
+            <view v-if="!isCurrentMonth" class="back-current" @click="backToCurrentMonth">
+              <text class="back-current-text">{{ i18n.calendar.backToCurrent }}</text>
+            </view>
+          </view>
           <view class="nav-arrows">
             <view class="nav-btn" @click="changeMonth(-1)">
                <text class="arrow-icon">←</text>
@@ -195,7 +200,12 @@ export default {
       overtimeValue: 0,
       currentOvertimeDateStr: '',
       lastNx: 0,
-      scrollTimer: null
+      scrollTimer: null,
+      // 打点让「是否本月」随时间重算（computed 不感知时间流逝）
+      nowStamp: 0,
+      // 左右滑动切月的起点，null = 没有进行中的手势
+      swipeStartX: null,
+      swipeStartY: null
     }
   },
   computed: {
@@ -234,6 +244,12 @@ export default {
     },
     currentMonth() {
       return this.currentDate.getMonth() + 1;
+    },
+    // 当前翻到的月份是不是"真实的这个月"；不是才需要「回到本月」入口
+    isCurrentMonth() {
+      const stamp = this.nowStamp; // 依赖打点，跨月/回到页面时能重算
+      const now = new Date(stamp || Date.now());
+      return this.currentYear === now.getFullYear() && this.currentMonth === now.getMonth() + 1;
     },
     daysInMonth() {
       return new Date(this.currentYear, this.currentMonth, 0).getDate();
@@ -362,6 +378,7 @@ export default {
     uni.$off('wio:data-restored', this.loadData);
   },
   onShow() {
+    this.nowStamp = Date.now();
     this.loadData();
   },
   onPageScroll(e) {
@@ -409,6 +426,34 @@ export default {
       newDate.setMonth(newDate.getMonth() + delta);
       this.currentDate = newDate;
       this.updateStats();
+    },
+    // 一键跳回真实当月（连翻几个月后不用再一格格点回来）
+    backToCurrentMonth() {
+      haptic('medium');
+      const now = new Date();
+      this.nowStamp = now.getTime();
+      if (this.isCurrentMonth) return;
+      this.currentDate = new Date(now);
+      this.updateStats();
+    },
+    onCardTouchStart(e) {
+      if (!e.touches || !e.touches.length) return;
+      this.swipeStartX = e.touches[0].clientX;
+      this.swipeStartY = e.touches[0].clientY;
+    },
+    onCardTouchEnd(e) {
+      if (this.swipeStartX === null) return;
+      const t = (e.changedTouches && e.changedTouches[0]) || null;
+      const startX = this.swipeStartX;
+      const startY = this.swipeStartY;
+      this.swipeStartX = null;
+      this.swipeStartY = null;
+      if (!t) return;
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      // 阈值 60px 且必须明显偏横向，避免上下滑动页面时误切月
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      this.changeMonth(dx < 0 ? 1 : -1);
     },
     isToday(day) {
       const now = new Date();
@@ -895,9 +940,39 @@ export default {
   margin-bottom: 15px;
 }
 
+.month-group {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .month-year {
   font-size: 18px;
   font-weight: bold;
+  white-space: nowrap;
+}
+
+/* 「回到本月」：轻量 pill，只在翻到别的月份时出现 */
+.back-current {
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background-color: #EAF2F0;
+  transition: all 0.15s ease;
+}
+
+.back-current:active {
+  background-color: #DCEAE7;
+  transform: scale(0.96);
+}
+
+.back-current-text {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: #0E6E62;
 }
 
 .nav-arrows {

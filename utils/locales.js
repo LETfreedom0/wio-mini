@@ -63,6 +63,7 @@ export const locales = {
       legendHint: '点击选择后标记日历',
       clickToClear: '请点击日期清除状态',
       overtime: '加班时长',
+      backToCurrent: '回到本月',
       weekdays: ['日', '一', '二', '三', '四', '五', '六'],
       legends: {
         company: '公司办公',
@@ -348,6 +349,7 @@ export const locales = {
       legendHint: 'Tap to select and mark calendar',
       clickToClear: 'Please tap a date to clear status',
       overtime: 'Overtime Hours',
+      backToCurrent: 'This month',
       weekdays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
       legends: {
         company: 'Off',
