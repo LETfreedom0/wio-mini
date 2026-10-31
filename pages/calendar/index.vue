@@ -82,7 +82,7 @@
           <view v-for="n in startEmptyDays" :key="'empty-'+n" class="day-cell empty"></view>
           
           <view v-for="day in daysInMonth" :key="day" class="day-cell" @click="onDayClick(day)" @longpress="onDayLongPress(day)">
-            <view class="day-content" :class="[getDayClass(day), { 'today-mark': isToday(day) }]" :style="getCustomStyle(day)">
+            <view class="day-content" :class="[getDayClass(day), { 'today-highlight': isToday(day) }]" :style="getCustomStyle(day)">
               <text class="day-number">{{ day }}</text>
               <view v-if="getOvertimeDisplay(day)" class="overtime-badge">{{ getOvertimeDisplay(day) }}</view>
               <text v-if="getHolidayName(day)" class="holiday-text" :class="{'text-work': isHolidayWork(day), 'english': settings.language === 'en-US'}">{{ getHolidayDisplayName(day) }}</text>
@@ -1014,17 +1014,60 @@ export default {
 .home-office { background-color: #BBDEFB; color: #1565C0; }
 .company-office { background-color: #C8E6C9; color: #2E7D32; }
 
-/* ===== 今日：只用字重区分，不上任何颜色 =====
-   之前的蓝底/蓝框/脉冲光晕会和状态标记色（绿/蓝/红）正面打架，
-   同一天既"是今天"又"已标记"时看不出到底是哪种状态，故全部移除。
-   现在仅把今日数字加重加深，与标记色互不干扰。 */
-.today-mark {
-  font-weight: 700;
+/* ===== 今日标识 =====
+   只去掉「底色 + 字色」这层填充——它会把已标记日子的绿/红/橙整片盖掉，
+   同一天既"是今天"又"已标记"时分不清到底什么状态。
+   描边、外光晕、底部蓝点、脉冲动画全部保留：这些是外圈/角标，
+   和格子内部的标记色不抢位。 */
+.today-highlight {
+  position: relative;
+  font-weight: bold;
+  animation: pulse 2s infinite;
 }
 
-/* 今日且当天尚无标记时，把数字压深一档，方便一眼定位 */
-.today-mark:not(.company-office):not(.home-office):not(.status-vacation):not(.status-birthday):not(.status-comp-off):not(.status-sick):not(.status-unpaid):not(.status-public):not(.status-exclude-wio):not(.status-custom) {
-  color: #15181C;
+.today-highlight::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  width: 6px;
+  height: 6px;
+  background-color: #1976D2;
+  border-radius: 50%;
+  box-shadow: 0 0 4px rgba(25, 118, 210, 0.5);
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(25, 118, 210, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(25, 118, 210, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(25, 118, 210, 0);
+  }
+}
+
+/* 无标记的今天：留蓝框蓝字，只是不再铺蓝底（蓝底才是盖住标记色的元凶） */
+.today-highlight:not(.company-office):not(.home-office):not(.status-vacation):not(.status-birthday):not(.status-comp-off):not(.status-sick):not(.status-unpaid):not(.status-public):not(.status-exclude-wio):not(.status-custom) {
+  color: #1976D2;
+  border: 2px solid #1976D2;
+  border-radius: 12px;
+}
+
+/* 已标记的今天：标记底色照原样显示，只叠蓝框 + 外光晕 */
+.today-highlight.company-office,
+.today-highlight.home-office,
+.today-highlight.status-vacation,
+.today-highlight.status-birthday,
+.today-highlight.status-comp-off,
+.today-highlight.status-sick,
+.today-highlight.status-unpaid,
+.today-highlight.status-public,
+.today-highlight.status-exclude-wio,
+.today-highlight.status-custom {
+  border: 3px solid #1976D2;
+  border-radius: 12px;
 }
 
 .legend-header {

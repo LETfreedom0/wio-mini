@@ -30,3 +30,6 @@ Thumbs.db
 .devtools/
 .playwright-mcp/
 supabase/.temp/
+
+# 每次构建都会变的预览二维码
+.workbuddy/preview/
