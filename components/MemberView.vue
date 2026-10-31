@@ -156,7 +156,7 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
-import { getAuth } from '@/utils/auth.js'
+import { getAuth, refreshSubscription } from '@/utils/auth.js'
 import { isProUser, getProState, proExpireDate, PRO_CHANGED_EVENT } from '@/utils/pro.js'
 import * as syncService from '@/utils/syncService.js'
 import CustomLeaveSheet from '@/components/CustomLeaveSheet.vue'
@@ -232,6 +232,9 @@ export default {
     this.load()
     this.bindSync()
     uni.$on(PRO_CHANGED_EVENT, this.onProChanged)
+    // 订阅的真身在云端数据库，本地只是镜像：进页面时对齐一次，
+    // 避免「已经付过钱、但本地缓存还是旧的」导致页面显示未开通
+    refreshSubscription()
   },
   beforeUnmount() {
     this.unbindSync()

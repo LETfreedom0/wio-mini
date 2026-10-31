@@ -294,7 +294,7 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
-import { login, getAuth, logout, updateCachedUser, uploadAvatar } from '@/utils/auth.js'
+import { login, getAuth, logout, updateCachedUser, uploadAvatar, refreshSubscription } from '@/utils/auth.js'
 import { isProUser, getProState, proExpireDate, PRO_CHANGED_EVENT } from '@/utils/pro.js'
 import * as syncService from '@/utils/syncService.js'
 import CustomLeaveSheet from '@/components/CustomLeaveSheet.vue'
@@ -451,6 +451,8 @@ export default {
     uni.$on('wio:language-changed', this.onLanguageChanged);
     // 登录 / 退出 / 核销 / 订阅刷新后重算 isPro
     uni.$on(PRO_CHANGED_EVENT, this.onProChanged);
+    // 订阅真身在云端，本地只是镜像：启动时对齐一次，会员入口卡的徽章才不会过期
+    refreshSubscription();
   },
   beforeUnmount() {
     this.unbindSync();

@@ -108,9 +108,9 @@ function requestVirtualPayment(payData) {
 }
 
 /** 支付成功后服务端发货是异步的（发货推送），这里轮询查单确认入账 */
-async function waitForDeliver(outTradeNo, times = 6) {
+async function waitForDeliver(outTradeNo, times = 6, gap = 1200) {
   for (let i = 0; i < times; i++) {
-    if (i > 0) await new Promise((r) => setTimeout(r, 1200))
+    if (i > 0) await new Promise((r) => setTimeout(r, gap))
     try {
       const r = await callCloud('pay', { action: 'query', outTradeNo })
       if (r && r.ok && r.paid) return r
@@ -119,6 +119,22 @@ async function waitForDeliver(outTradeNo, times = 6) {
     }
   }
   return null
+}
+
+/**
+ * 后台补确认：钱已经付了，只是服务端还没确认入账。
+ * 不阻塞界面（付款墙立刻关闭），确认到账后写本地订阅并广播，
+ * 会员标识自动变化；确认失败也不打扰用户，交给云函数定时查单兜底。
+ */
+async function confirmInBackground(outTradeNo, plan) {
+  try {
+    const r = await waitForDeliver(outTradeNo, 12, 1500)
+    if (r && r.expiresAt) {
+      updateCachedSubscription({ plan: r.plan || plan, expiresAt: r.expiresAt })
+    }
+  } catch (e) {
+    // 静默失败：定时查单会补
+  }
 }
 
 /**
@@ -146,13 +162,16 @@ export async function purchase(plan = 'year') {
 
   await requestVirtualPayment(order)
 
-  // 支付已成功，等服务器确认发货；推送慢时给前端一个 pending 态
-  const delivered = await waitForDeliver(order.outTradeNo)
-  if (delivered && delivered.expiresAt) {
-    updateCachedSubscription({ plan: delivered.plan || plan, expiresAt: delivered.expiresAt })
-    return { plan: delivered.plan || plan, expiresAt: delivered.expiresAt }
+  // 支付已成功。先快速探两次（服务端通常 1 秒内入账），没探到就立刻返回 pending，
+  // 让付款墙马上关闭，剩下的确认交给后台轮询。
+  // 之前是同步等 6 次、每次 1.2 秒，用户会盯着「唤起支付」的 loading 以为卡死在付款墙。
+  const quick = await waitForDeliver(order.outTradeNo, 2, 800)
+  if (quick && quick.expiresAt) {
+    updateCachedSubscription({ plan: quick.plan || plan, expiresAt: quick.expiresAt })
+    return { plan: quick.plan || plan, expiresAt: quick.expiresAt }
   }
 
-  // 钱已付、货未确认：不让用户重复付费，交给后台查单兜底
+  // 钱已付、货未确认：不让用户重复付费，后台继续确认，云函数定时查单兜底
+  confirmInBackground(order.outTradeNo, plan)
   return { plan, expiresAt: 0, pending: true, outTradeNo: order.outTradeNo }
 }

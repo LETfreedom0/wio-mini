@@ -73,6 +73,24 @@ export function updateCachedSubscription(sub) {
 }
 
 /**
+ * 从云端重新拉取订阅状态并写回本地会话（不动登录态与资料）。
+ * 用途：付款在别处完成、定时查单补发货、或本地缓存落后于服务端时校正。
+ * 订阅的真身在云端数据库，本地只是镜像，所以进会员页时对齐一次。
+ */
+export async function refreshSubscription() {
+  if (!isCloudAvailable() || !isLogin()) return null
+  try {
+    const res = await callCloud('login', {})
+    if (!res || res.ok === false) return null
+    uni.setStorageSync(KEY_AUTH, JSON.stringify(res))
+    notifyProChanged()
+    return res.subscription || null
+  } catch (e) {
+    return null
+  }
+}
+
+/**
  * 退出登录（只清本地会话与兑换码试用，云端数据保留）
  * 退出后必须立刻失去 PRO 权益：订阅在会话里、试用在本地，一并清掉，
  * 再广播一次让所有页面重算 isPro，避免残留「退了还能用」

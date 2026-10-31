@@ -99,37 +99,51 @@ function httpsRequest(method, urlStr, bodyStr) {
 
 // ---------------- access_token（带缓存，避免高频刷新被限） ----------------
 
+// cgi-bin/token 每取一次都会让上一个 token 失效，而云函数是多实例的，
+// 只要别处再取一次（控制台调试、另一个函数、甚至另一台机器），本地缓存立刻变成废票，
+// 表现为 query_order 报 invalid credential → 反查失败 → 付了钱也发不出货。
+// stable_token 同一 appid 反复调用返回同一个 token，且可指定 force_refresh，是官方推荐做法。
+const TOKEN_INVALID_CODES = [40001, 40014, 42001]
+
 let memToken = { token: '', exp: 0 }
 
-async function getAccessToken() {
-  if (memToken.token && Date.now() < memToken.exp) return memToken.token
+async function fetchAccessToken(forceRefresh) {
+  const body = JSON.stringify({
+    grant_type: 'client_credential',
+    appid: APPID,
+    secret: APP_SECRET,
+    force_refresh: !!forceRefresh
+  })
+  const r = await httpsRequest('POST', 'https://api.weixin.qq.com/cgi-bin/stable_token', body)
+  if (!r.access_token) throw new Error('access_token 获取失败: ' + JSON.stringify(r))
+  return { token: r.access_token, exp: Date.now() + ((r.expires_in || 7200) - 300) * 1000 }
+}
+
+async function getAccessToken(forceRefresh) {
+  if (!forceRefresh && memToken.token && Date.now() < memToken.exp) return memToken.token
 
   const col = db.collection('sys_cache')
-  try {
-    const doc = await col.doc('wx_access_token').get()
-    const d = doc && doc.data
-    if (d && d.token && d.exp > Date.now() + 60000) {
-      memToken = { token: d.token, exp: d.exp }
-      return d.token
-    }
-  } catch (e) { /* 集合或文档不存在时忽略 */ }
+  if (!forceRefresh) {
+    try {
+      const doc = await col.doc('wx_access_token').get()
+      const d = doc && doc.data
+      if (d && d.token && d.exp > Date.now() + 60000) {
+        memToken = { token: d.token, exp: d.exp }
+        return d.token
+      }
+    } catch (e) { /* 集合或文档不存在时忽略 */ }
+  }
 
-  const r = await httpsRequest(
-    'GET',
-    `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${APPID}&secret=${APP_SECRET}`
-  )
-  if (!r.access_token) throw new Error('access_token 获取失败: ' + JSON.stringify(r))
-
-  const exp = Date.now() + (r.expires_in - 300) * 1000
-  memToken = { token: r.access_token, exp }
+  const fresh = await fetchAccessToken(forceRefresh)
+  memToken = fresh
   try {
-    await col.doc('wx_access_token').set({ data: { token: r.access_token, exp } })
+    await col.doc('wx_access_token').set({ data: fresh })
   } catch (e) {
     try {
-      await col.add({ data: { _id: 'wx_access_token', token: r.access_token, exp } })
+      await col.add({ data: { _id: 'wx_access_token', token: fresh.token, exp: fresh.exp } })
     } catch (e2) { /* 并发写入冲突可忽略 */ }
   }
-  return r.access_token
+  return fresh.token
 }
 
 /** 用 wx.login 的 code 换 session_key（用户态签名唯一来源） */
@@ -168,6 +182,9 @@ async function deliver(openid, order, wxOrderId) {
       plan: order.plan,
       status: 'active',
       wx_order_id: key,
+      // 集合上残留了 wx_transaction_id 的唯一索引（历史遗留），空值只允许一条，
+      // 不写就会导致「第二次购买必然写库失败」。写入平台单号满足唯一性。
+      wx_transaction_id: key,
       out_trade_no: order.out_trade_no,
       started_at: Date.now(),
       expires_at: expiresAt
@@ -186,20 +203,47 @@ async function deliver(openid, order, wxOrderId) {
 async function queryOrderAndDeliver(openid, order) {
   const bodyStr = JSON.stringify({ openid, env: 0, order_id: order.out_trade_no })
   const paySig = hmacHex('/xpay/query_order&' + bodyStr, APP_KEY)
-  const token = await getAccessToken()
-  const r = await httpsRequest(
-    'POST',
-    `https://api.weixin.qq.com/xpay/query_order?access_token=${token}&pay_sig=${paySig}`,
-    bodyStr
-  )
 
-  if (r.errcode) return { ok: false, code: 'query_failed', message: r.errmsg || String(r.errcode) }
+  const doQuery = async (forceRefresh) => {
+    const token = await getAccessToken(forceRefresh)
+    return httpsRequest(
+      'POST',
+      `https://api.weixin.qq.com/xpay/query_order?access_token=${token}&pay_sig=${paySig}`,
+      bodyStr
+    )
+  }
+
+  let r = await doQuery(false)
+  // token 被别处刷新会返回 40001/40014/42001，清缓存强制刷新后重试一次即可恢复
+  if (r && TOKEN_INVALID_CODES.indexOf(Number(r.errcode)) >= 0) {
+    r = await doQuery(true)
+  }
+
+  if (r.errcode) {
+    // 268490002「数据不存在」= 平台侧根本没有这笔单（例如下单就被 -15013 拦掉了），
+    // 属于确定未支付，交给定时查单按过期清理，不要当成临时故障一直挂着
+    if (Number(r.errcode) === 268490002) {
+      return { ok: true, paid: false, status: -1, notFound: true }
+    }
+    return { ok: false, code: 'query_failed', message: r.errmsg || String(r.errcode) }
+  }
 
   // status: 2 已支付待发货 / 4 已发货 / 5 已退款 / 7 退款失败 / 8 用户退款完成
   const st = r.order && Number(r.order.status)
+  const wxOrderId = (r.order && r.order.wx_order_id) || ''
+
+  // 已退款：只标记订单，不擅自收回权益（是否收回由业务决定，避免误伤）
+  if (st === 5 || st === 8) {
+    if (order.status !== 'refunded') {
+      await db.collection('payment_orders').doc(order._id).update({
+        data: { status: 'refunded', wx_order_id: wxOrderId, refunded_at: Date.now() }
+      })
+    }
+    return { ok: true, paid: false, status: st, refunded: true }
+  }
+
   if (st !== 2 && st !== 4) return { ok: true, paid: false, status: st }
 
-  const wxOrderId = (r.order && r.order.wx_order_id) || ''
   const rec = await deliver(openid, order, wxOrderId)
   return { ok: true, paid: true, already: rec.already, plan: rec.plan, expiresAt: rec.expiresAt }
 }
