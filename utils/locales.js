@@ -49,7 +49,12 @@ export const locales = {
       leaveUsed: '已用',
       recentRecords: '最近记录',
       noRecord: '还没有记录，今天开始打卡吧',
-      countDays: '天'
+      countDays: '天',
+      leaveLegend: '休假',
+      mixTotal: '共 {n} 天',
+      gapAchievedOver: '超出目标 {n}%',
+      gapRemain: '还剩 {n} 个工作日',
+      gapNeed: '再去 {n} 天就够'
     },
     calendar: {
       monthlyWio: '月度 WIO',
@@ -335,7 +340,12 @@ export const locales = {
       leaveUsed: 'Used',
       recentRecords: 'Recent',
       noRecord: 'No records yet, start today',
-      countDays: 'd'
+      countDays: 'd',
+      leaveLegend: 'Leave',
+      mixTotal: '{n} days total',
+      gapAchievedOver: '{n}% above target',
+      gapRemain: '{n} working days left',
+      gapNeed: '{n} more days to go'
     },
     calendar: {
       monthlyWio: 'Monthly WIO',

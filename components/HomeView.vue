@@ -42,26 +42,35 @@
               <text class="big-number">{{ wioPercentage }}</text>
               <text class="percent-sign">%</text>
             </view>
-            <text class="gap-note">{{ gapText }}</text>
+            <view class="gap-note">
+              <text class="gap-line">{{ gapLine1 }}</text>
+              <text class="gap-line" v-if="gapLine2">{{ gapLine2 }}</text>
+            </view>
           </view>
 
-          <view class="progress-track">
-            <view class="progress-fill" :style="{ width: fillWidth + '%' }"></view>
+          <!-- 本月构成条：三段按各自天数占比例分格，天数直接印在段内 -->
+          <view class="mix-track">
+            <view
+              v-for="seg in mixSegments"
+              :key="seg.key"
+              class="mix-seg"
+              :class="'seg-' + seg.key"
+              :style="{ flexGrow: seg.days }"
+            >
+              <text class="mix-num">{{ seg.days }}</text>
+              <text class="mix-unit">{{ i18n.home.countDays }}</text>
+            </view>
           </view>
 
-          <view class="stats-row">
-            <view class="stat-col">
-              <text class="stat-value">{{ stats.companyDays }} {{ i18n.home.countDays }}</text>
-              <text class="stat-label">{{ i18n.home.workFromCompany }}</text>
+          <!-- 段名图例：只负责把颜色翻译成「公司 / 居家 / 休假」，数字不在这里重复 -->
+          <view class="mix-legend">
+            <view class="mix-legend-items">
+              <view class="mix-legend-item" v-for="seg in mixSegments" :key="seg.key">
+                <view class="mix-dot" :class="'dot-' + seg.key"></view>
+                <text class="mix-legend-text">{{ seg.label }}</text>
+              </view>
             </view>
-            <view class="stat-col">
-              <text class="stat-value">{{ stats.homeDays }} {{ i18n.home.countDays }}</text>
-              <text class="stat-label">{{ i18n.home.workFromHome }}</text>
-            </view>
-            <view class="stat-col">
-              <text class="stat-value">{{ remainWorkDays }} {{ i18n.home.countDays }}</text>
-              <text class="stat-label">{{ i18n.home.remainWorkDays }}</text>
-            </view>
+            <text class="mix-total">{{ mixTotalText }}</text>
           </view>
         </view>
 
@@ -229,13 +238,41 @@ export default {
       const needCompany = Math.ceil((this.targetPercentage / 100) * this.denominator)
       return Math.max(0, needCompany - this.stats.companyDays)
     },
-    gapText() {
-      if (this.isAchieved) return this.i18n.home.achieved
+    // 大数字旁的解读：达标讲成果，未达标讲可行性（还剩几天 + 还差几天）
+    gapLine1() {
       const u = this.i18n.home
-      return `${u.daysToGo} ${this.gapDays} ${u.daysToGoUnit}${u.achievedSuffix}`
+      if (this.isAchieved) {
+        const over = this.wioPercentage - this.targetPercentage
+        return u.gapAchievedOver.replace('{n}', over)
+      }
+      return u.gapRemain.replace('{n}', this.remainWorkDays)
     },
-    fillWidth() {
-      return Math.max(0, Math.min(100, this.wioPercentage))
+    gapLine2() {
+      if (this.isAchieved) return ''
+      return this.i18n.home.gapNeed.replace('{n}', this.gapDays)
+    },
+    // 休假合计：与分母的扣减项保持一致（年假/生日假/病假/无薪/调休/不计入/自定义假期）
+    leaveTotalDays() {
+      const s = this.stats || {}
+      return (s.vacationDays || 0) + (s.birthdayDays || 0) + (s.sickDays || 0)
+           + (s.unpaidDays || 0) + (s.compOffDays || 0) + (s.excludeWioDays || 0)
+           + (s.customLeaveDays || 0)
+    },
+    // 构成条三段：天数为 0 的段不渲染，避免出现「0 天」的空段占位
+    mixSegments() {
+      const u = this.i18n.home
+      const list = [
+        { key: 'company', days: this.stats.companyDays || 0, label: u.workFromCompany },
+        { key: 'home', days: this.stats.homeDays || 0, label: u.workFromHome },
+        { key: 'leave', days: this.leaveTotalDays, label: u.leaveLegend }
+      ]
+      return list.filter(item => item.days > 0)
+    },
+    mixTotal() {
+      return this.mixSegments.reduce((sum, item) => sum + item.days, 0)
+    },
+    mixTotalText() {
+      return this.i18n.home.mixTotal.replace('{n}', this.mixTotal)
     },
     // 距离月底还有多少个工作日（原实现是「本月的有效工作日里还有几天没记录」，
     // 与用户想看的「还剩多少天可以冲目标」不是一回事）
@@ -537,7 +574,7 @@ export default {
 
 .number-row {
   display: flex;
-  align-items: baseline;
+  align-items: flex-end;
   justify-content: space-between;
 }
 
@@ -567,65 +604,172 @@ export default {
 }
 
 .gap-note {
-  font-size: 12px;
-  color: #F6D8D2;
-  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  max-width: 54%;
 }
 
-.card-ok .gap-note {
+.gap-line {
+  font-size: 12px;
+  color: #F6D8D2;
+  line-height: 1.45;
+}
+
+.card-ok .gap-line {
   color: #D8EFEA;
 }
 
-.progress-track {
-  position: relative;
+/* ===== 本月构成条：按天数分段，天数直接印在段里 ===== */
+.mix-track {
+  display: flex;
+  gap: 2px;
   width: 100%;
-  height: 6px;
-  border-radius: 3px;
-  background: #BF6157;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.15);
   overflow: hidden;
 }
 
-.card-ok .progress-track {
-  background: #2E897C;
-}
-
-.progress-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 6px;
-  border-radius: 3px;
-  background: #FFFFFF;
-  transition: width 0.5s cubic-bezier(0.25, 0.8, 0.3, 1);
-}
-
-.stats-row {
+.mix-seg {
+  flex-basis: 0;
+  /* 窄段最小 46px：再窄就装不下「2 天」，数字会挤到段外 */
+  min-width: 46px;
+  border-radius: 10px;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.stat-col {
-  display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 3px;
 }
 
-.stat-value {
+.mix-num {
   font-size: 17px;
   font-weight: 600;
-  color: #FFFFFF;
-  line-height: 1.3;
+  line-height: 1;
 }
 
-.stat-label {
+.mix-unit {
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* 公司：最实的一段 */
+.seg-company {
+  background: rgba(255, 255, 255, 0.93);
+}
+
+.seg-company .mix-num {
+  color: #7C2A23;
+}
+
+.seg-company .mix-unit {
+  color: #A4554C;
+}
+
+/* 居家：半透，和公司拉开层次 */
+.seg-home {
+  background: rgba(255, 255, 255, 0.50);
+}
+
+.seg-home .mix-num {
+  color: #7C2A23;
+}
+
+.seg-home .mix-unit {
+  color: #A4554C;
+}
+
+/* 休假：压暗一档，前两段越亮它越清楚 */
+.seg-leave {
+  background: rgba(0, 0, 0, 0.19);
+}
+
+.seg-leave .mix-num {
+  color: #FFFFFF;
+}
+
+.seg-leave .mix-unit {
+  color: #E5BBB6;
+}
+
+.card-ok .seg-company .mix-num {
+  color: #0A5D53;
+}
+
+.card-ok .seg-company .mix-unit {
+  color: #4E958B;
+}
+
+.card-ok .seg-home .mix-num {
+  color: #0A5D53;
+}
+
+.card-ok .seg-home .mix-unit {
+  color: #2F7E73;
+}
+
+.card-ok .seg-leave .mix-unit {
+  color: #B7D7D1;
+}
+
+/* ===== 段名图例 ===== */
+.mix-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mix-legend-items {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.mix-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mix-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.dot-company {
+  background: rgba(255, 255, 255, 0.93);
+}
+
+.dot-home {
+  background: rgba(255, 255, 255, 0.50);
+}
+
+.dot-leave {
+  background: rgba(0, 0, 0, 0.19);
+}
+
+.mix-legend-text {
   font-size: 11px;
   color: #EFC9C3;
   line-height: 1.3;
 }
 
-.card-ok .stat-label {
-  color: #CBE5E0;
+.card-ok .mix-legend-text {
+  color: #D8EFEA;
+}
+
+.mix-total {
+  font-size: 11px;
+  color: #D8A9A2;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.card-ok .mix-total {
+  color: #A9CFC8;
 }
 
 /* ===== 年假剩余卡 ===== */
