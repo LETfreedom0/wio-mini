@@ -142,7 +142,7 @@ export const locales = {
     profile: {
       pageTitle: '我的',
       wioTarget: '月度回公司目标',
-      wioTargetHint: '左右拖动调整 · 步进 10%',
+      wioTargetHint: '左右拖动调整 · 步进 5%',
       wioTargetDesc: '设置您每月期望在公司办公的时间比例。',
       vacationDays: '年假',
       sickDays: '病假',
@@ -475,7 +475,7 @@ export const locales = {
     profile: {
       pageTitle: 'Profile',
       wioTarget: 'Monthly WIO Target',
-      wioTargetHint: 'Drag to adjust · step 10%',
+      wioTargetHint: 'Drag to adjust · step 5%',
       wioTargetDesc: 'Set your desired monthly office work percentage.',
       vacationDays: 'Vacation',
       sickDays: 'Sick Leave',

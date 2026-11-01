@@ -45,7 +45,7 @@
             :value="settings.targetPercentage"
             @change="onSliderChange($event, 'targetPercentage')"
             @changing="onSliderChanging($event, 'targetPercentage')"
-            min="0" max="100" step="10" activeColor="#0E6E62" backgroundColor="#ECEEEF" block-size="18" block-color="#ffffff"
+            min="0" max="100" step="5" activeColor="#0E6E62" backgroundColor="#ECEEEF" block-size="18" block-color="#ffffff"
             :aria-label="i18n.profile.wioTarget" />
         </view>
         <view class="tick-row">
