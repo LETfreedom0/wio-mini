@@ -24,7 +24,10 @@
 
         <!-- ===== Header：问候 + 日期（右侧） ===== -->
         <view class="header-row anim-entry" style="animation-delay: 0.05s;">
-          <text class="greeting-text">{{ greetingText }}</text>
+          <view class="greeting-wrap">
+            <text class="greeting-text">{{ greetingBase }}{{ greetingJoin }}</text>
+            <text class="greeting-name" v-if="nickname">{{ nickname }}</text>
+          </view>
           <text class="date-text">{{ currentDateStr }}</text>
         </view>
 
@@ -211,18 +214,20 @@ export default {
     },
     // 时段问候 + 已登录用户的昵称
     // 凌晨 0-4 点用「夜深了」：5 点前说「早上好」明显不对，这是之前的 bug
-    greetingText() {
+    // 拆成前缀 + 昵称两个节点：整句截断时省略号会吃掉昵称（显示成 "Good afternoon, ..."），
+    // 现在前缀永不截断，只有昵称自己缩略
+    greetingBase() {
       void this.nowStamp
       const h = new Date().getHours()
       const u = this.i18n.home
-      let base
-      if (h < 5) base = u.greetingNight
-      else if (h < 11) base = u.greetingMorning
-      else if (h < 13) base = u.greetingNoon
-      else if (h < 18) base = u.greetingAfternoon
-      else base = u.greetingEvening
-      const name = this.nickname
-      return name ? base + u.greetingJoin + name : base
+      if (h < 5) return u.greetingNight
+      if (h < 11) return u.greetingMorning
+      if (h < 13) return u.greetingNoon
+      if (h < 18) return u.greetingAfternoon
+      return u.greetingEvening
+    },
+    greetingJoin() {
+      return this.nickname ? this.i18n.home.greetingJoin : ''
     },
     targetPercentage() {
       // 首页只看当月，取当月生效比例
@@ -515,16 +520,32 @@ export default {
   flex-shrink: 0;
 }
 
+.greeting-wrap {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  flex: 1;
+  margin-right: 10px;
+}
+
 .greeting-text {
   font-size: 22px;
   font-weight: 700;
   color: #15181C;
   line-height: 1.35;
-  /* 昵称可能很长：单行省略，不能把右侧日期挤走或换行破版 */
-  max-width: 64%;
-  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 昵称单独截断：再窄的屏也至少能露出开头几个字，不会整段变 "..." */
+.greeting-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: #15181C;
+  line-height: 1.35;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ===== 本月回公司率卡（低于目标 = 红卡） ===== */
