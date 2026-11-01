@@ -866,7 +866,10 @@ export default {
   padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
   border: 1.5px solid transparent;
   transition: border-color 0.2s ease, background 0.2s ease;
 }
