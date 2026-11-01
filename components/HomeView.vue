@@ -96,6 +96,12 @@
           </view>
         </view>
 
+        <!-- 分享入口：做成轻量文字链跟着率卡走，不再往卡里塞第三个按钮 -->
+        <view class="share-entry anim-entry" style="animation-delay: 0.12s;" @click="goShare">
+          <text class="share-entry-text">{{ i18n.shareCard.entry }}</text>
+          <text class="share-entry-arrow">›</text>
+        </view>
+
         <!-- ===== 年假剩余 ===== -->
         <view class="leave-card anim-entry" style="animation-delay: 0.15s;">
           <view class="leave-top">
@@ -158,7 +164,7 @@
 </template>
 
 <script>
-import wioService from '@/utils/wioService.js'
+import wioService, { computeMonthlyReport } from '@/utils/wioService.js'
 import { locales, getMonthName, getWeekdayName } from '@/utils/locales.js'
 import { getAuth, isLogin } from '@/utils/auth.js'
 import { tap as haptic } from '@/utils/haptic.js'
@@ -234,31 +240,22 @@ export default {
       const now = new Date()
       return wioService.getTargetForMonth(now.getFullYear(), now.getMonth() + 1)
     },
-    // 与日历页保持同一套回公司率公式
+    // 统一的展示口径：与分享卡共用 computeMonthlyReport，避免两处公式各算各的
+    report() {
+      return computeMonthlyReport(this.stats, this.targetPercentage)
+    },
     wioPercentage() {
-      const denominator = this.denominator
-      if (denominator <= 0) return 0
-      return Math.round((this.stats.companyDays / denominator) * 100)
+      return this.report.rate
     },
     denominator() {
-      const totalDeductible = this.stats.vacationDays
-                            + this.stats.birthdayDays
-                            + this.stats.sickDays
-                            + this.stats.unpaidDays
-                            + this.stats.compOffDays
-                            + this.stats.excludeWioDays
-      const effectiveDeductible = totalDeductible - (this.stats.weekendLeaves || 0)
-      return this.stats.workingDays - effectiveDeductible
+      return this.report.denominator
     },
     isAchieved() {
-      return this.wioPercentage >= this.targetPercentage
+      return this.report.achieved
     },
     // 距离目标还差多少个「公司办公日」
     gapDays() {
-      if (this.isAchieved) return 0
-      if (this.denominator <= 0) return 0
-      const needCompany = Math.ceil((this.targetPercentage / 100) * this.denominator)
-      return Math.max(0, needCompany - this.stats.companyDays)
+      return this.report.gapDays
     },
     // 大数字旁的解读：达标讲成果（超多少），未达标讲可行性（还差几天）
     gapNote() {
@@ -271,15 +268,11 @@ export default {
     },
     // 休假合计：与分母的扣减项保持一致（年假/生日假/病假/无薪/调休/不计入/自定义假期）
     leaveTotalDays() {
-      const s = this.stats || {}
-      return (s.vacationDays || 0) + (s.birthdayDays || 0) + (s.sickDays || 0)
-           + (s.unpaidDays || 0) + (s.compOffDays || 0) + (s.excludeWioDays || 0)
-           + (s.customLeaveDays || 0)
+      return this.report.leave
     },
     // 还没到的日子 = 全月工作日 - 已办公 - 休假（含周末标记的假期，它们同样占掉了可用工作日）
     restDays() {
-      const s = this.stats || {}
-      return Math.max(0, (s.workingDays || 0) - (s.companyDays || 0) - (s.homeDays || 0) - this.leaveTotalDays)
+      return this.report.rest
     },
     // 构成条四段：天数为 0 的段不渲染；最右 rest 段永远最后
     mixSegments() {
@@ -426,6 +419,10 @@ export default {
       haptic('light')
       uni.switchTab({ url: '/pages/calendar/index' })
     },
+    goShare() {
+      haptic('light')
+      uni.navigateTo({ url: '/pages/share/index' })
+    },
     triggerConfetti() {
       const colors = ['#ff0055', '#00ddff', '#00ff99', '#9900ff', '#ffd300', '#ff8800']
       const pieces = []
@@ -565,6 +562,29 @@ export default {
 /* 已达标 = 主色绿卡 */
 .progress-card.card-ok {
   background: #0E6E62;
+}
+
+/* 分享入口：文字链，随率卡右对齐 */
+.share-entry {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  padding-right: 6px;
+  margin: -4px 0 10px;
+}
+
+.share-entry-text {
+  font-size: 12px;
+  color: #0E6E62;
+  line-height: 1.4;
+}
+
+.share-entry-arrow {
+  font-size: 13px;
+  color: #0E6E62;
+  line-height: 1;
+  margin-top: -1px;
 }
 
 .card-header {

@@ -24,6 +24,57 @@ const DEFAULT_SETTINGS = {
   }
 };
 
+/**
+ * 由月度统计推导展示口径（首页率卡 / 分享卡共用，避免两套公式各算各的）
+ *
+ * 回公司率 = 公司天数 ÷ (全月工作日 − 有效休假)
+ *   - 有效休假要扣掉落在非工作日的休假标记（weekendLeaves），否则分母会被多减
+ *   剩余天 = 全月工作日 − 公司 − 居家 − 休假（= 还没过的日子 + 漏打卡的日子）
+ *
+ * @param {object} stats getMonthStats() 的返回值
+ * @param {number} targetPercentage 当月目标比例
+ */
+export function computeMonthlyReport(stats, targetPercentage) {
+  const s = stats || {}
+  const leave = (s.vacationDays || 0) + (s.birthdayDays || 0) + (s.sickDays || 0)
+              + (s.unpaidDays || 0) + (s.compOffDays || 0) + (s.excludeWioDays || 0)
+              + (s.customLeaveDays || 0)
+  const workingDays = s.workingDays || 0
+  const company = s.companyDays || 0
+  const home = s.homeDays || 0
+  const target = targetPercentage || 0
+
+  const denominator = Math.max(0, workingDays - (leave - (s.weekendLeaves || 0)))
+  const rate = denominator > 0 ? Math.round((company / denominator) * 100) : 0
+  const achieved = rate >= target
+  const needCompany = Math.ceil((target / 100) * denominator)
+  const gapDays = achieved ? 0 : Math.max(0, needCompany - company)
+  const rest = Math.max(0, workingDays - company - home - leave)
+
+  const otHours = s.totalOvertime || 0
+  // 「≈ 多上 N 天班」：按 8 小时一个工作日折算，保留到 0.5 天
+  const otDays = Math.round((otHours / 8) * 2) / 2
+
+  const leaveTypes = [
+    { key: 'vacation', days: s.vacationDays || 0 },
+    { key: 'sick', days: s.sickDays || 0 },
+    { key: 'comp_off', days: s.compOffDays || 0 },
+    { key: 'birthday', days: s.birthdayDays || 0 },
+    { key: 'unpaid', days: s.unpaidDays || 0 },
+    { key: 'exclude_wio', days: s.excludeWioDays || 0 },
+    { key: 'custom', days: s.customLeaveDays || 0 }
+  ].filter(item => item.days > 0)
+
+  return {
+    rate, target, achieved,
+    over: achieved ? rate - target : 0,
+    gapDays,
+    denominator, workingDays, company, home,
+    leave, rest, leaveTypes,
+    otHours, otDays
+  }
+}
+
 export default {
   // --- Settings ---
   getSettings() {
@@ -558,6 +609,18 @@ export default {
       workingDays: stats.workingDays,
       totalOvertime: parseFloat(stats.totalOvertime.toFixed(1))
     };
+  },
+
+  /** 某月的展示口径（率 / 达标 / 剩余 / 假期构成 / 加班），首页与分享卡共用 */
+  getMonthlyReport(year, month) {
+    let stats
+    try {
+      stats = this.getMonthStats(year, month)
+    } catch (e) {
+      console.error('getMonthlyReport failed', e)
+      stats = {}
+    }
+    return computeMonthlyReport(stats, this.getTargetForMonth(year, month))
   },
 
   // Get stats for a specific year (YYYY)

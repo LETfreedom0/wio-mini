@@ -32,6 +32,17 @@
       "timeout": 60,
       "memorySize": 256,
       "installDependency": true
+    },
+    {
+      "name": "wxacode",
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "timeout": 20,
+      "memorySize": 256,
+      "installDependency": true,
+      "envVariables": {
+        "WX_APP_SECRET": "{{env.WX_APP_SECRET}}"
+      }
     }
   ]
 }
