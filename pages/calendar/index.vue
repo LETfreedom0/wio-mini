@@ -87,7 +87,7 @@
           <view v-for="n in startEmptyDays" :key="'empty-'+n" class="day-cell empty"></view>
           
           <view v-for="day in daysInMonth" :key="day" class="day-cell" @click="onDayClick(day)" @longpress="onDayLongPress(day)">
-            <view class="day-content" :class="[getDayClass(day), { 'today-highlight': isToday(day) }]" :style="getCustomStyle(day)">
+            <view class="day-content" :class="[getDayClass(day), { 'today-highlight': isToday(day) }, { 'day-split': isDaySplit(day) }]" :style="dayStyle(day)">
               <text class="day-number">{{ day }}</text>
               <view v-if="getOvertimeDisplay(day)" class="overtime-badge">{{ getOvertimeDisplay(day) }}</view>
               <text v-if="getHolidayName(day)" class="holiday-text" :class="{'text-work': isHolidayWork(day), 'english': settings.language === 'en-US'}">{{ getHolidayDisplayName(day) }}</text>
@@ -112,6 +112,7 @@
           <view class="legend-item" v-for="(item, index) in filteredLegends" :key="index" @click="selectLegend(item)" :class="{ active: selectedStatus === item.value }">
             <view class="legend-dot" :class="item.color" :style="item.dotColor ? { background: item.dotColor } : null"></view>
             <text class="legend-label">{{ item.label }}</text>
+            <text v-if="item.isPro" class="legend-pro">PRO</text>
           </view>
         </view>
       </view>
@@ -142,13 +143,63 @@
       </view>
     </view>
 
+    <!-- 半天标记面板（PRO）：先选作用范围，再选状态 -->
+    <view class="modal-overlay" v-if="showHalfPanel" @click="closeHalfPanel">
+      <view class="modal-content half-modal" @click.stop>
+        <view class="modal-close-btn" @click="closeHalfPanel">×</view>
+        <view class="modal-header">
+          <text class="modal-title">{{ i18n.calendar.halfTitle }}</text>
+          <text class="modal-subtitle">{{ halfDateStr }}</text>
+        </view>
+        <text class="half-current">{{ halfCurrentText }}</text>
+
+        <view class="scope-row">
+          <view
+            v-for="opt in halfScopeOptions"
+            :key="opt.key"
+            class="scope-chip"
+            :class="{ 'scope-on': halfScope === opt.key }"
+            @click="setHalfScope(opt.key)"
+          >
+            <text class="scope-text">{{ opt.label }}</text>
+          </view>
+        </view>
+
+        <view class="half-status-grid">
+          <view
+            v-for="opt in halfStatusOptions"
+            :key="opt.value"
+            class="half-status-item"
+            :class="{ 'half-status-on': halfStatus === opt.value }"
+            @click="setHalfStatus(opt.value)"
+          >
+            <view class="legend-dot" :class="opt.color"></view>
+            <text class="half-status-text">{{ opt.label }}</text>
+          </view>
+        </view>
+
+        <view class="half-actions">
+          <view class="half-btn half-btn-ghost" @click="clearHalfDay">
+            <text class="half-btn-text">{{ i18n.common.clear }}</text>
+          </view>
+          <view class="half-btn half-btn-primary" @click="applyHalfDay">
+            <text class="half-btn-text half-btn-text-on">{{ i18n.common.save }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <PaywallSheet :visible="showPaywall" @close="showPaywall = false" @upgraded="onProUpgraded" />
+
     <CustomTabBar current="calendar" />
   </view>
 </template>
 
 <script>
 import CustomTabBar from '@/components/CustomTabBar.vue'
-import wioService from '@/utils/wioService.js'
+import PaywallSheet from '@/components/PaywallSheet.vue'
+import wioService, { isSplitDay, parseDayParts } from '@/utils/wioService.js'
+import { isProUser } from '@/utils/pro.js'
 import { locales, t, getMonthYearName } from '@/utils/locales.js'
 import { getTopSafeArea } from '@/utils/safeArea.js'
 import { tap as haptic } from '@/utils/haptic.js'
@@ -163,9 +214,25 @@ const holidayNameMap = {
   '国庆节': 'National Day'
 };
 
+// 状态配色：日历格斜切（半天）时要用底色，而 CSS 类只能给整格一个颜色，
+// 所以这里把 .day-content 的配色表搬一份到 JS，供 inline style 拼渐变
+const STATUS_COLORS = {
+  company: { bg: '#C8E6C9', color: '#2E7D32' },
+  home: { bg: '#BBDEFB', color: '#1565C0' },
+  vacation: { bg: '#FFE0B2', color: '#EF6C00' },
+  birthday: { bg: '#F8BBD9', color: '#E91E63' },
+  comp_off: { bg: '#B2EBF2', color: '#006064' },
+  sick: { bg: '#E1BEE7', color: '#4A148C' },
+  unpaid: { bg: '#F5F5F5', color: '#616161' },
+  public: { bg: '#FFCDD2', color: '#B71C1C' },
+  exclude_wio: { bg: '#ECEFF1', color: '#607D8B' },
+  default: { bg: '#FFFFFF', color: '#15181C' }
+};
+
 export default {
   components: {
-    CustomTabBar
+    CustomTabBar,
+    PaywallSheet
   },
   data() {
     return {
@@ -205,7 +272,16 @@ export default {
       nowStamp: 0,
       // 左右滑动切月的起点，null = 没有进行中的手势
       swipeStartX: null,
-      swipeStartY: null
+      swipeStartY: null,
+      // 半天标记（PRO）
+      showHalfPanel: false,
+      halfDateStr: '',
+      halfDayNum: 0,
+      halfScope: 'all', // all | am | pm
+      halfStatus: 'company',
+      showPaywall: false,
+      // 权益变化后用它打点，让 isPro 这个 computed 重算
+      proStamp: 0
     }
   },
   computed: {
@@ -228,8 +304,42 @@ export default {
         { label: t('calendar.legends.public', lang), color: 'red', value: 'public' },
         { label: t('calendar.legends.overtime_record', lang), color: 'purple-ot', value: 'overtime_record' },
         { label: t('calendar.legends.exclude_wio', lang), color: 'exclude', value: 'exclude_wio' },
+        { label: t('calendar.halfLegend', lang), color: 'half', value: 'half_day', isPro: true },
         { label: t('calendar.legends.clear', lang), color: 'dashed', value: 'clear' },
       ];
+    },
+    // 权益实时判定：proStamp 只是个打点，让开通/到期后这里能重算
+    isPro() {
+      return this.proStamp >= 0 && isProUser();
+    },
+    // 半天面板里可选的状态：排除加班（走独立弹层）、清除、自定义假期、半天自身
+    halfStatusOptions() {
+      const skip = ['overtime_record', 'clear', 'half_day'];
+      return this.filteredLegends.filter(item => !item.isCustom && skip.indexOf(item.value) === -1);
+    },
+    halfScopeOptions() {
+      const c = this.i18n.calendar;
+      return [
+        { key: 'all', label: c.halfScopeAll },
+        { key: 'am', label: c.halfScopeAm },
+        { key: 'pm', label: c.halfScopePm }
+      ];
+    },
+    halfParts() {
+      if (!this.halfDateStr) return { am: null, pm: null };
+      return parseDayParts(this.entries[this.halfDateStr]);
+    },
+    // 面板顶部「上午 X · 下午 Y」的当前值说明
+    halfCurrentText() {
+      const c = this.i18n.calendar;
+      const label = s => {
+        if (!s) return '—';
+        const item = this.legends.find(i => i.value === s);
+        return item ? item.label : s;
+      };
+      return c.halfCurrent
+        .replace('{am}', label(this.halfParts.am))
+        .replace('{pm}', label(this.halfParts.pm));
     },
     monthYearText() {
       return getMonthYearName(this.currentMonth, this.currentYear, this.settings.language);
@@ -279,7 +389,8 @@ export default {
       const order = [
         'company', 'home', 'vacation',
         'sick', 'overtime_record', 'public',
-        'comp_off', 'unpaid', 'exclude_wio'
+        'comp_off', 'unpaid', 'exclude_wio',
+        'half_day' // PRO：按上午/下午分别标记
       ];
       
       let result = order.map(key => this.legends.find(item => item.value === key)).filter(Boolean);
@@ -460,7 +571,22 @@ export default {
       // 自定义假期图例仅作展示，不支持点选标记（区间在设置中配置）
       if (item.isCustom) return;
       haptic('light');
-      
+
+      // 半天是 PRO 功能：非会员点这里直接拉起付费墙，不给「选了却用不了」的半截体验
+      if (item.value === 'half_day') {
+        if (!this.isPro) {
+          this.showPaywall = true;
+          return;
+        }
+        this.selectedStatus = 'half_day';
+        uni.showToast({
+          title: this.i18n.calendar.legendHint,
+          icon: 'none',
+          duration: 1500
+        });
+        return;
+      }
+
       this.selectedStatus = item.value;
       if (item.value === 'clear') {
         uni.showToast({
@@ -496,6 +622,16 @@ export default {
       this.lastClickDay = day;
 
       if (!this.selectedStatus) {
+        return;
+      }
+
+      // 半天标记走独立面板：要先决定作用范围（全天/上午/下午）再选状态
+      if (this.selectedStatus === 'half_day') {
+        if (!this.isPro) {
+          this.showPaywall = true;
+          return;
+        }
+        this.openHalfPanel(day, dateStr);
         return;
       }
 
@@ -590,6 +726,93 @@ export default {
     closeOvertimeModal() {
       this.showOvertimeModal = false;
     },
+    dateStrOf(day) {
+      return `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    },
+    isDaySplit(day) {
+      return isSplitDay(this.entries[this.dateStrOf(day)]);
+    },
+    // 格子样式：上下午不同时用对角斜切（左上 = 上午，右下 = 下午），
+    // 其余情况退回原来的自定义假期底色
+    dayStyle(day) {
+      const raw = this.entries[this.dateStrOf(day)];
+      if (isSplitDay(raw)) {
+        const p = parseDayParts(raw);
+        const a = STATUS_COLORS[p.am] || STATUS_COLORS.default;
+        const b = STATUS_COLORS[p.pm] || STATUS_COLORS.default;
+        return {
+          background: `linear-gradient(to bottom right, ${a.bg} 0%, ${a.bg} 50%, ${b.bg} 50%, ${b.bg} 100%)`,
+          color: a.color
+        };
+      }
+      return this.getCustomStyle(day);
+    },
+    openHalfPanel(day, dateStr) {
+      const parts = parseDayParts(this.entries[dateStr]);
+      this.halfDateStr = dateStr;
+      this.halfDayNum = day;
+      this.halfScope = 'all';
+      // 默认落在当前上午的状态上，没有记录就给「公司办公」
+      this.halfStatus = parts.am || parts.pm || 'company';
+      this.showHalfPanel = true;
+    },
+    closeHalfPanel() {
+      this.showHalfPanel = false;
+    },
+    setHalfScope(scope) {
+      haptic('light');
+      this.halfScope = scope;
+    },
+    setHalfStatus(status) {
+      haptic('light');
+      this.halfStatus = status;
+    },
+    applyHalfDay() {
+      const parts = this.halfParts;
+      let am = parts.am;
+      let pm = parts.pm;
+      if (this.halfScope === 'all') {
+        am = this.halfStatus;
+        pm = this.halfStatus;
+      } else if (this.halfScope === 'am') {
+        am = this.halfStatus;
+      } else {
+        pm = this.halfStatus;
+      }
+      // 空的那段跟随另一段：避免出现「上午有、下午空」这种说不清的记录
+      if (!am) am = pm;
+      if (!pm) pm = am;
+
+      if (!wioService.saveDayParts(this.halfDateStr, am, pm)) {
+        // 失败的两种可能：假期额度用满，或权益在面板打开期间失效
+        if (am !== pm && !isProUser()) {
+          this.showPaywall = true;
+          return;
+        }
+        const hit = ['vacation', 'sick'].find(k => am === k || pm === k);
+        if (hit) {
+          this.showLeaveLimitModal(hit);
+        } else {
+          uni.showToast({ title: this.i18n.calendar.halfSaveFailed, icon: 'none' });
+        }
+        return;
+      }
+      haptic('medium');
+      this.showHalfPanel = false;
+      this.loadData();
+    },
+    clearHalfDay() {
+      haptic('medium');
+      wioService.saveDayParts(this.halfDateStr, null, null);
+      this.showHalfPanel = false;
+      this.loadData();
+    },
+    onProUpgraded() {
+      this.showPaywall = false;
+      this.proStamp++;
+      // 刚开通：顺手把「半天」选上，用户不用再点一次图例
+      if (this.isPro) this.selectedStatus = 'half_day';
+    },
     getOvertimeDisplay(day) {
       const dateStr = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const val = this.overtimeEntries[dateStr];
@@ -673,7 +896,12 @@ export default {
     },
     hasBirthdayInMonth() {
       const prefix = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}`;
-      return Object.keys(this.entries).some(key => key.startsWith(prefix) && this.entries[key] === 'birthday');
+      return Object.keys(this.entries).some(key => {
+        if (!key.startsWith(prefix)) return false;
+        // 半天标记的生日假也算「本月已休」
+        const p = parseDayParts(this.entries[key]);
+        return p.am === 'birthday' || p.pm === 'birthday';
+      });
     }
   }
 }
@@ -1465,5 +1693,146 @@ export default {
   font-size: 12px;
   color: #fff;
   font-weight: 500;
+}
+
+/* ===== 半天标记（PRO） ===== */
+/* 图例里的 PRO 角标：跟在标签右边，不挤占格子高度 */
+.legend-pro {
+  font-size: 8px;
+  font-weight: 700;
+  color: #8A5A12;
+  background-color: #F6E3BC;
+  border-radius: 3px;
+  padding: 0 3px;
+  margin-left: 3px;
+  line-height: 12px;
+}
+
+/* 图例圆点：斜切两色，直观表示「上下午可以不同」 */
+.legend-dot.half {
+  background: linear-gradient(to bottom right, #C8E6C9 0%, #C8E6C9 50%, #FFE0B2 50%, #FFE0B2 100%);
+  border: 1px solid #B0A08A;
+}
+
+/* 斜切格子上的那条对角线：光靠渐变在浅色组合下边界发糊，补一根细线 */
+.day-split::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(to bottom right, transparent calc(50% - 0.5px), rgba(21, 24, 28, 0.16) calc(50% - 0.5px), rgba(21, 24, 28, 0.16) calc(50% + 0.5px), transparent calc(50% + 0.5px));
+  pointer-events: none;
+}
+
+.day-split .day-number {
+  position: relative;
+  z-index: 1;
+}
+
+.half-modal {
+  padding-bottom: 20px;
+}
+
+.half-current {
+  font-size: 12px;
+  color: #8A9299;
+  margin-bottom: 12px;
+}
+
+.scope-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.scope-chip {
+  flex: 1;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background-color: #F4F5F6;
+  transition: all 0.15s ease;
+}
+
+.scope-chip.scope-on {
+  background-color: #0E6E62;
+}
+
+.scope-text {
+  font-size: 13px;
+  color: #5A626A;
+}
+
+.scope-on .scope-text {
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.half-status-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.half-status-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background-color: #F7F8F9;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.half-status-item.half-status-on {
+  background-color: #EAF2F0;
+  border-color: #0E6E62;
+}
+
+.half-status-text {
+  font-size: 13px;
+  color: #15181C;
+}
+
+.half-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.half-btn {
+  flex: 1;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.half-btn-ghost {
+  background-color: #F1F3F4;
+}
+
+.half-btn-primary {
+  background-color: #0E6E62;
+}
+
+.half-btn-text {
+  font-size: 15px;
+  color: #15181C;
+  font-weight: 500;
+}
+
+.half-btn-text-on {
+  color: #FFFFFF;
 }
 </style>

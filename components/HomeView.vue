@@ -163,6 +163,10 @@
               <text class="choice-state" :class="{ 'state-on': location === 'home' }">{{ location === 'home' ? i18n.home.recorded : i18n.home.tapToSwitch }}</text>
             </view>
           </view>
+          <!-- 今天标了半天：把上下午读出来，避免在首页看不出今天到底怎么记的 -->
+          <view v-if="todayIsSplit" class="today-half-note">
+            <text class="today-half-text">{{ todayHalfText }}</text>
+          </view>
           <text class="today-hint">{{ i18n.home.hint }}</text>
         </view>
 
@@ -192,7 +196,7 @@
 </template>
 
 <script>
-import wioService, { computeMonthlyReport } from '@/utils/wioService.js'
+import wioService, { computeMonthlyReport, parseDayParts, isSplitDay } from '@/utils/wioService.js'
 import { locales, getMonthName, getWeekdayName } from '@/utils/locales.js'
 import { getAuth, isLogin } from '@/utils/auth.js'
 import { tap as haptic } from '@/utils/haptic.js'
@@ -202,6 +206,8 @@ export default {
   data() {
     return {
       location: null, // 'home' | 'company' | null
+      // 今天的上下午；两段不同 = 日历里标了半天
+      todayParts: { am: null, pm: null },
       todayStr: '',
       nickname: '',
       entries: {},
@@ -322,6 +328,17 @@ export default {
       const ratio = 100 / this.reportPageCount
       return { flex: `0 0 ${ratio}%`, width: `${ratio}%` }
     },
+    // 今天标了半天（上下午不同）→ 首页只做只读展示，精细编辑在日历页
+    todayIsSplit() {
+      const p = this.todayParts
+      return !!p.am && !!p.pm && p.am !== p.pm
+    },
+    todayHalfText() {
+      const p = this.todayParts
+      return this.i18n.home.todayHalf
+        .replace('{am}', this.statusLabel(p.am))
+        .replace('{pm}', this.statusLabel(p.pm))
+    },
     trackStyle() {
       const n = this.reportPageCount
       const dragging = !!(this.reportDrag && this.reportDrag.horizontal)
@@ -363,7 +380,9 @@ export default {
     initData() {
       this.settings = wioService.getSettings()
       this.todayStr = wioService.getTodayDateStr()
-      this.location = wioService.getEntryForDate(this.todayStr)
+      this.todayParts = wioService.getDayParts(this.todayStr)
+      // 半天时按上午的状态高亮：上午在公司就亮「公司办公」那张卡
+      this.location = this.todayParts.am || null
       // nowStamp 触发 greeting / 日期重新计算：computed 不感知时间流逝，
       // 页面从后台切回来（跨时段/跨天）必须手动打点
       this.nowStamp = Date.now()
@@ -539,14 +558,48 @@ export default {
         return { dateLabel, label: m2.label, color: m2.color, bgColor: m2.bg }
       })
     },
+    statusLabel(status) {
+      const map = {
+        company: this.i18n.home.workFromCompany,
+        home: this.i18n.home.workFromHome,
+        vacation: this.i18n.calendar.legends.vacation,
+        birthday: this.i18n.calendar.legends.birthday,
+        sick: this.i18n.calendar.legends.sick,
+        unpaid: this.i18n.calendar.legends.unpaid,
+        comp_off: this.i18n.calendar.legends.comp_off,
+        public: this.i18n.calendar.legends.public,
+        exclude_wio: this.i18n.calendar.legends.exclude_wio
+      }
+      return map[status] || status || '—'
+    },
     setStatus(status) {
-      // 点击就反馈，包括点已选中的卡片（重复点也要有回应，否则像没反应）
       haptic('light')
+      // 今天已标了半天：首页是「今天在哪办公」的快速打卡，写整天会把半天抹平，
+      // 所以先问一句，别让人不小心丢掉上午/下午的精细记录
+      if (this.todayIsSplit && this.todayParts.am !== status) {
+        uni.showModal({
+          title: this.i18n.home.halfOverwriteTitle,
+          content: this.i18n.home.halfOverwriteBody
+            .replace('{am}', this.statusLabel(this.todayParts.am))
+            .replace('{pm}', this.statusLabel(this.todayParts.pm)),
+          confirmText: this.i18n.common.confirm,
+          cancelText: this.i18n.common.cancel,
+          success: (res) => {
+            if (res.confirm) this.applyTodayStatus(status)
+          }
+        })
+        return
+      }
+      this.applyTodayStatus(status)
+    },
+    applyTodayStatus(status) {
+      // 点击就反馈，包括点已选中的卡片（重复点也要有回应，否则像没反应）
       if (this.location !== status) {
         if (status === 'home') this.triggerConfetti()
         else if (status === 'company') this.triggerRocket()
       }
       this.location = status
+      this.todayParts = { am: status, pm: status }
       wioService.saveEntry(this.todayStr, status)
       this.loadStats()
     },
@@ -1158,6 +1211,22 @@ export default {
   color: #9AA1A8;
   line-height: 1.5;
   margin-left: 4px;
+}
+
+/* 今天标了半天：一行只读说明，用主色底提示「今天不是整天」 */
+.today-half-note {
+  align-self: flex-start;
+  margin: 8px 0 0 2px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background-color: #EAF2F0;
+}
+
+.today-half-text {
+  font-size: 11px;
+  color: #0E6E62;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 /* ===== 最近记录 ===== */

@@ -15,6 +15,9 @@ const DEFAULT_SETTINGS = {
   birthdayEnabled: false,
   birthdayMonth: '',
   autoSync: true,
+  // 半天出勤计法：'half' = 按半天（0.5 天，默认）；'full' = 视同一整天
+  // 这是 PRO 权益，非会员读取时降级回 'half'（见 getSettings）
+  halfDayAttendance: 'half',
   // 每天往返通勤分钟数（用于年度统计「节约通勤」换算）
   commuteMinutes: 90,
   // 调休配置规则 (Key: 节日名称, Value: boolean 是否调休)
@@ -23,6 +26,107 @@ const DEFAULT_SETTINGS = {
       '春节': true
   }
 };
+
+// ============================================================
+// 半天记录模型
+//
+// entries[dateStr] 允许两种形态：
+//   字符串 'company'    —— 整天标记（老数据与普通标记都用这个）
+//   对象 { am, pm }     —— 上下午不同（PRO 的半天标记）
+//
+// 规整约定：am === pm 时一律存成字符串。好处是
+//   ① 体积最小；② 老版本客户端（1.4.0）读到字符串照常显示，不会白屏。
+//
+// 折算口径（用户拍板）：
+//   半天出勤 → 开关 halfDayAttendance 决定 0.5 天还是 1 天
+//   半天居家 / 半天假期 → 恒定 0.5 天（不受开关影响，保证开关只影响达标率）
+// ============================================================
+
+const HALF = 0.5;
+/** 计入分母扣减的假期状态 */
+const DAY_LEAVE_KEYS = ['vacation', 'birthday', 'sick', 'unpaid', 'comp_off', 'exclude_wio'];
+
+/** 存储原始值 → { am, pm }；老字符串自动补成两段相同 */
+export function parseDayParts(raw) {
+  if (!raw) return { am: null, pm: null };
+  if (typeof raw === 'string') return { am: raw, pm: raw };
+  if (typeof raw === 'object') {
+    return { am: raw.am || null, pm: raw.pm || null };
+  }
+  return { am: null, pm: null };
+}
+
+/** { am, pm } → 存储值；两段相同规整为字符串，都为空返回 null（等于清除） */
+export function packDayParts(am, pm) {
+  const a = am || null;
+  const p = pm || null;
+  if (!a && !p) return null;
+  if (a === p) return a;
+  return { am: a, pm: p };
+}
+
+/** 是否属于「上下午不同」的半天标记 */
+export function isSplitDay(raw) {
+  const p = parseDayParts(raw);
+  return !!p.am && !!p.pm && p.am !== p.pm;
+}
+
+/**
+ * 单日分段折算：把 { am, pm } 变成各项统计的天数贡献
+ *
+ * @param {string|object} raw 存储原始值
+ * @param {object} opts
+ *   halfDayAsFull  true = 半天出勤视同一整天（PRO 开关打开）
+ *   isWorkingDay   该日是否计入分母；false 时假期不扣分母（沿用 weekendLeaves 口径）
+ * @returns {object} company / home / leave{状态:天数} / leaveTotal /
+ *                   deductible（从分母扣减的天数）/ weekendLeave / hasEntry / companyParts
+ */
+export function evaluateDayParts(raw, opts) {
+  const parts = parseDayParts(raw);
+  const halfAsFull = !!(opts && opts.halfDayAsFull);
+  const isWorkingDay = !opts || opts.isWorkingDay !== false;
+
+  const out = {
+    company: 0, home: 0,
+    leave: {}, leaveTotal: 0,
+    deductible: 0, weekendLeave: 0,
+    hasEntry: false, companyParts: 0, homeParts: 0
+  };
+
+  ['am', 'pm'].forEach(k => {
+    const s = parts[k];
+    if (!s) return;
+    out.hasEntry = true;
+    if (s === 'company') { out.companyParts++; return; }
+    if (s === 'home') { out.homeParts++; out.home += HALF; return; }
+    if (DAY_LEAVE_KEYS.indexOf(s) !== -1) {
+      out.leave[s] = (out.leave[s] || 0) + HALF;
+      out.leaveTotal += HALF;
+    }
+  });
+
+  // 出勤折算：整天出勤 = 1；半天出勤看开关
+  if (out.companyParts >= 2) out.company = 1;
+  else if (out.companyParts === 1) out.company = halfAsFull ? 1 : HALF;
+
+  // 分母扣减的三种豁免：
+  //   a) 非工作日标记的假期 —— 本来就不在分母里（weekendLeaves 口径）
+  //   b) 开关打开 + 半天出勤 —— 这天已算完整出勤日，不能同时再扣掉半天，否则率会超过 100%
+  if (!isWorkingDay) {
+    out.weekendLeave = out.leaveTotal;
+    out.deductible = 0;
+  } else if (halfAsFull && out.companyParts === 1) {
+    out.deductible = 0;
+  } else {
+    out.deductible = out.leaveTotal;
+  }
+  return out;
+}
+
+/** 保留 1 位小数：0.5 的累加是精确的，这里只防未来引入 1/3 类权重时出现 0.30000000000000004 */
+export function round1(n) {
+  return Math.round((Number(n) || 0) * 10) / 10;
+}
 
 /**
  * 由月度统计推导展示口径（首页率卡 / 分享卡共用，避免两套公式各算各的）
@@ -44,11 +148,18 @@ export function computeMonthlyReport(stats, targetPercentage) {
   const home = s.homeDays || 0
   const target = targetPercentage || 0
 
-  const denominator = Math.max(0, workingDays - (leave - (s.weekendLeaves || 0)))
+  // 分母扣减优先用逐日算好的 deductibleLeave（半天口径下才是准确的）；
+  // 老调用方 / 构造数据里没有这个字段时，退回原来的「假期 − 非工作日假期」
+  const deductible = s.deductibleLeave != null
+    ? s.deductibleLeave
+    : Math.max(0, leave - (s.weekendLeaves || 0))
+  const denominator = Math.max(0, workingDays - deductible)
   const rate = denominator > 0 ? Math.round((company / denominator) * 100) : 0
   const achieved = rate >= target
   const needCompany = Math.ceil((target / 100) * denominator)
-  const gapDays = achieved ? 0 : Math.max(0, needCompany - company)
+  // 半天口径下 company 会是小数，差额要向上取整：
+  // 「还差 3.5 天」没有意义，人只会按整天安排什么时候去公司
+  const gapDays = achieved ? 0 : Math.max(0, Math.ceil(needCompany - company))
   const rest = Math.max(0, workingDays - company - home - leave)
 
   const otHours = s.totalOvertime || 0
@@ -89,6 +200,12 @@ export default {
         if (s.language && s.language !== 'zh-CN' && !isProUser()) {
           s.language = 'zh-CN';
         }
+        // 半天出勤计法是 PRO 权益：同语言降级套路，只降级读取值、不改存储，
+        // 重新开通后原来的选择自动回来。
+        if (s.halfDayAttendance === 'full' && !isProUser()) {
+          s.halfDayAttendance = 'half';
+        }
+        if (s.halfDayAttendance !== 'full') s.halfDayAttendance = 'half';
         return s;
       }
     } catch (e) {
@@ -342,6 +459,94 @@ export default {
     }
   },
 
+  // --- 半天标记（PRO） ---
+  /** 当前生效的半天出勤计法（非会员恒为 'half'） */
+  getHalfDayAttendanceMode() {
+    return this.getSettings().halfDayAttendance === 'full' ? 'full' : 'half';
+  },
+
+  /** 半天出勤是否按一整天算 */
+  isHalfDayAsFullAttendance() {
+    return this.getHalfDayAttendanceMode() === 'full';
+  },
+
+  /** 读某天的上下午（老字符串自动补成两段相同） */
+  getDayParts(dateStr) {
+    const entries = this.getEntries();
+    return parseDayParts(entries[dateStr]);
+  },
+
+  /** 是否会员专属的「上下午不同」标记 */
+  isSplitDayFor(dateStr) {
+    return isSplitDay(this.getEntries()[dateStr]);
+  },
+
+  /**
+   * 写某天的上下午
+   *
+   * 会员闸门放在数据层：只要 am !== pm（真的拆了半天）就要求 PRO。
+   * 会员过期后已标的半天照常显示与参与统计，只是不能再新增/修改。
+   *
+   * @returns {boolean} false = 被拦截（非会员拆半天，或假期额度用满）
+   */
+  saveDayParts(dateStr, am, pm) {
+    try {
+      const entries = this.getEntries();
+      const prev = parseDayParts(entries[dateStr]);
+      const nextAm = am || null;
+      const nextPm = pm || null;
+
+      // 拆半天是 PRO 能力：整天标记（两段相同）永远免费
+      if (nextAm !== nextPm && !isProUser()) return false;
+
+      // 假期额度硬约束：按折算天数（半天 = 0.5）与「改动前后」的差额判断，
+      // 同一天重复保存同一状态是幂等的，不能因为已用满而拦掉。
+      const year = String(dateStr).slice(0, 4);
+      const deltaByStatus = this._leaveDelta(prev, { am: nextAm, pm: nextPm });
+      const keys = Object.keys(deltaByStatus);
+      for (let i = 0; i < keys.length; i++) {
+        const status = keys[i];
+        const delta = deltaByStatus[status];
+        if (delta <= 0) continue;
+        const quota = this.getLeaveQuota(status, year);
+        // quota.used 已包含改动前的占用，所以只要 增加量 <= 剩余 就是合法的
+        if (quota && delta > quota.left + 1e-9) return false;
+      }
+
+      const packed = packDayParts(nextAm, nextPm);
+      if (packed) {
+        entries[dateStr] = packed;
+      } else {
+        delete entries[dateStr];
+      }
+      uni.setStorageSync(KEY_ENTRIES, JSON.stringify(entries));
+      markDirty();
+      return true;
+    } catch (e) {
+      console.error('Error saving day parts', e);
+      return false;
+    }
+  },
+
+  /** 改动前后各假期状态的折算天数差额（正 = 多用） */
+  _leaveDelta(prev, next) {
+    const delta = {};
+    const add = (map, sign) => {
+      ['am', 'pm'].forEach(k => {
+        const s = map[k];
+        if (s && DAY_LEAVE_KEYS.indexOf(s) !== -1) {
+          delta[s] = (delta[s] || 0) + sign * HALF;
+        }
+      });
+    };
+    add(prev, -1);
+    add(next, 1);
+    Object.keys(delta).forEach(k => {
+      if (Math.abs(delta[k]) < 1e-9) delete delta[k];
+    });
+    return delta;
+  },
+
   // 年假 / 病假的年度额度（统计口径：全年所有该状态条目）
   // 返回 null 表示该状态不受额度约束
   getLeaveQuota(status, year) {
@@ -482,6 +687,7 @@ export default {
   getMonthStats(year, month) {
     const entries = this.getEntries();
     const overtimeEntries = this.getOvertimeEntries();
+    const halfDayAsFull = this.isHalfDayAsFullAttendance();
     const prefix = `${year}-${String(month).padStart(2, '0')}`;
     
     let stats = {
@@ -497,7 +703,9 @@ export default {
       custom: 0, // 自定义假期（区间内工作日）
       totalRecorded: 0,
       workingDays: 0, // Mon-Fri
-      totalOvertime: 0 // New: Total overtime hours
+      totalOvertime: 0, // New: Total overtime hours
+      weekendLeaves: 0, // 落在非工作日的假期（不扣分母）
+      deductibleLeave: 0 // 从分母扣减的假期折算天数（半天口径的唯一准确来源）
     };
 
     // Calculate Working Days (Official) in the month
@@ -510,73 +718,47 @@ export default {
       // 1. Calculate Working Days
       let isWorkingDay = this.isOfficialWorkingDay(date);
       
-      const entryStatus = entries[dateStr];
-      
+      const rawEntry = entries[dateStr];
+      // 先按「是工作日」探一次，用来判断要不要把这天拉回分母（规则 A）
+      const probe = evaluateDayParts(rawEntry, { halfDayAsFull, isWorkingDay: true });
+
       // Special handling:
-      // A. If user marks a non-working day as 'company' or 'home', it becomes a working day (denominator +1)
-      if (!isWorkingDay && (entryStatus === 'company' || entryStatus === 'home')) {
-          isWorkingDay = true;
+      // A. 非工作日只要有出勤段（公司 / 居家），这天就拉回分母（workingDays +1）
+      if (!isWorkingDay && (probe.companyParts > 0 || probe.homeParts > 0)) {
+        isWorkingDay = true;
       }
-      
-      // B. If user marks a non-working day as any LEAVE type (vacation, sick, etc.),
-      // it should NOT become a working day.
-      // (The previous logic naturally handles this because isWorkingDay is false, 
-      // and we only force it to true for 'company'/'home')
+      // B. 非工作日标假期不会变成工作日——保持 false 即可
+
+      // 用最终的是否工作日再算一次，deductible 才算得准
+      const ev = evaluateDayParts(rawEntry, { halfDayAsFull, isWorkingDay });
 
       if (isWorkingDay) {
         stats.workingDays++;
-      } else {
-        // Fix: If it is NOT a working day (e.g. weekend), but user marked it as LEAVE,
-        // we must prevent it from being subtracted from the denominator in index.vue.
-        // The formula in index.vue is: workingDays - vacationDays - sickDays...
-        // If 'vacationDays' includes a weekend vacation, it will subtract 1 from workingDays.
-        // But since workingDays didn't include this weekend, we end up with workingDays - 1, which is WRONG.
-        
-        // Solution: We separate "working day leaves" from "non-working day leaves".
-        // However, changing the return structure might break index.vue.
-        // A simpler hack: If user marks leave on a non-working day, we DO NOT count it towards the stats 
-        // that are used for subtraction in index.vue, OR we handle the subtraction logic smarter.
-        
-        // Let's modify step 2 below to only count leaves if they are on working days?
-        // No, user wants to track total leave usage too.
-        
-        // Better approach: Calculate 'deductibleDays' specifically for WIO calculation.
       }
 
       // 2. Count Stats based on Entry OR Public Holiday default
       // 2.0 自定义假期：仅在「无手动标记」的日期生效（手动标记优先）；
       //     工作日 → 分母扣减项；非工作日 → 计入 weekendLeaves 防止误扣分母
-      if (!entryStatus) {
+      if (!ev.hasEntry) {
         const customLeave = this.getCustomLeaveForDate(dateStr);
         if (customLeave) {
           if (isWorkingDay) {
             stats.custom++;
+            stats.deductibleLeave += 1;
           } else {
-            if (!stats.weekendLeaves) stats.weekendLeaves = 0;
-            stats.weekendLeaves++;
+            stats.weekendLeaves += 1;
           }
         }
       }
-      if (entryStatus) {
-        // User manually marked this day
-        if (stats.hasOwnProperty(entryStatus)) {
-          stats[entryStatus]++;
-          
-          // New: Track if this status entry is on a non-working day (weekend/holiday)
-          // so we can adjust the WIO calculation later.
-          // We only care about statuses that are subtracted in the formula:
-          // vacation, sick, unpaid, comp_off, exclude_wio
-          const deductibleStatuses = ['vacation', 'birthday', 'sick', 'unpaid', 'comp_off', 'exclude_wio'];
-          if (!isWorkingDay && deductibleStatuses.includes(entryStatus)) {
-             // This is a "Weekend Leave". It shouldn't reduce the denominator.
-             // We can record this in a new field or just NOT count it in the main stats?
-             // But we need total vacation days for profile...
-             
-             // Let's add a new field: 'weekendLeaves' to track these "invalid" deductions
-             if (!stats.weekendLeaves) stats.weekendLeaves = 0;
-             stats.weekendLeaves++;
-          }
-        }
+      if (ev.hasEntry) {
+        // 按段折算：半天出勤看开关，居家与各类假期恒定 0.5 天
+        stats.company += ev.company;
+        stats.home += ev.home;
+        Object.keys(ev.leave).forEach(k => {
+          if (stats.hasOwnProperty(k)) stats[k] += ev.leave[k];
+        });
+        stats.weekendLeaves += ev.weekendLeave;
+        stats.deductibleLeave += ev.deductible;
         stats.totalRecorded++;
       } else {
         // No manual entry, check if it's a public holiday (off day)
@@ -594,17 +776,18 @@ export default {
     }
 
     return {
-      companyDays: stats.company,
-      homeDays: stats.home,
-      vacationDays: stats.vacation,
-      birthdayDays: stats.birthday,
-      sickDays: stats.sick,
-      unpaidDays: stats.unpaid,
-      compOffDays: stats.comp_off,
+      companyDays: round1(stats.company),
+      homeDays: round1(stats.home),
+      vacationDays: round1(stats.vacation),
+      birthdayDays: round1(stats.birthday),
+      sickDays: round1(stats.sick),
+      unpaidDays: round1(stats.unpaid),
+      compOffDays: round1(stats.comp_off),
       publicDays: stats.public,
-      excludeWioDays: stats.exclude_wio,
+      excludeWioDays: round1(stats.exclude_wio),
       customLeaveDays: stats.custom,
-      weekendLeaves: stats.weekendLeaves || 0, // Return the count of leaves on non-working days
+      weekendLeaves: round1(stats.weekendLeaves), // 落在非工作日的假期（不扣分母）
+      deductibleLeave: round1(stats.deductibleLeave), // 分母扣减项（半天口径的唯一准确来源）
       totalRecorded: stats.totalRecorded,
       workingDays: stats.workingDays,
       totalOvertime: parseFloat(stats.totalOvertime.toFixed(1))
@@ -636,14 +819,14 @@ export default {
       totalOvertime: 0 // New: Total overtime hours for the year
     };
     
-    // Calculate leave days
+    // Calculate leave days（按段折算：半天假期 = 0.5 天）
+    // 假期折算与「半天出勤开关」无关，所以这里固定传 halfDayAsFull: false
     Object.keys(entries).forEach(date => {
-      if (date.startsWith(prefix)) {
-        const status = entries[date];
-        if (status === 'vacation') stats.vacation++;
-        if (status === 'birthday') stats.birthday++;
-        if (status === 'sick') stats.sick++;
-      }
+      if (!date.startsWith(prefix)) return;
+      const ev = evaluateDayParts(entries[date], { halfDayAsFull: false, isWorkingDay: true });
+      if (ev.leave.vacation) stats.vacation += ev.leave.vacation;
+      if (ev.leave.birthday) stats.birthday += ev.leave.birthday;
+      if (ev.leave.sick) stats.sick += ev.leave.sick;
     });
 
     // Calculate total overtime for the year
@@ -654,9 +837,9 @@ export default {
     });
 
     return {
-      vacationDaysUsed: stats.vacation,
-      birthdayDaysUsed: stats.birthday,
-      sickDaysUsed: stats.sick,
+      vacationDaysUsed: round1(stats.vacation),
+      birthdayDaysUsed: round1(stats.birthday),
+      sickDaysUsed: round1(stats.sick),
       totalOvertime: parseFloat(stats.totalOvertime.toFixed(1))
     };
   },
@@ -736,7 +919,12 @@ export default {
       .sort()
       .forEach(dateStr => {
         const wd = weekdays[new Date(dateStr + 'T00:00:00').getDay()];
-        const status = statusKeys[entries[dateStr]] || entries[dateStr];
+        const parts = parseDayParts(entries[dateStr]);
+        const label = s => statusKeys[s] || s || '';
+        // 上下午不同写成「公司办公(上午) 年假(下午)」——不用逗号，免得破列
+        const status = parts.am === parts.pm
+          ? label(parts.am)
+          : `${label(parts.am)}(上午) ${label(parts.pm)}(下午)`;
         const ot = overtimeEntries[dateStr] || '';
         rows.push(`${dateStr},${wd},${status},${ot}`);
       });

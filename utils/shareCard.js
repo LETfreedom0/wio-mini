@@ -9,11 +9,12 @@ import wioService from './wioService.js'
 import { locales, getMonthName } from './locales.js'
 import { drawShareCard, CARD_W, CARD_H, PALETTE } from './shareCardArt.js'
 
-/** 12 / 12.5 小时：整数不显示小数点 */
-function formatHours(n) {
+/** 12 / 12.5：整数不显示小数点（半天标记后天数会出现 0.5 的小数） */
+function formatNumber(n) {
   const v = Math.round(Number(n) * 10) / 10
   return Number.isInteger(v) ? String(v) : v.toFixed(1)
 }
+const formatHours = formatNumber
 
 /**
  * 生成绘制所需的全部字段
@@ -42,13 +43,13 @@ export function buildShareModel(lang, year, month) {
   const leaveLabel = singleName || S.colLeave
 
   const cols = [
-    { value: r.company, unit: S.unitDay, label: S.colOffice },
-    { value: r.home, unit: S.unitDay, label: S.colHome }
+    { value: formatNumber(r.company), unit: S.unitDay, label: S.colOffice },
+    { value: formatNumber(r.home), unit: S.unitDay, label: S.colHome }
   ]
   if (r.leave > 0) {
-    cols.push({ value: r.leave, unit: S.unitDay, label: leaveLabel })
+    cols.push({ value: formatNumber(r.leave), unit: S.unitDay, label: leaveLabel })
   }
-  cols.push({ value: r.rest, unit: S.unitDay, label: S.colRemain, accent: true })
+  cols.push({ value: formatNumber(r.rest), unit: S.unitDay, label: S.colRemain, accent: true })
 
   const hasOt = r.otHours > 0
 

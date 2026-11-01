@@ -33,3 +33,9 @@ supabase/.temp/
 
 # 每次构建都会变的预览二维码
 .workbuddy/preview/
+
+# 本地离线校验：脚本入库，从项目同步的副本不入库
+.workbuddy/shared-check/utils/
+.workbuddy/shared-check/*.png
+.workbuddy/shared-check/*.svg
+.workbuddy/share-card/
