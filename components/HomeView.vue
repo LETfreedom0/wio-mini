@@ -37,7 +37,9 @@
           class="report-swipe anim-entry"
           style="animation-delay: 0.1s;"
           @touchstart="onReportTouchStart"
+          @touchmove="onReportTouchMove"
           @touchend="onReportTouchEnd"
+          @touchcancel="onReportTouchEnd"
         >
           <view class="report-track" :style="trackStyle">
             <view
@@ -45,6 +47,7 @@
               :key="card.key"
               class="progress-card"
               :class="{ 'card-ok': card.achieved }"
+              :style="cardStyle"
             >
               <view class="card-header">
                 <view class="title-group">
@@ -202,28 +205,17 @@ export default {
       todayStr: '',
       nickname: '',
       entries: {},
-      prevMonthStats: {},
-      reportIndex: 0, // 0 = 当月，1 = 上月
-      reportSwipeX: null,
-      reportSwipeY: null,
+      // 每个月一份统计，键 'YYYY-M'；率卡翻页时按需读取
+      monthStats: {},
+      reportIndex: 0, // 0 = 当月，1 = 上月，2 = 上上月……
+      reportCardWidth: 0, // 率卡实际像素宽，拖动时按像素位移
+      reportDragX: 0, // 拖动中的实时位移（带边界阻尼）
+      reportDrag: null, // { startX, startY, decided, horizontal } 本次手势状态
       nowStamp: 0,
       showConfetti: false,
       showRocket: false,
       confettiPieces: [],
       settings: {},
-      stats: {
-        companyDays: 0,
-        homeDays: 0,
-        totalOvertime: 0,
-        workingDays: 0,
-        vacationDays: 0,
-        birthdayDays: 0,
-        sickDays: 0,
-        unpaidDays: 0,
-        compOffDays: 0,
-        excludeWioDays: 0,
-        weekendLeaves: 0
-      },
       yearStats: {
         vacationDaysUsed: 0,
         sickDaysUsed: 0
@@ -269,43 +261,78 @@ export default {
       const now = new Date()
       return wioService.getTargetForMonth(now.getFullYear(), now.getMonth() + 1)
     },
-    // 率卡两页：0 = 当月，1 = 上个月（左滑翻页，与日历切月同一手感）
-    // 每页的率/构成/四列读数都在 buildReportCard 里算好，模板只负责展示，
-    // 避免同一套公式在模板里写两遍各算各的
-    reportCards() {
+    // 率卡时间轴：当月 + 往前若干个月，一直回溯到「最早有记录的那个月」为止。
+    // 再往前翻必然是 0%，没有信息量，所以不生成空页；同时硬上限 12 个月，轨道太长手感会差
+    reportMonths() {
+      void this.nowStamp
+      const entries = this.entries || {}
       const now = new Date()
       const cy = now.getFullYear()
       const cm = now.getMonth() + 1
-      const prev = new Date(cy, cm - 2, 1)
-      const py = prev.getFullYear()
-      const pm = prev.getMonth() + 1
-      return [
-        this.buildReportCard({
-          key: 'current',
-          year: cy,
-          month: cm,
-          stats: this.stats,
-          target: this.targetPercentage,
-          current: true
-        }),
-        this.buildReportCard({
-          key: 'prev',
-          year: py,
-          month: pm,
-          stats: this.prevMonthStats,
-          target: wioService.getTargetForMonth(py, pm),
-          current: false
+      let floorDate = new Date(cy, cm - 1, 1)
+      const keys = Object.keys(entries).sort()
+      if (keys.length) {
+        const [fy, fm] = keys[0].split('-').map(Number)
+        if (fy && fm) {
+          const first = new Date(fy, fm - 1, 1)
+          if (first < floorDate) floorDate = first
+        }
+      }
+      const hardFloor = new Date(cy, cm - 1 - 11, 1)
+      if (floorDate < hardFloor) floorDate = hardFloor
+      const span = (cy - floorDate.getFullYear()) * 12 + (cm - 1 - floorDate.getMonth())
+      const list = []
+      for (let i = 0; i <= span; i++) {
+        const d = new Date(cy, cm - 1 - i, 1)
+        list.push({
+          key: `${d.getFullYear()}-${d.getMonth() + 1}`,
+          year: d.getFullYear(),
+          month: d.getMonth() + 1
         })
-      ]
+      }
+      return list
     },
+    // 每页的率/构成/四列读数都在 buildReportCard 里算好，模板只负责展示，
+    // 避免同一套公式在模板里写两遍各算各的
+    reportCards() {
+      const curYear = new Date().getFullYear()
+      return this.reportMonths.map((m, i) => this.buildReportCard({
+        key: m.key,
+        year: m.year,
+        month: m.month,
+        stats: this.monthStats[m.key] || {},
+        target: wioService.getTargetForMonth(m.year, m.month),
+        current: i === 0,
+        currentYear: curYear
+      }))
+    },
+    reportPageCount() {
+      return Math.max(1, this.reportCards.length)
+    },
+    // 页码越界保护：数据被清空导致页数变少时，自动落回有效的页
+    reportPage() {
+      return Math.min(Math.max(this.reportIndex, 0), this.reportPageCount - 1)
+    },
+    // 不在当月才显示「回到本月」
     isPastReport() {
-      return this.reportIndex > 0
+      return this.reportPage > 0
+    },
+    // 每张卡占轨道的 1/n，轨道总宽 n×100%
+    cardStyle() {
+      const ratio = 100 / this.reportPageCount
+      return { flex: `0 0 ${ratio}%`, width: `${ratio}%` }
     },
     trackStyle() {
-      // 轨道宽度是两页，所以每翻一页位移轨道自身的 50%
+      const n = this.reportPageCount
+      const dragging = !!(this.reportDrag && this.reportDrag.horizontal)
+      // 有实测卡宽就用像素位移（拖动跟手必需）；没有就退回百分比，翻页本身不受影响
+      const transform = this.reportCardWidth
+        ? `translate3d(${-this.reportPage * this.reportCardWidth + this.reportDragX}px, 0, 0)`
+        : `translateX(${(-100 / n) * this.reportPage}%)`
       return {
-        transform: `translateX(${-50 * this.reportIndex}%)`,
-        transition: 'transform 0.3s cubic-bezier(0.22, 0.75, 0.2, 1)'
+        width: `${n * 100}%`,
+        transform,
+        transition: dragging ? 'none' : 'transform 0.34s cubic-bezier(0.22, 0.75, 0.2, 1)'
       }
     },
     vacationTotal() {
@@ -326,6 +353,8 @@ export default {
     this.initData()
     // 云端数据覆盖本地（同步恢复 / 冲突选云端）后，首页要立刻跟着变
     uni.$on('wio:data-restored', this.onDataRestored)
+    // 布局完成后再量卡宽，翻页拖动才有像素基准
+    this.$nextTick(() => this.measureReportCard())
   },
   beforeUnmount() {
     uni.$off('wio:data-restored', this.onDataRestored)
@@ -351,32 +380,32 @@ export default {
       const name = session && session.user && session.user.nickname
       return name ? String(name).trim() : ''
     },
-    // 只读本月 + 上月统计 + 年度假期统计 + 最近记录（不改动存储结构）
+    // 只读时间轴内每个月的统计 + 年度假期统计 + 最近记录（不改动存储结构）
     loadStats() {
       const now = new Date()
       const year = now.getFullYear()
-      const month = now.getMonth() + 1
-      const prev = new Date(year, month - 2, 1)
       this.entries = wioService.getEntries() || {}
-      try {
-        this.stats = wioService.getMonthStats(year, month)
-      } catch (e) {
-        console.error('loadStats month failed', e)
-      }
-      try {
-        this.prevMonthStats = wioService.getMonthStats(prev.getFullYear(), prev.getMonth() + 1)
-      } catch (e) {
-        console.error('loadStats prev month failed', e)
-      }
+      // 一次性把率卡每个月的统计备好：翻页时不再临时算，滑动手感才稳
+      const map = {}
+      this.reportMonths.forEach(m => {
+        try {
+          map[m.key] = wioService.getMonthStats(m.year, m.month)
+        } catch (e) {
+          console.error('loadStats month failed', m.key, e)
+        }
+      })
+      this.monthStats = map
       try {
         this.yearStats = wioService.getYearStats(year)
       } catch (e) {
         console.error('loadStats year failed', e)
       }
       this.buildRecentRecords()
+      // 页数可能变少（清空数据/最早记录变近），页码要落回有效范围
+      if (this.reportIndex > this.reportPageCount - 1) this.reportIndex = 0
     },
-    // 单页率卡的全部展示字段：当月与上月共用，只有措辞不同
-    buildReportCard({ key, year, month, stats, target, current }) {
+    // 单页率卡的全部展示字段：所有月份共用，只有措辞不同
+    buildReportCard({ key, year, month, stats, target, current, currentYear }) {
       const u = this.i18n.home
       const r = computeMonthlyReport(stats, target)
       const segments = [
@@ -385,6 +414,16 @@ export default {
         { key: 'leave', days: r.leave },
         { key: 'rest', days: r.rest }
       ].filter(item => item.days > 0)
+      // 跨年月份补上年份，否则「11月」看不出是哪一年
+      let title = u.monthlyWio
+      if (!current) {
+        title = u.monthWio.replace('{m}', month)
+        if (year !== currentYear) {
+          title = this.settings.language === 'en-US'
+            ? `${getMonthName(month, 'en-US')} ${year} WIO`
+            : `${year}年${month}月回公司率`
+        }
+      }
       return {
         key,
         year,
@@ -392,7 +431,7 @@ export default {
         rate: r.rate,
         target,
         achieved: r.achieved,
-        title: current ? u.monthlyWio : u.monthWio.replace('{m}', month),
+        title,
         // 大数字旁的解读：达标讲成果（超多少）；当月未达标讲可行性（再去几天就够）。
         // 已过去的月份说「再去几天就够」没有意义，改成差额总结。
         gapNote: r.achieved
@@ -408,27 +447,64 @@ export default {
       }
     },
     onReportTouchStart(e) {
-      if (!e.touches || !e.touches.length) return
-      this.reportSwipeX = e.touches[0].clientX
-      this.reportSwipeY = e.touches[0].clientY
+      const t = e.touches && e.touches[0]
+      if (!t) return
+      // 记录起点 + 方向判定状态；方向未判定前不移动轨道
+      this.reportDrag = { startX: t.clientX, startY: t.clientY, decided: false, horizontal: false }
+      this.reportDragX = 0
+    },
+    onReportTouchMove(e) {
+      const drag = this.reportDrag
+      if (!drag || !e.touches || !e.touches.length) return
+      const t = e.touches[0]
+      const dx = t.clientX - drag.startX
+      const dy = t.clientY - drag.startY
+      if (!drag.decided) {
+        // 6px 死区：太小会把点击/轻触误判成拖动
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return
+        drag.decided = true
+        // 横向明显占优才接管，否则整个手势让给页面纵向滚动
+        drag.horizontal = Math.abs(dx) > Math.abs(dy) * 1.2
+      }
+      if (!drag.horizontal) return
+      this.reportDragX = this.applyDragResistance(dx)
+    },
+    // 已经在最新/最旧一页还继续拖时给阻尼：手感是「拉不动」，而不是硬顶
+    applyDragResistance(dx) {
+      const atNewest = this.reportPage === 0 && dx > 0
+      const atOldest = this.reportPage >= this.reportPageCount - 1 && dx < 0
+      return atNewest || atOldest ? dx * 0.3 : dx
     },
     onReportTouchEnd(e) {
-      if (this.reportSwipeX === null) return
+      const drag = this.reportDrag
+      if (!drag) return
+      this.reportDrag = null
+      if (!drag.horizontal) {
+        this.reportDragX = 0
+        return
+      }
       const t = (e.changedTouches && e.changedTouches[0]) || null
-      const startX = this.reportSwipeX
-      const startY = this.reportSwipeY
-      this.reportSwipeX = null
-      this.reportSwipeY = null
-      if (!t) return
-      const dx = t.clientX - startX
-      const dy = t.clientY - startY
-      // 阈值 60px 且必须明显偏横向：这里在 scroll-view 顶部，纵向滑动页面很常见，不能误翻页
-      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return
-      // 左滑看上月，右滑回当月（只有两页，到边就不再动）
-      const next = dx < 0 ? 1 : 0
-      if (next === this.reportIndex) return
-      haptic('light')
-      this.reportIndex = next
+      const dx = t ? t.clientX - drag.startX : 0
+      const from = this.reportPage
+      // 阈值随卡宽走（约卡宽的 22%，夹在 40~64px），比原来固定 60px 更容易触发，
+      // 但低于 40px 的轻扫仍判为误触，避免误翻
+      const unit = this.reportCardWidth || 320
+      const threshold = Math.min(Math.max(unit * 0.22, 40), 64)
+      let next = from
+      if (Math.abs(dx) >= threshold) next = dx < 0 ? from + 1 : from - 1
+      next = Math.min(Math.max(next, 0), this.reportPageCount - 1)
+      this.reportDragX = 0
+      if (next !== from) {
+        haptic('light')
+        this.reportIndex = next
+      }
+    },
+    // 一张卡的实际宽度：拖动要按像素位移才跟手，取不到就退回百分比模式
+    measureReportCard() {
+      const query = uni.createSelectorQuery().in(this)
+      query.select('.report-swipe').boundingClientRect(rect => {
+        if (rect && rect.width) this.reportCardWidth = rect.width
+      }).exec()
     },
     backToCurrentReport() {
       haptic('medium')
@@ -481,7 +557,7 @@ export default {
     goShare() {
       haptic('light')
       // 分享哪个月就带哪个月，别在上个月的数据上生成「本月」卡片
-      const card = this.reportCards[this.reportIndex]
+      const card = this.reportCards[this.reportPage]
       const query = card ? `?y=${card.year}&m=${card.month}` : ''
       uni.navigateTo({ url: `/pages/share/index${query}` })
     },
@@ -626,8 +702,8 @@ export default {
   background: #0E6E62;
 }
 
-/* ===== 率卡左右翻页（左滑看上月） ===== */
-/* 左右翻页容器：只做裁剪，轨道是两张卡宽，位移一半即翻一页 */
+/* ===== 率卡左右翻页（左滑看上一个月，可连续往前翻） ===== */
+/* 左右翻页容器：只做裁剪；轨道宽度与每张卡宽度由 cardStyle / trackStyle 按页数算 */
 .report-swipe {
   width: 100%;
   overflow: hidden;
@@ -637,13 +713,11 @@ export default {
 
 .report-track {
   display: flex;
-  width: 200%;
   will-change: transform;
 }
 
 .report-track .progress-card {
-  width: 50%;
-  flex: 0 0 50%;
+  flex: 0 0 100%;
   margin-bottom: 0;
 }
 
