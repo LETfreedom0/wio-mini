@@ -50,7 +50,9 @@ export default {
       topSafe: 44,
       imagePath: '',
       failed: false,
-      model: null
+      model: null,
+      year: 0,
+      month: 0
     }
   },
   computed: {
@@ -59,9 +61,14 @@ export default {
       return pack.shareCard
     }
   },
-  onLoad() {
+  onLoad(options) {
     this.language = wioService.getSettings().language || 'zh-CN'
     this.topSafe = getTopSafeArea().totalHeight
+    // 从首页滑到历史月份再点分享：带上年月，别把上个月的数据画成当月
+    const y = Number(options && options.y) || 0
+    const m = Number(options && options.m) || 0
+    this.year = y
+    this.month = m
   },
   onReady() {
     this.generate()
@@ -105,7 +112,7 @@ export default {
       this.busy = true
       this.failed = false
       try {
-        const model = buildShareModel(this.language)
+        const model = buildShareModel(this.language, this.year || undefined, this.month || undefined)
         this.model = model
 
         const canvas = await this.getCanvasNode()

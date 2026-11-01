@@ -6,7 +6,7 @@
 // ============================================================
 
 import wioService from './wioService.js'
-import { locales } from './locales.js'
+import { locales, getMonthName } from './locales.js'
 import { drawShareCard, CARD_W, CARD_H, PALETTE } from './shareCardArt.js'
 
 /** 12 / 12.5 小时：整数不显示小数点 */
@@ -27,6 +27,10 @@ export function buildShareModel(lang, year, month) {
   const now = new Date()
   const y = year || now.getFullYear()
   const m = month || now.getMonth() + 1
+
+  // 从首页滑到历史月份再分享时，卡片不能还写「本月」
+  const isCurrent = y === now.getFullYear() && m === now.getMonth() + 1
+  const monthToken = lang === 'zh-CN' ? `${m}月` : getMonthName(m, lang)
 
   const r = wioService.getMonthlyReport(y, m)
 
@@ -55,14 +59,16 @@ export function buildShareModel(lang, year, month) {
     scene: `${y}${String(m).padStart(2, '0')}`,
     brand: S.brand,
     monthText: `${y} · ${String(m).padStart(2, '0')}`,
-    title: S.cardTitle,
+    title: isCurrent ? S.cardTitle : S.cardTitlePast.replace('{m}', monthToken),
     rate: r.rate,
     achieved: r.achieved,
     badgeText: r.achieved ? S.onTarget : S.offTarget,
     gapText: r.achieved
       ? S.above.replace('{n}', r.over)
-      : S.need.replace('{n}', r.gapDays),
-    compositionText: S.composition.replace('{n}', r.workingDays),
+      : (isCurrent ? S.need : S.needPast).replace('{n}', r.gapDays),
+    compositionText: (isCurrent ? S.composition : S.compositionPast)
+      .replace('{m}', monthToken)
+      .replace('{n}', r.workingDays),
     hasOt,
     otLine1: S.otTitle.replace('{n}', formatHours(r.otHours)),
     otLine2: S.otDays.replace('{n}', formatHours(r.otDays)),

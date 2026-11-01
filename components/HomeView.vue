@@ -31,75 +31,100 @@
           <text class="date-text">{{ currentDateStr }}</text>
         </view>
 
-        <!-- ===== 本月回公司率 ===== -->
-        <view class="progress-card anim-entry" :class="{ 'card-ok': isAchieved }" style="animation-delay: 0.1s;">
-          <view class="card-header">
-            <view class="title-group">
-              <text class="card-label">{{ i18n.home.monthlyWio }}</text>
-              <text class="title-target">· {{ i18n.home.targetLabel }} {{ targetPercentage }}%</text>
-            </view>
-            <view class="state-badge" :class="isAchieved ? 'badge-ok' : 'badge-miss'">
-              <text v-if="isAchieved" class="badge-check">✓</text>
-              <text class="badge-text">{{ isAchieved ? i18n.home.achieved : i18n.home.notAchieved }}</text>
-            </view>
-          </view>
-
-          <view class="number-row">
-            <view class="number-group">
-              <text class="big-number">{{ wioPercentage }}</text>
-              <text class="percent-sign">%</text>
-            </view>
-            <text class="gap-note">{{ gapNote }}</text>
-          </view>
-
-          <!-- 本月构成条：纯视觉不承载文字，最右淡段 = 还没到的日子 -->
-          <view class="mix-track">
+        <!-- ===== 月度回公司率：左滑看上一个月的同类数据 ===== -->
+        <!-- 只有率卡带月度维度（年假、今天打卡、最近记录都不分月），所以滑动只作用在这一张卡上 -->
+        <view
+          class="report-swipe anim-entry"
+          style="animation-delay: 0.1s;"
+          @touchstart="onReportTouchStart"
+          @touchend="onReportTouchEnd"
+        >
+          <view class="report-track" :style="trackStyle">
             <view
-              v-for="seg in mixSegments"
-              :key="seg.key"
-              class="mix-seg"
-              :class="'seg-' + seg.key"
-              :style="{ flexGrow: seg.days }"
-            ></view>
-          </view>
+              v-for="card in reportCards"
+              :key="card.key"
+              class="progress-card"
+              :class="{ 'card-ok': card.achieved }"
+            >
+              <view class="card-header">
+                <view class="title-group">
+                  <text class="card-label">{{ card.title }}</text>
+                  <text class="title-target">· {{ i18n.home.targetLabel }} {{ card.target }}%</text>
+                </view>
+                <view class="state-badge" :class="card.achieved ? 'badge-ok' : 'badge-miss'">
+                  <text v-if="card.achieved" class="badge-check">✓</text>
+                  <text class="badge-text">{{ card.achieved ? i18n.home.achieved : i18n.home.notAchieved }}</text>
+                </view>
+              </view>
 
-          <!-- 数据行：条的全部读数都在这一行，左三组左对齐，剩余右对齐强调 -->
-          <view class="data-row">
-            <view class="data-col">
-              <view class="data-value-row">
-                <text class="data-value">{{ stats.companyDays || 0 }}</text>
-                <text class="data-unit">{{ i18n.home.countDays }}</text>
+              <view class="number-row">
+                <view class="number-group">
+                  <text class="big-number">{{ card.rate }}</text>
+                  <text class="percent-sign">%</text>
+                </view>
+                <text class="gap-note">{{ card.gapNote }}</text>
               </view>
-              <text class="data-label">{{ i18n.home.dlCompany }}</text>
-            </view>
-            <view class="data-col">
-              <view class="data-value-row">
-                <text class="data-value">{{ stats.homeDays || 0 }}</text>
-                <text class="data-unit">{{ i18n.home.countDays }}</text>
+
+              <!-- 本月构成条：纯视觉不承载文字，最右淡段 = 还没到的日子 -->
+              <view class="mix-track">
+                <view
+                  v-for="seg in card.segments"
+                  :key="seg.key"
+                  class="mix-seg"
+                  :class="'seg-' + seg.key"
+                  :style="{ flexGrow: seg.days }"
+                ></view>
               </view>
-              <text class="data-label">{{ i18n.home.dlHome }}</text>
-            </view>
-            <view class="data-col">
-              <view class="data-value-row">
-                <text class="data-value">{{ leaveTotalDays }}</text>
-                <text class="data-unit">{{ i18n.home.countDays }}</text>
+
+              <!-- 数据行：条的全部读数都在这一行，最后一组右对齐强调 -->
+              <view class="data-row">
+                <view class="data-col">
+                  <view class="data-value-row">
+                    <text class="data-value">{{ card.company }}</text>
+                    <text class="data-unit">{{ i18n.home.countDays }}</text>
+                  </view>
+                  <text class="data-label">{{ i18n.home.dlCompany }}</text>
+                </view>
+                <view class="data-col">
+                  <view class="data-value-row">
+                    <text class="data-value">{{ card.home }}</text>
+                    <text class="data-unit">{{ i18n.home.countDays }}</text>
+                  </view>
+                  <text class="data-label">{{ i18n.home.dlHome }}</text>
+                </view>
+                <view class="data-col">
+                  <view class="data-value-row">
+                    <text class="data-value">{{ card.leave }}</text>
+                    <text class="data-unit">{{ i18n.home.countDays }}</text>
+                  </view>
+                  <text class="data-label">{{ i18n.home.dlLeave }}</text>
+                </view>
+                <view class="data-col data-col-last">
+                  <view class="data-value-row">
+                    <text class="data-value data-value-accent">{{ card.lastValue }}</text>
+                    <text class="data-unit data-unit-accent">{{ i18n.home.countDays }}</text>
+                  </view>
+                  <text class="data-label">{{ card.lastLabel }}</text>
+                </view>
               </view>
-              <text class="data-label">{{ i18n.home.dlLeave }}</text>
-            </view>
-            <view class="data-col data-col-last">
-              <view class="data-value-row">
-                <text class="data-value data-value-accent">{{ restDays }}</text>
-                <text class="data-unit data-unit-accent">{{ i18n.home.countDays }}</text>
-              </view>
-              <text class="data-label">{{ i18n.home.remainWorkDays }}</text>
             </view>
           </view>
         </view>
 
-        <!-- 分享入口：做成轻量文字链跟着率卡走，不再往卡里塞第三个按钮 -->
-        <view class="share-entry anim-entry" style="animation-delay: 0.12s;" @click="goShare">
-          <text class="share-entry-text">{{ i18n.shareCard.entry }}</text>
-          <text class="share-entry-arrow">›</text>
+        <!-- 分享入口：轻量文字链；历史月份时左端挂「回到本月」，不额外占一行 -->
+        <view class="share-entry anim-entry" style="animation-delay: 0.13s;" @click="goShare">
+          <view
+            v-if="isPastReport"
+            class="nav-back-btn"
+            @click.stop="backToCurrentReport"
+          >
+            <text class="nav-back-text">‹ {{ i18n.calendar.backToCurrent }}</text>
+          </view>
+          <view v-else class="share-entry-holder"></view>
+          <view class="share-entry-link">
+            <text class="share-entry-text">{{ i18n.shareCard.entry }}</text>
+            <text class="share-entry-arrow">›</text>
+          </view>
         </view>
 
         <!-- ===== 年假剩余 ===== -->
@@ -177,6 +202,10 @@ export default {
       todayStr: '',
       nickname: '',
       entries: {},
+      prevMonthStats: {},
+      reportIndex: 0, // 0 = 当月，1 = 上月
+      reportSwipeX: null,
+      reportSwipeY: null,
       nowStamp: 0,
       showConfetti: false,
       showRocket: false,
@@ -240,79 +269,44 @@ export default {
       const now = new Date()
       return wioService.getTargetForMonth(now.getFullYear(), now.getMonth() + 1)
     },
-    // 统一的展示口径：与分享卡共用 computeMonthlyReport，避免两处公式各算各的
-    report() {
-      return computeMonthlyReport(this.stats, this.targetPercentage)
-    },
-    wioPercentage() {
-      return this.report.rate
-    },
-    denominator() {
-      return this.report.denominator
-    },
-    isAchieved() {
-      return this.report.achieved
-    },
-    // 距离目标还差多少个「公司办公日」
-    gapDays() {
-      return this.report.gapDays
-    },
-    // 大数字旁的解读：达标讲成果（超多少），未达标讲可行性（还差几天）
-    gapNote() {
-      const u = this.i18n.home
-      if (this.isAchieved) {
-        const over = this.wioPercentage - this.targetPercentage
-        return u.gapAchievedOver.replace('{n}', over)
-      }
-      return u.gapNeed.replace('{n}', this.gapDays)
-    },
-    // 休假合计：与分母的扣减项保持一致（年假/生日假/病假/无薪/调休/不计入/自定义假期）
-    leaveTotalDays() {
-      return this.report.leave
-    },
-    // 还没到的日子 = 全月工作日 - 已办公 - 休假（含周末标记的假期，它们同样占掉了可用工作日）
-    restDays() {
-      return this.report.rest
-    },
-    // 构成条四段：天数为 0 的段不渲染；最右 rest 段永远最后
-    mixSegments() {
-      const list = [
-        { key: 'company', days: this.stats.companyDays || 0 },
-        { key: 'home', days: this.stats.homeDays || 0 },
-        { key: 'leave', days: this.leaveTotalDays },
-        { key: 'rest', days: this.restDays }
-      ]
-      return list.filter(item => item.days > 0)
-    },
-    // 距离月底还有多少个工作日（原实现是「本月的有效工作日里还有几天没记录」，
-    // 与用户想看的「还剩多少天可以冲目标」不是一回事）
-    // 口径：今天（含）到月末逐日判断，排除：
-    //   - 已标记的假期 / 不计入（那些天本来就不用来公司）
-    //   - 自定义假期区间
-    //   - 今天若已打卡（公司/居家），从明天算起——今天这一天已经用掉了
-    remainWorkDays() {
+    // 率卡两页：0 = 当月，1 = 上个月（左滑翻页，与日历切月同一手感）
+    // 每页的率/构成/四列读数都在 buildReportCard 里算好，模板只负责展示，
+    // 避免同一套公式在模板里写两遍各算各的
+    reportCards() {
       const now = new Date()
-      const y = now.getFullYear()
-      const m = now.getMonth() + 1
-      const today = now.getDate()
-      const daysInMonth = new Date(y, m, 0).getDate()
-      const entries = this.entries || {}
-      const leaveStatuses = ['vacation', 'birthday', 'sick', 'unpaid', 'comp_off', 'exclude_wio']
-      // 自定义假期只取一次，避免逐日重复读存储
-      const customLeaves = wioService.getCustomLeaves()
-      const inCustomLeave = (dateStr) => customLeaves.some(l => dateStr >= l.start && dateStr <= l.end)
-
-      let count = 0
-      for (let d = today; d <= daysInMonth; d++) {
-        const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-        const status = entries[dateStr]
-        if (d === today && (status === 'company' || status === 'home')) continue
-        if (status && leaveStatuses.indexOf(status) !== -1) continue
-        if (!status && inCustomLeave(dateStr)) continue
-        if (!wioService.isOfficialWorkingDay(new Date(y, m - 1, d))) continue
-        count++
+      const cy = now.getFullYear()
+      const cm = now.getMonth() + 1
+      const prev = new Date(cy, cm - 2, 1)
+      const py = prev.getFullYear()
+      const pm = prev.getMonth() + 1
+      return [
+        this.buildReportCard({
+          key: 'current',
+          year: cy,
+          month: cm,
+          stats: this.stats,
+          target: this.targetPercentage,
+          current: true
+        }),
+        this.buildReportCard({
+          key: 'prev',
+          year: py,
+          month: pm,
+          stats: this.prevMonthStats,
+          target: wioService.getTargetForMonth(py, pm),
+          current: false
+        })
+      ]
+    },
+    isPastReport() {
+      return this.reportIndex > 0
+    },
+    trackStyle() {
+      // 轨道宽度是两页，所以每翻一页位移轨道自身的 50%
+      return {
+        transform: `translateX(${-50 * this.reportIndex}%)`,
+        transition: 'transform 0.3s cubic-bezier(0.22, 0.75, 0.2, 1)'
       }
-      return count
     },
     vacationTotal() {
       return this.settings.vacationDays || 0
@@ -357,11 +351,12 @@ export default {
       const name = session && session.user && session.user.nickname
       return name ? String(name).trim() : ''
     },
-    // 只读本月统计 + 年度假期统计 + 最近记录（不改动存储结构）
+    // 只读本月 + 上月统计 + 年度假期统计 + 最近记录（不改动存储结构）
     loadStats() {
       const now = new Date()
       const year = now.getFullYear()
       const month = now.getMonth() + 1
+      const prev = new Date(year, month - 2, 1)
       this.entries = wioService.getEntries() || {}
       try {
         this.stats = wioService.getMonthStats(year, month)
@@ -369,11 +364,75 @@ export default {
         console.error('loadStats month failed', e)
       }
       try {
+        this.prevMonthStats = wioService.getMonthStats(prev.getFullYear(), prev.getMonth() + 1)
+      } catch (e) {
+        console.error('loadStats prev month failed', e)
+      }
+      try {
         this.yearStats = wioService.getYearStats(year)
       } catch (e) {
         console.error('loadStats year failed', e)
       }
       this.buildRecentRecords()
+    },
+    // 单页率卡的全部展示字段：当月与上月共用，只有措辞不同
+    buildReportCard({ key, year, month, stats, target, current }) {
+      const u = this.i18n.home
+      const r = computeMonthlyReport(stats, target)
+      const segments = [
+        { key: 'company', days: r.company },
+        { key: 'home', days: r.home },
+        { key: 'leave', days: r.leave },
+        { key: 'rest', days: r.rest }
+      ].filter(item => item.days > 0)
+      return {
+        key,
+        year,
+        month,
+        rate: r.rate,
+        target,
+        achieved: r.achieved,
+        title: current ? u.monthlyWio : u.monthWio.replace('{m}', month),
+        // 大数字旁的解读：达标讲成果（超多少）；当月未达标讲可行性（再去几天就够）。
+        // 已过去的月份说「再去几天就够」没有意义，改成差额总结。
+        gapNote: r.achieved
+          ? u.gapAchievedOver.replace('{n}', r.rate - target)
+          : (current ? u.gapNeed : u.gapShort).replace('{n}', r.gapDays),
+        company: r.company,
+        home: r.home,
+        leave: r.leave,
+        // 当月最后一列是「还没到的日子」；历史月份那些天只是没记录，不能叫剩余
+        lastValue: r.rest,
+        lastLabel: current ? u.remainWorkDays : u.notRecorded,
+        segments
+      }
+    },
+    onReportTouchStart(e) {
+      if (!e.touches || !e.touches.length) return
+      this.reportSwipeX = e.touches[0].clientX
+      this.reportSwipeY = e.touches[0].clientY
+    },
+    onReportTouchEnd(e) {
+      if (this.reportSwipeX === null) return
+      const t = (e.changedTouches && e.changedTouches[0]) || null
+      const startX = this.reportSwipeX
+      const startY = this.reportSwipeY
+      this.reportSwipeX = null
+      this.reportSwipeY = null
+      if (!t) return
+      const dx = t.clientX - startX
+      const dy = t.clientY - startY
+      // 阈值 60px 且必须明显偏横向：这里在 scroll-view 顶部，纵向滑动页面很常见，不能误翻页
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+      // 左滑看上月，右滑回当月（只有两页，到边就不再动）
+      const next = dx < 0 ? 1 : 0
+      if (next === this.reportIndex) return
+      haptic('light')
+      this.reportIndex = next
+    },
+    backToCurrentReport() {
+      haptic('medium')
+      this.reportIndex = 0
     },
     buildRecentRecords() {
       const entries = wioService.getEntries() || {}
@@ -421,7 +480,10 @@ export default {
     },
     goShare() {
       haptic('light')
-      uni.navigateTo({ url: '/pages/share/index' })
+      // 分享哪个月就带哪个月，别在上个月的数据上生成「本月」卡片
+      const card = this.reportCards[this.reportIndex]
+      const query = card ? `?y=${card.year}&m=${card.month}` : ''
+      uni.navigateTo({ url: `/pages/share/index${query}` })
     },
     triggerConfetti() {
       const colors = ['#ff0055', '#00ddff', '#00ff99', '#9900ff', '#ffd300', '#ff8800']
@@ -564,14 +626,67 @@ export default {
   background: #0E6E62;
 }
 
-/* 分享入口：文字链，随率卡右对齐 */
+/* ===== 率卡左右翻页（左滑看上月） ===== */
+/* 左右翻页容器：只做裁剪，轨道是两张卡宽，位移一半即翻一页 */
+.report-swipe {
+  width: 100%;
+  overflow: hidden;
+  border-radius: 20px;
+  margin-bottom: 2px;
+}
+
+.report-track {
+  display: flex;
+  width: 200%;
+  will-change: transform;
+}
+
+.report-track .progress-card {
+  width: 50%;
+  flex: 0 0 50%;
+  margin-bottom: 0;
+}
+
+.nav-back-btn {
+  display: flex;
+  align-items: center;
+  padding: 1px 9px;
+  border-radius: 10px;
+  background: #EAF2F0;
+  transition: all 0.15s ease;
+}
+
+.nav-back-btn:active {
+  background: #DCEAE7;
+  transform: scale(0.96);
+}
+
+.nav-back-text {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: #0E6E62;
+}
+
+/* 分享入口：文字链，随率卡右对齐；左侧空占位让「回到本月」出现时不挤动右侧 */
 .share-entry {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  padding: 0 6px;
+  margin: 0 0 12px;
+  min-height: 18px;
+}
+
+.share-entry-holder {
+  flex: 1;
+}
+
+.share-entry-link {
+  display: flex;
+  align-items: center;
   gap: 2px;
-  padding-right: 6px;
-  margin: -4px 0 10px;
+  margin-left: auto;
 }
 
 .share-entry-text {
