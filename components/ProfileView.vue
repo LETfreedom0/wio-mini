@@ -163,7 +163,7 @@
         </view>
       </view>
 
-      <view class="version-row"><text class="version-text">WIO Tracker · v1.1.0</text></view>
+      <view class="version-row"><text class="version-text">{{ versionLabel }}</text></view>
 
     </view>
 
@@ -300,6 +300,7 @@ import * as syncService from '@/utils/syncService.js'
 import CustomLeaveSheet from '@/components/CustomLeaveSheet.vue'
 import PaywallSheet from '@/components/PaywallSheet.vue'
 import { tap as haptic } from '@/utils/haptic.js'
+import { APP_VERSION_LABEL } from '@/utils/appVersion.js'
 
 const holidayNameMap = {
   '元旦': 'New Year\'s',
@@ -374,6 +375,9 @@ export default {
   computed: {
     i18n() {
       return locales[this.settings.language] || locales['zh-CN'];
+    },
+    versionLabel() {
+      return APP_VERSION_LABEL;
     },
     monthOptions() {
       const isEn = this.settings.language === 'en-US';

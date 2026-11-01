@@ -14,6 +14,7 @@
 import { callCloud, isCloudAvailable } from './cloud.js'
 import { isLogin, updateCachedSubscription } from './auth.js'
 import { isProUser } from './pro.js'
+import { APP_VERSION } from './appVersion.js'
 
 const KEY_SYNC_STATE = 'wio_sync_state' // { dataVersion, dirty, lastSyncAt }
 const KEY_BACKUP = 'wio_backup'         // 覆盖本地前的备份，防误恢复
@@ -54,7 +55,7 @@ export function buildSnapshot() {
     overtime: readKey('wio_overtime'),
     meta: {
       savedAt: new Date().toISOString(),
-      appVersion: '1.1.0'
+      appVersion: APP_VERSION
     }
   }
 }
