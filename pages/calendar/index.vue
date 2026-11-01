@@ -323,10 +323,24 @@ export default {
     isPro() {
       return this.proStamp >= 0 && isProUser();
     },
-    // 半天面板里可选的状态：排除加班（走独立弹层）、清除、自定义假期、半天自身
+    // 半天组合只开放四种最常见状态（公司 / 居家 / 年假 / 病假）：
+    // 半天假几乎都是「请半天病假」「请半天年假」，剩下的调休、无薪、公共假期
+    // 极少出现半天组合，留在图例里批量标记就够，面板只有四格也更好点
     halfStatusOptions() {
-      const skip = ['overtime_record', 'clear', 'half_day'];
-      return this.filteredLegends.filter(item => !item.isCustom && skip.indexOf(item.value) === -1);
+      const allow = ['company', 'home', 'vacation', 'sick'];
+      const list = allow
+        .map(value => this.legends.find(item => item.value === value))
+        .filter(Boolean);
+      // 兼容旧数据 / 图例标的其它状态：把当前值补进选项，
+      // 否则打开面板选中态会凭空消失，用户也没法原样保存
+      const current = [this.halfAm, this.halfPm];
+      current.forEach(value => {
+        if (!value || allow.indexOf(value) !== -1) return;
+        if (list.some(item => item.value === value)) return;
+        const item = this.legends.find(i => i.value === value);
+        if (item) list.push(item);
+      });
+      return list;
     },
     halfPartRows() {
       const c = this.i18n.calendar;
@@ -1834,15 +1848,18 @@ export default {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
+/* 固定四种状态，做成 2×2 等宽格：比一行塞四个小 chip 更好点，英文也不挤 */
 .half-status-item {
+  flex: 0 0 calc(50% - 4px);
+  box-sizing: border-box;
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 5px;
-  padding: 6px 9px;
+  gap: 6px;
+  padding: 9px 10px;
   border-radius: 10px;
   background-color: #F7F8F9;
   border: 1px solid transparent;
