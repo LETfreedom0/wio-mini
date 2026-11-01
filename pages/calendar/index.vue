@@ -143,7 +143,7 @@
       </view>
     </view>
 
-    <!-- 半天标记面板（PRO）：先选作用范围，再选状态 -->
+    <!-- 半天标记面板（PRO）：上午 / 下午各选各的，任意组合 -->
     <view class="modal-overlay" v-if="showHalfPanel" @click="closeHalfPanel">
       <view class="modal-content half-modal" @click.stop>
         <view class="modal-close-btn" @click="closeHalfPanel">×</view>
@@ -151,30 +151,40 @@
           <text class="modal-title">{{ i18n.calendar.halfTitle }}</text>
           <text class="modal-subtitle">{{ halfDateStr }}</text>
         </view>
-        <text class="half-current">{{ halfCurrentText }}</text>
 
-        <view class="scope-row">
-          <view
-            v-for="opt in halfScopeOptions"
-            :key="opt.key"
-            class="scope-chip"
-            :class="{ 'scope-on': halfScope === opt.key }"
-            @click="setHalfScope(opt.key)"
-          >
-            <text class="scope-text">{{ opt.label }}</text>
+        <!-- 预览：把日历上那一格直接摆出来，选完就知道长什么样 -->
+        <view class="half-preview">
+          <view class="half-preview-cell" :style="halfPreviewStyle">
+            <text class="half-preview-num">{{ halfDayNum }}</text>
+          </view>
+          <view class="half-preview-text">
+            <text class="half-preview-line">{{ halfPreviewAm }}</text>
+            <text class="half-preview-line">{{ halfPreviewPm }}</text>
           </view>
         </view>
 
-        <view class="half-status-grid">
-          <view
-            v-for="opt in halfStatusOptions"
-            :key="opt.value"
-            class="half-status-item"
-            :class="{ 'half-status-on': halfStatus === opt.value }"
-            @click="setHalfStatus(opt.value)"
-          >
-            <view class="legend-dot" :class="opt.color"></view>
-            <text class="half-status-text">{{ opt.label }}</text>
+        <view class="half-part" v-for="part in halfPartRows" :key="part.key">
+          <view class="half-part-head">
+            <text class="half-part-title">{{ part.title }}</text>
+            <view v-if="part.key === 'pm'" class="half-copy" @click="copyAmToPm">
+              <text class="half-copy-text">{{ i18n.calendar.halfSameAsAm }}</text>
+            </view>
+          </view>
+          <view class="half-status-grid">
+            <view
+              v-for="opt in halfStatusOptions"
+              :key="opt.value"
+              class="half-status-item"
+              :class="{ 'half-status-on': partValue(part.key) === opt.value }"
+              :style="halfChipStyle(partValue(part.key) === opt.value, opt.value)"
+              @click="setHalfPart(part.key, opt.value)"
+            >
+              <view
+                class="half-chip-dot"
+                :style="{ background: statusColor(opt.value).bg, borderColor: statusColor(opt.value).color }"
+              ></view>
+              <text class="half-status-text">{{ opt.label }}</text>
+            </view>
           </view>
         </view>
 
@@ -277,8 +287,9 @@ export default {
       showHalfPanel: false,
       halfDateStr: '',
       halfDayNum: 0,
-      halfScope: 'all', // all | am | pm
-      halfStatus: 'company',
+      // 上下午各存一份，天然支持任意组合（上午公司 + 下午年假 等）
+      halfAm: 'company',
+      halfPm: 'company',
       showPaywall: false,
       // 权益变化后用它打点，让 isPro 这个 computed 重算
       proStamp: 0
@@ -317,29 +328,31 @@ export default {
       const skip = ['overtime_record', 'clear', 'half_day'];
       return this.filteredLegends.filter(item => !item.isCustom && skip.indexOf(item.value) === -1);
     },
-    halfScopeOptions() {
+    halfPartRows() {
       const c = this.i18n.calendar;
       return [
-        { key: 'all', label: c.halfScopeAll },
-        { key: 'am', label: c.halfScopeAm },
-        { key: 'pm', label: c.halfScopePm }
+        { key: 'am', title: c.amShort },
+        { key: 'pm', title: c.pmShort }
       ];
     },
     halfParts() {
       if (!this.halfDateStr) return { am: null, pm: null };
       return parseDayParts(this.entries[this.halfDateStr]);
     },
-    // 面板顶部「上午 X · 下午 Y」的当前值说明
-    halfCurrentText() {
-      const c = this.i18n.calendar;
-      const label = s => {
-        if (!s) return '—';
-        const item = this.legends.find(i => i.value === s);
-        return item ? item.label : s;
+    // 预览格：与日历上的格子同一套斜切画法（左上=上午，右下=下午）
+    halfPreviewStyle() {
+      const a = this.statusColor(this.halfAm);
+      const b = this.statusColor(this.halfPm);
+      return {
+        background: `linear-gradient(to bottom right, ${a.bg} 0%, ${a.bg} 50%, ${b.bg} 50%, ${b.bg} 100%)`,
+        color: a.color
       };
-      return c.halfCurrent
-        .replace('{am}', label(this.halfParts.am))
-        .replace('{pm}', label(this.halfParts.pm));
+    },
+    halfPreviewAm() {
+      return `${this.i18n.calendar.amShort} ${this.statusLabel(this.halfAm)}`;
+    },
+    halfPreviewPm() {
+      return `${this.i18n.calendar.pmShort} ${this.statusLabel(this.halfPm)}`;
     },
     monthYearText() {
       return getMonthYearName(this.currentMonth, this.currentYear, this.settings.language);
@@ -751,37 +764,45 @@ export default {
       const parts = parseDayParts(this.entries[dateStr]);
       this.halfDateStr = dateStr;
       this.halfDayNum = day;
-      this.halfScope = 'all';
-      // 默认落在当前上午的状态上，没有记录就给「公司办公」
-      this.halfStatus = parts.am || parts.pm || 'company';
+      // 两段都预填当前值；没有记录就给「公司办公」，打开即可直接保存
+      this.halfAm = parts.am || parts.pm || 'company';
+      this.halfPm = parts.pm || parts.am || 'company';
       this.showHalfPanel = true;
     },
     closeHalfPanel() {
       this.showHalfPanel = false;
     },
-    setHalfScope(scope) {
-      haptic('light');
-      this.halfScope = scope;
+    // 面板里两行各自的当前值
+    partValue(key) {
+      return key === 'am' ? this.halfAm : this.halfPm;
     },
-    setHalfStatus(status) {
+    setHalfPart(key, value) {
       haptic('light');
-      this.halfStatus = status;
+      if (key === 'am') this.halfAm = value;
+      else this.halfPm = value;
+    },
+    // 常见操作「下午和上午一样」，省一次点击
+    copyAmToPm() {
+      haptic('light');
+      this.halfPm = this.halfAm;
+    },
+    statusColor(value) {
+      return STATUS_COLORS[value] || STATUS_COLORS.default;
+    },
+    statusLabel(value) {
+      if (!value) return '—';
+      const item = this.legends.find(i => i.value === value);
+      return item ? item.label : value;
+    },
+    // 选中的 chip 用该状态自己的颜色做浅底 + 描边，比统一的主题色更好认
+    halfChipStyle(on, value) {
+      if (!on) return {};
+      const c = this.statusColor(value);
+      return { background: this.hexToRgba(c.color, 0.1), borderColor: c.color };
     },
     applyHalfDay() {
-      const parts = this.halfParts;
-      let am = parts.am;
-      let pm = parts.pm;
-      if (this.halfScope === 'all') {
-        am = this.halfStatus;
-        pm = this.halfStatus;
-      } else if (this.halfScope === 'am') {
-        am = this.halfStatus;
-      } else {
-        pm = this.halfStatus;
-      }
-      // 空的那段跟随另一段：避免出现「上午有、下午空」这种说不清的记录
-      if (!am) am = pm;
-      if (!pm) pm = am;
+      const am = this.halfAm;
+      const pm = this.halfPm;
 
       if (!wioService.saveDayParts(this.halfDateStr, am, pm)) {
         // 失败的两种可能：假期额度用满，或权益在面板打开期间失效
@@ -1734,58 +1755,94 @@ export default {
 
 .half-modal {
   padding-bottom: 20px;
+  /* 状态多时（英文标签更长）面板会变高，限高后可滚动，不会被顶出屏幕 */
+  max-height: 78vh;
+  overflow-y: auto;
 }
 
-.half-current {
-  font-size: 12px;
-  color: #8A9299;
-  margin-bottom: 12px;
-}
-
-.scope-row {
+/* ===== 预览：与日历格子同一套斜切画法 ===== */
+.half-preview {
   display: flex;
-  gap: 8px;
-  margin-bottom: 14px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  border-radius: 14px;
+  background-color: #F7F8F9;
 }
 
-.scope-chip {
-  flex: 1;
-  height: 34px;
+.half-preview-cell {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  background-color: #F4F5F6;
-  transition: all 0.15s ease;
-}
-
-.scope-chip.scope-on {
-  background-color: #0E6E62;
-}
-
-.scope-text {
-  font-size: 13px;
-  color: #5A626A;
-}
-
-.scope-on .scope-text {
-  color: #FFFFFF;
   font-weight: 600;
+  overflow: hidden;
+}
+
+.half-preview-num {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.half-preview-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.half-preview-line {
+  display: block;
+  font-size: 12px;
+  color: #5A626A;
+  line-height: 1.7;
+}
+
+/* ===== 上午 / 下午 两段 ===== */
+.half-part + .half-part {
+  margin-top: 14px;
+}
+
+.half-part-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.half-part-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #15181C;
+}
+
+.half-copy {
+  padding: 2px 8px;
+  border-radius: 8px;
+  background-color: #EAF2F0;
+}
+
+.half-copy-text {
+  font-size: 10px;
+  font-weight: 500;
+  color: #0E6E62;
 }
 
 .half-status-grid {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .half-status-item {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
+  gap: 5px;
+  padding: 6px 9px;
   border-radius: 10px;
   background-color: #F7F8F9;
   border: 1px solid transparent;
@@ -1793,20 +1850,29 @@ export default {
 }
 
 .half-status-item.half-status-on {
-  background-color: #EAF2F0;
-  border-color: #0E6E62;
+  font-weight: 600;
+}
+
+.half-chip-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border-width: 1px;
+  border-style: solid;
 }
 
 .half-status-text {
-  font-size: 13px;
+  font-size: 12px;
   color: #15181C;
+  white-space: nowrap;
 }
 
 .half-actions {
   display: flex;
   flex-direction: row;
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 18px;
 }
 
 .half-btn {

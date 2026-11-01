@@ -54,38 +54,6 @@
       </view>
 
 
-      <!-- 半天出勤计法（PRO） -->
-      <view class="settings-card">
-        <view class="card-header-row">
-          <view class="half-title-row">
-            <text class="card-title">{{ i18n.profile.halfDayCard }}</text>
-            <text class="pro-chip">PRO</text>
-          </view>
-        </view>
-        <text class="card-hint">{{ i18n.profile.halfDayDesc }}</text>
-
-        <view class="seg-row">
-          <view
-            class="seg-item"
-            :class="{ 'seg-on': settings.halfDayAttendance === 'half' }"
-            @click="setHalfDayMode('half')"
-          >
-            <text class="seg-title">{{ i18n.profile.halfDayHalf }}</text>
-            <text class="seg-hint">{{ i18n.profile.halfDayHalfHint }}</text>
-          </view>
-          <view
-            class="seg-item"
-            :class="{ 'seg-on': settings.halfDayAttendance === 'full' }"
-            @click="setHalfDayMode('full')"
-          >
-            <text class="seg-title">{{ i18n.profile.halfDayFull }}</text>
-            <text class="seg-hint">{{ i18n.profile.halfDayFullHint }}</text>
-          </view>
-        </view>
-
-        <text class="half-foot">{{ isPro ? i18n.profile.halfDayProHint : i18n.profile.halfDayLocked }}</text>
-      </view>
-
       <!-- 假期额度（年假 + 病假合并卡） -->
       <view class="settings-card">
         <view class="card-header-row">
@@ -605,20 +573,6 @@ export default {
     toggleLanguage() {
       const newLang = this.settings.language === 'zh-CN' ? 'en-US' : 'zh-CN';
       this.setLanguage(newLang);
-    },
-    setHalfDayMode(mode) {
-      haptic('light');
-      // 会员闸门：非会员点哪一档都拉起付费墙，不做「能点但没反应」
-      if (!this.isPro) {
-        this.showPaywall = true;
-        return;
-      }
-      if (this.settings.halfDayAttendance === mode) return;
-      // 只改这一个键；saveSettings 内部会用 _rawStoredLanguage 保护语言等降级字段
-      wioService.saveSettings(Object.assign({}, this.settings, { halfDayAttendance: mode }));
-      this.settings = wioService.getSettings();
-      haptic('medium');
-      // 统计是实时从 entries 算的，切回首页 / 日历页的 onShow 会自动重算历史
     },
     toggleBirthdayEnabled() {
       this.settings.birthdayEnabled = !this.settings.birthdayEnabled;
@@ -2279,63 +2233,4 @@ export default {
   color: #FFFFFF;
 }
 
-/* ===== 半天出勤计法（PRO） ===== */
-.half-title-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-}
-
-.pro-chip {
-  font-size: 9px;
-  font-weight: 700;
-  color: #8A5A12;
-  background-color: #F6E3BC;
-  border-radius: 4px;
-  padding: 1px 4px;
-  line-height: 12px;
-}
-
-.seg-row {
-  display: flex;
-  flex-direction: row;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.seg-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background-color: #F7F8F9;
-  border: 1px solid transparent;
-  transition: all 0.15s ease;
-}
-
-.seg-item.seg-on {
-  background-color: #EAF2F0;
-  border-color: #0E6E62;
-}
-
-.seg-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #15181C;
-}
-
-.seg-hint {
-  font-size: 11px;
-  color: #8A9299;
-}
-
-.half-foot {
-  margin-top: 10px;
-  font-size: 11px;
-  color: #A8802F;
-  line-height: 1.5;
-}
 </style>
