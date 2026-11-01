@@ -149,7 +149,7 @@
 <script>
 import CustomTabBar from '@/components/CustomTabBar.vue'
 import wioService from '@/utils/wioService.js'
-import { locales, t } from '@/utils/locales.js'
+import { locales, t, getMonthYearName } from '@/utils/locales.js'
 import { getTopSafeArea } from '@/utils/safeArea.js'
 import { tap as haptic } from '@/utils/haptic.js'
 
@@ -232,12 +232,7 @@ export default {
       ];
     },
     monthYearText() {
-      if (this.settings.language === 'en-US') {
-        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                       'July', 'August', 'September', 'October', 'November', 'December'];
-        return `${months[this.currentMonth - 1]} ${this.currentYear}`;
-      }
-      return `${this.currentYear}年${this.currentMonth}月`;
+      return getMonthYearName(this.currentMonth, this.currentYear, this.settings.language);
     },
     currentYear() {
       return this.currentDate.getFullYear();

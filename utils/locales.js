@@ -52,7 +52,7 @@ export const locales = {
       leaveUsed: '已用',
       recentRecords: '最近记录',
       noRecord: '还没有记录，今天开始打卡吧',
-      countDays: '天',
+      countDays: '天',
       notAchieved: '未达标',
       gapAchievedOver: '已超目标 {n}%',
       gapNeed: '再去 {n} 天就够'
@@ -344,7 +344,7 @@ export const locales = {
       leaveUsed: 'Used',
       recentRecords: 'Recent',
       noRecord: 'No records yet, start today',
-      countDays: 'd',
+      countDays: 'd',
       notAchieved: 'Below target',
       gapAchievedOver: '{n}% above target',
       gapNeed: '{n} more days to go'
@@ -395,7 +395,7 @@ export const locales = {
       vacationDays: 'Vacation',
       sickDays: 'Sick Leave',
       leaveCard: 'Leave Quota',
-      leaveResetHint: 'Resets every January',
+      leaveResetHint: 'Resets every Jan',
       remainUsed: '{r} d left · {u} d used',
       quotaUnit: 'd',
       birthdayLeave: 'Birthday Leave',
@@ -598,13 +598,23 @@ export function t(key, lang = 'zh-CN') {
   return result;
 }
 
+// 英文月份统一用三字母简写：界面里月份永远是配角，
+// 全称（September / November）在窄屏上会把同一行的年份和日期挤出去。
+const MONTHS_EN_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 export function getMonthName(month, lang = 'zh-CN') {
   if (lang === 'zh-CN') {
     return `${month}月`;
   }
-  const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                 'July', 'August', 'September', 'October', 'November', 'December'];
-  return months[month - 1];
+  return MONTHS_EN_SHORT[month - 1] || '';
+}
+
+// 需要「Sep 2026」这类月+年组合时走这里，避免各处自己拼数组
+export function getMonthYearName(month, year, lang = 'zh-CN') {
+  return lang === 'zh-CN'
+    ? `${year}年${month}月`
+    : `${getMonthName(month, lang)} ${year}`;
 }
 
 export function getWeekdayName(day, lang = 'zh-CN') {

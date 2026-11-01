@@ -205,9 +205,7 @@ export default {
       const date = now.getDate()
       const day = getWeekdayName(now.getDay(), this.settings.language)
       if (this.settings.language === 'en-US') {
-        const months = ['January', 'February', 'March', 'April', 'May', 'June',
-                       'July', 'August', 'September', 'October', 'November', 'December']
-        return `${months[month - 1]} ${date} · ${day}`
+        return `${getMonthName(month, 'en-US')} ${date} · ${day}`
       }
       return `${month}月${date}日 · 星期${day}`
     },
