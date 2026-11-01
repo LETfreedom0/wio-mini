@@ -226,6 +226,18 @@ export default {
     }
   },
 
+  // 存储里的原始 halfDayAttendance（不经权益降级），供 saveSettings 回写保护用
+  _rawStoredHalfDay() {
+    try {
+      const raw = uni.getStorageSync(KEY_SETTINGS);
+      if (!raw) return '';
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return (parsed && parsed.halfDayAttendance) || '';
+    } catch (e) {
+      return '';
+    }
+  },
+
   // 合法比例：1~100 的数字，否则回退 fallback（fallback 可为 null 表示「无有效值」）
   _sanitizeRatio(v, fallback) {
     const n = Number(v);
@@ -271,6 +283,11 @@ export default {
         const rawLang = this._rawStoredLanguage();
         if (rawLang && rawLang !== 'zh-CN' && (!settings.language || settings.language === 'zh-CN')) {
           settings = { ...settings, language: rawLang };
+        }
+        // 半天出勤计法同理：无权益时 getSettings 把 'full' 降级读成 'half'，
+        // 如果调用方（只改了目标比例等）把降级值写回，会员的原始选择就被抹掉了
+        if (this._rawStoredHalfDay() === 'full' && settings.halfDayAttendance !== 'full') {
+          settings = { ...settings, halfDayAttendance: 'full' };
         }
       }
       uni.setStorageSync(KEY_SETTINGS, JSON.stringify(settings));

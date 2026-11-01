@@ -259,6 +259,17 @@ export default {
       const d = new Date(this.lastSyncAt)
       const pad = n => String(n).padStart(2, '0')
       return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    },
+    // ===== 半天出勤计法 =====
+    // getSettings 已对非会员做「只降级读取」，这里读到的就是实际生效口径
+    halfDayMode() {
+      return this.settings.halfDayAttendance === 'full' ? 'full' : 'half'
+    },
+    halfDayFoot() {
+      const p = this.i18n.profile
+      if (!this.isPro) return p.halfDayLocked
+      const hint = this.halfDayMode === 'full' ? p.halfDayFullHint : p.halfDayHalfHint
+      return `${hint} · ${p.halfDayProHint}`
     }
   },
   mounted() {
@@ -410,16 +421,6 @@ export default {
       }
     },
     // ===== 半天出勤计法 =====
-    // getSettings 已对非会员做「只降级读取」，这里读到的就是实际生效口径
-    halfDayMode() {
-      return this.settings.halfDayAttendance === 'full' ? 'full' : 'half';
-    },
-    halfDayFoot() {
-      const p = this.i18n.profile;
-      if (!this.isPro) return p.halfDayLocked;
-      const hint = this.halfDayMode === 'full' ? p.halfDayFullHint : p.halfDayHalfHint;
-      return `${hint} · ${p.halfDayProHint}`;
-    },
     setHalfDayMode(mode) {
       // 会员闸门：非会员点哪一档都拉起付费墙，不做「能点但没反应」
       if (!this.isPro) {

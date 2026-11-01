@@ -553,10 +553,34 @@ export default {
         const dateLabel = lang === 'en-US'
           ? `${getMonthName(Number(m), lang)} ${Number(d)}`
           : `${Number(m)}月${Number(d)}日 · 周${weekday}`
-        const status = entries[dateStr]
-        const m2 = meta[status] || { label: status, color: '#6B7379', bg: '#EFF1F3' }
+        const raw = entries[dateStr]
+        // 半天记录是 { am, pm } 对象，直接拿去查 meta 会得到 [object Object] 渲染出来，
+        // 这里单独拆开成「上午X · 下午Y」，颜色跟上午段走（与今天打卡卡片的取色一致）
+        if (isSplitDay(raw)) {
+          const p = parseDayParts(raw)
+          const head = meta[p.am] || meta[p.pm] || { color: '#6B7379', bg: '#EFF1F3' }
+          return {
+            dateLabel,
+            label: this.i18n.home.recentHalf
+              .replace('{am}', this.shortStatusLabel(p.am))
+              .replace('{pm}', this.shortStatusLabel(p.pm)),
+            color: head.color,
+            bgColor: head.bg
+          }
+        }
+        const m2 = meta[raw] || { label: raw, color: '#6B7379', bg: '#EFF1F3' }
         return { dateLabel, label: m2.label, color: m2.color, bgColor: m2.bg }
       })
+    },
+    // 紧凑位置（最近记录那条 pill）用的短标签：公司 / 居家 / 年假 / 病假
+    shortStatusLabel(status) {
+      const map = {
+        company: this.i18n.home.shortCompany,
+        home: this.i18n.home.shortHome,
+        vacation: this.i18n.home.shortVacation,
+        sick: this.i18n.home.shortSick
+      }
+      return map[status] || this.statusLabel(status)
     },
     statusLabel(status) {
       const map = {

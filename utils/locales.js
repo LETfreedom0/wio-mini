@@ -61,6 +61,11 @@ export const locales = {
       notRecorded: '未记录',
       monthWio: '{m}月回公司率',
       todayHalf: '今天 · 上午{am} · 下午{pm}',
+      recentHalf: '上午{am} · 下午{pm}',
+      shortCompany: '公司',
+      shortHome: '居家',
+      shortVacation: '年假',
+      shortSick: '病假',
       halfOverwriteTitle: '改成全天？',
       halfOverwriteBody: '今天已标记为「上午{am} · 下午{pm}」，改成全天会覆盖它。'
     },
@@ -415,6 +420,11 @@ export const locales = {
       notRecorded: 'No record',
       monthWio: '{m} WIO',
       todayHalf: 'Today · AM {am} · PM {pm}',
+      recentHalf: 'AM {am} · PM {pm}',
+      shortCompany: 'Office',
+      shortHome: 'Home',
+      shortVacation: 'Vacation',
+      shortSick: 'Sick',
       halfOverwriteTitle: 'Mark all day?',
       halfOverwriteBody: 'Today is marked as AM {am} / PM {pm}. Marking all day will overwrite it.'
     },

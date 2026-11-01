@@ -272,5 +272,19 @@ eq('英文版列值正常', moEn.cols.every(c => /^\d+(\.5)?$/.test(String(c.val
 eq('英文版标题无未替换占位', moEn.title.indexOf('{') === -1, true)
 delete store.wio_auth
 
+// ---------- E. 设置回写保护 ----------
+console.log('E. 设置回写保护（非会员保存其它设置时不得抹掉 full）')
+store.wio_settings = JSON.stringify({ targetPercentage: 40, halfDayAttendance: 'full' })
+store.wio_auth = ''
+const degraded = S.default.getSettings()
+eq('E1 非会员读取降级为 half', degraded.halfDayAttendance, 'half')
+S.default.saveSettings(Object.assign({}, degraded, { targetPercentage: 45 }))
+eq('E2 存储里仍保留 full', JSON.parse(store.wio_settings).halfDayAttendance, 'full')
+eq('E3 目标比例确实写入', JSON.parse(store.wio_settings).targetPercentage, 45)
+eq('E4 重新开通后读回 full', S.default.getHalfDayAttendanceMode(), 'half') // 仍非会员，读的是降级值
+store.wio_auth = JSON.stringify({ user: { openid: 'o' }, subscription: { plan: 'month', expiresAt: Date.now() + 86400000 } })
+eq('E5 会员态读回 full', S.default.getHalfDayAttendanceMode(), 'full')
+delete store.wio_auth
+
 console.log(`\n结果：${pass} 通过 / ${fail} 失败`)
 process.exit(fail ? 1 : 0)
