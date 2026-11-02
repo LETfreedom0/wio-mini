@@ -1,13 +1,15 @@
 // 自定义假期「按天取用」离线校验
 // 运行：node .workbuddy/shared-check/customleave.mjs
 //
-// 六组断言：
+// 八组断言：
 //  A. 记录规整（老数据无 mode 默认 range / 脏数据丢弃 / 额度与规则默认值）
 //  B. 区间命中（range 只认区间；day 绝不被当成整段休假）
 //  C. 按天标记存储（写入 / 半天 / 清除 / 老字符串兼容 / 不能标到 range 假期上）
 //  D. 额度用量（yearly vs total / 半天 0.5 / 不限额度 / 超额）
 //  E. 月度统计端到端（range + day full + day 半天 + 周末 + entries 优先）
 //  F. 删除假期连带清理标记 + 与改动前版本的回归对比
+//  G. 表单日期条与扣减天数
+//  H. 色板一致性（12 色去重 / 首屏 8 个快捷色的顺序契约 / 预设色必须能在色板里找到）
 //
 // 注：utils/ 下的副本需从项目根目录同步：
 //   cp utils/wioService.js .workbuddy/shared-check/utils/
@@ -256,6 +258,23 @@ eq('国庆假期内扣 0 天', S.countDeductibleDays('2026-10-01', '2026-10-07')
 // 所以按现有业务规则它不算工作日 —— 这里的期望值必须跟统计口径一致
 eq('国庆后两天工作日、调休日不算', S.countDeductibleDays('2026-10-08', '2026-10-10'), 2)
 eq('非法区间扣 0 天', S.countDeductibleDays('', ''), 0)
+
+// ---------- H. 色板一致性 ----------
+// 颜色区的 8 个快捷点取色板前 8 位（CustomLeaveSheet 的 QUICK_COLOR_COUNT），
+// 所以色板顺序是 UI 契约：改动前 8 位会让老记录的选中态错位。
+console.log('H. 色板一致性')
+const palette = S.CUSTOM_LEAVE_COLORS
+eq('色板 12 色', palette.length, 12)
+eq('色板没有重复色', new Set(palette.map(c => c.toLowerCase())).size, palette.length)
+ok('色板全是 #RRGGBB', palette.every(c => /^#[0-9A-Fa-f]{6}$/.test(c)))
+eq('首屏 8 个快捷色取前 8 位', palette.slice(0, 8), ['#0E6E62', '#2F8F6E', '#3C6FB0', '#41598A', '#7A5AA8', '#8C4F86', '#A93B78', '#C25B6E'])
+// 预设色必须落在色板内，否则点预设会走到「自定义色」兜底、选中点凭空消失
+const presetColors = S.CUSTOM_LEAVE_PRESETS.range.concat(S.CUSTOM_LEAVE_PRESETS.day).map(p => p.color)
+ok('预设色都在色板内', presetColors.every(c => palette.indexOf(c) !== -1))
+// 这两个预设色在后 4 位（丧假灰、生日假橙），表单必须自动把展开区打开，否则用户看不到选中态
+const tailColors = S.CUSTOM_LEAVE_PRESETS.range.concat(S.CUSTOM_LEAVE_PRESETS.day)
+  .filter(p => palette.indexOf(p.color) >= 8).map(p => p.color)
+eq('预设用到的后 4 位色', tailColors.sort(), ['#6B7379', '#C97A3D'])
 
 // 非会员：条目与标记都拿不到（但存储保留）
 store['wio_pro_trial'] = JSON.stringify({ expiresAt: 1 })

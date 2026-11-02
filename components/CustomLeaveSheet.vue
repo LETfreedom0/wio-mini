@@ -121,16 +121,34 @@
         <text class="cl-rule-note">{{ ruleNote }}</text>
       </view>
 
-      <!-- 颜色：一维色相条比色环更好用，右端留一个格子预览「标完长什么样」 -->
-      <view class="cl-color-row">
-        <view id="clHueBar" class="cl-hue-bar" @touchstart.stop="onHueTouch" @touchmove.stop="onHueTouch">
-          <view class="cl-hue-knob" :style="{ left: knobPct + '%' }">
-            <view class="cl-hue-knob-inner" :style="{ background: form.color }"></view>
-          </view>
+      <!-- 颜色：8 个常用色点选，末尾 + 展开其余 4 色。
+           不换色、不拖动——色板前 8 位就是历史 12 色板的前 8 个，老数据在日历上是哪个色，
+           这里选中的就是哪个色，不出现「日历蓝、面板找不到蓝」的错位。 -->
+      <view class="cl-swatches">
+        <view
+          v-for="c in quickColors"
+          :key="c"
+          class="cl-swatch"
+          :class="{ active: isPicked(c) }"
+          :style="isPicked(c) ? { boxShadow: '0 0 0 2px ' + c } : ''"
+          @click="pickColor(c)"
+        >
+          <view class="cl-swatch-dot" :style="{ background: c }"></view>
         </view>
-        <view class="cl-cell-preview" :style="{ background: previewBg }">
-          <text class="cl-cell-num" :style="{ color: form.color }">{{ previewDay }}</text>
-          <view v-if="form.mode === 'day'" class="cl-cell-bar" :style="{ background: form.color }"></view>
+        <view class="cl-swatch cl-swatch-more" @click="toggleMore">
+          <text class="cl-swatch-plus">{{ moreOpen ? '−' : '＋' }}</text>
+        </view>
+      </view>
+      <view v-if="moreOpen" class="cl-swatches cl-swatches-sub">
+        <view
+          v-for="c in moreColors"
+          :key="c"
+          class="cl-swatch"
+          :class="{ active: isPicked(c) }"
+          :style="isPicked(c) ? { boxShadow: '0 0 0 2px ' + c } : ''"
+          @click="pickColor(c)"
+        >
+          <view class="cl-swatch-dot" :style="{ background: c }"></view>
         </view>
       </view>
 
@@ -149,8 +167,9 @@ import wioService, { buildWeekStrip } from '@/utils/wioService.js'
 import { locales } from '@/utils/locales.js'
 import { tap as haptic } from '@/utils/haptic.js'
 
-const HUE_STOPS = ['#E54849', '#E57A3D', '#D9A93A', '#A8C24A', '#4FB36B', '#2FA37F',
-                   '#3597B8', '#3D6FCB', '#6A5ACD', '#8B54C0', '#B0489F', '#D2437A']
+// 首行放 8 个常用色，其余收进「＋」。8 是空间上限：342 - 28 内边距 = 314，
+// 9 个 26 宽（8 点 + ＋）刚好铺满，再加一个就得换行。
+const QUICK_COLOR_COUNT = 8
 
 export default {
   name: 'CustomLeaveSheet',
@@ -165,8 +184,9 @@ export default {
       settings: { language: 'zh-CN' },
       form: { mode: 'range', name: '', color: '#0E6E62', start: '', end: '', quota: 0, quotaRule: 'yearly' },
       editingId: null,
-      hue: 168,
-      hueRect: null,
+      // 记录里的颜色不在 12 色板内（手改过库/未来扩色）时，临时塞进展开区，避免选中态凭空消失
+      colorExtra: null,
+      moreOpen: false,
       storedUsage: { used: 0 }
     }
   },
@@ -253,27 +273,18 @@ export default {
         : this.i18n.profile.customLeft
       return tpl.replace('{n}', u.remaining)
     },
-    knobPct() {
-      return Math.max(0, Math.min(100, (this.hue / 360) * 100))
+    // 首行 8 色固定取色板前 8 位——和日历渲染用的是同一个数组，改顺序会让老记录的色名对不上
+    quickColors() {
+      return wioService.CUSTOM_LEAVE_COLORS.slice(0, QUICK_COLOR_COUNT)
     },
-    previewDay() {
-      if (this.form.mode === 'day') return 14
-      const s = this.form.start
-      return s ? Number(s.split('-')[2]) : 14
-    },
-    // 日历里假期色是 16% 淡底 + 原色文字，预览必须用同一套算法
-    previewBg() {
-      return this.hexToRgba(this.form.color, 0.16)
+    moreColors() {
+      const tail = wioService.CUSTOM_LEAVE_COLORS.slice(QUICK_COLOR_COUNT)
+      return this.colorExtra ? tail.concat([this.colorExtra]) : tail
     }
   },
   watch: {
     visible(v) {
-      if (v) {
-        this.init()
-        this.$nextTick(() => {
-          setTimeout(() => this.measureHueBar(), 120)
-        })
-      }
+      if (v) this.init()
     }
   },
   methods: {
@@ -312,27 +323,26 @@ export default {
         }
         this.storedUsage = { used: 0 }
       }
-      this.hue = this.hexToHue(this.form.color)
+      // 老记录用了后 4 色（橙/黄/橄榄/灰）时直接展开，否则用户会以为自己的颜色丢了
+      this.syncColorVisibility(this.form.color)
     },
-    measureHueBar() {
-      const q = uni.createSelectorQuery().in(this)
-      q.select('#clHueBar').boundingClientRect(rect => {
-        if (rect && rect.width) this.hueRect = rect
-      }).exec()
+    // 选中色落在展开区时要自动把展开区打开，否则底部选中态是隐形的
+    syncColorVisibility(color) {
+      const idx = wioService.CUSTOM_LEAVE_COLORS.indexOf(color)
+      this.colorExtra = idx === -1 ? color : null
+      this.moreOpen = idx === -1 || idx >= QUICK_COLOR_COUNT
     },
-    onHueTouch(e) {
-      const t = e.touches && e.touches[0]
-      if (!t) return
-      if (!this.hueRect) {
-        this.measureHueBar()
-        return
-      }
-      const p = Math.max(0, Math.min(1, (t.clientX - this.hueRect.left) / this.hueRect.width))
-      // 吸附 5°：不吸附会拖出一堆肉眼难分的近似红
-      const h = (Math.round((p * 360) / 5) * 5) % 360
-      this.hue = h
-      // 饱和度/明度锁在可读区间：日历里这色要当文字色用，太浅会糊
-      this.form.color = this.hslToHex(h, 52, 42)
+    isPicked(c) {
+      return String(this.form.color || '').toLowerCase() === String(c).toLowerCase()
+    },
+    pickColor(c) {
+      if (this.isPicked(c)) return
+      haptic('light')
+      this.form.color = c
+    },
+    toggleMore() {
+      haptic('light')
+      this.moreOpen = !this.moreOpen
     },
     stepQuota(delta) {
       haptic('light')
@@ -389,7 +399,8 @@ export default {
       this.form.color = p.color
       // 预设法定期限自带额度规则：婚产陪丧一次性，关爱假/生日假按年发
       if (p.quotaRule) this.form.quotaRule = p.quotaRule
-      this.hue = this.hexToHue(p.color)
+      // 丧假(#6B7379)、生日假(#C97A3D)在色板后 4 位，选中后要把展开区带出来
+      this.syncColorVisibility(p.color)
       haptic('light')
     },
     save() {
@@ -434,40 +445,6 @@ export default {
     close() {
       haptic('light')
       this.$emit('close')
-    },
-    // --- 颜色换算 ---
-    hexToRgba(hex, alpha) {
-      const h = String(hex || '').replace('#', '')
-      if (h.length !== 6) return `rgba(14,110,98,${alpha})`
-      const r = parseInt(h.slice(0, 2), 16)
-      const g = parseInt(h.slice(2, 4), 16)
-      const b = parseInt(h.slice(4, 6), 16)
-      return `rgba(${r},${g},${b},${alpha})`
-    },
-    hexToHue(hex) {
-      const h = String(hex || '').replace('#', '')
-      if (h.length !== 6) return 168
-      const r = parseInt(h.slice(0, 2), 16) / 255
-      const g = parseInt(h.slice(2, 4), 16) / 255
-      const b = parseInt(h.slice(4, 6), 16) / 255
-      const max = Math.max(r, g, b)
-      const min = Math.min(r, g, b)
-      const d = max - min
-      if (!d) return 0
-      let deg
-      if (max === r) deg = ((g - b) / d) % 6
-      else if (max === g) deg = (b - r) / d + 2
-      else deg = (r - g) / d + 4
-      return Math.round((deg * 60 + 360) % 360)
-    },
-    hslToHex(hue, s, l) {
-      const S = s / 100
-      const L = l / 100
-      const k = n => (n + hue / 30) % 12
-      const a = S * Math.min(L, 1 - L)
-      const f = n => L - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))
-      const to = x => Math.round(255 * x).toString(16).padStart(2, '0')
-      return '#' + to(f(0)) + to(f(8)) + to(f(4))
     }
   }
 }
@@ -934,62 +911,59 @@ export default {
   color: #9AA1A8;
 }
 
-/* --- 颜色：色相条 + 格子预览 --- */
-.cl-color-row {
+/* --- 颜色：8 点选 + ＋展开 --- */
+.cl-swatches {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
 }
 
-.cl-hue-bar {
-  flex: 1;
-  height: 40px;
-  border-radius: 20px;
-  position: relative;
-  background: linear-gradient(to right, #E54849, #E57A3D, #D9A93A, #A8C24A, #4FB36B, #2FA37F, #3597B8, #3D6FCB, #6A5ACD, #8B54C0, #B0489F, #D2437A, #E54849);
+/* 展开区只有 4~5 个点，左对齐 + 固定间距，跟首行位置对得上 */
+.cl-swatches-sub {
+  justify-content: flex-start;
+  gap: 10px;
+  margin-top: -2px;
 }
 
-.cl-hue-knob {
-  position: absolute;
-  top: 7px;
+.cl-swatch {
   width: 26px;
   height: 26px;
-  margin-left: -13px;
   border-radius: 50%;
-  background: #FFFFFF;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 1px 4px rgba(21, 24, 28, 0.2);
-}
-
-.cl-hue-knob-inner {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-}
-
-.cl-cell-preview {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
   flex-shrink: 0;
+  transition: box-shadow 0.16s ease;
 }
 
-.cl-cell-num {
+/* 选中态用同色描边环，比单纯加阴影在白底上更明确 */
+.cl-swatch.active {
+  background: #FFFFFF;
+}
+
+.cl-swatch-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+.cl-swatch.active .cl-swatch-dot {
+  width: 16px;
+  height: 16px;
+}
+
+.cl-swatch-more {
+  background: #F3F5F6;
+}
+
+.cl-swatch-more:active {
+  background: #E8EBED;
+}
+
+.cl-swatch-plus {
   font-size: 13px;
-  font-weight: 600;
-}
-
-.cl-cell-bar {
-  width: 14px;
-  height: 3px;
-  border-radius: 2px;
+  line-height: 1;
+  color: #6B7379;
 }
 
 /* --- 保存 / 删除 --- */
