@@ -846,7 +846,15 @@ export default {
         }
       }
       
+      this.clearMarkIfAny(dateStr);
       this.loadData();
+    },
+    // 同一天只能有一种口径：出勤状态与福利假标记互斥。
+    // 不清掉旧标记的话，entries 优先级更高，用户会看到「标了却没反应」。
+    clearMarkIfAny(dateStr) {
+      if (this.customMarks && this.customMarks[dateStr]) {
+        wioService.clearCustomMark(dateStr);
+      }
     },
     // 假期额度用满的统一提示
     showLeaveLimitModal(status) {
@@ -925,6 +933,14 @@ export default {
       // 已有标记就回填原来的半天口径，否则默认整天
       this.customMarkPart = existing ? existing.part : 'full';
       this.showCustomMarkPanel = true;
+      // 这天如果已经标了出勤，保存会覆盖它——先讲清楚，别让用户以为两件事能并存
+      if (this.entries[dateStr]) {
+        uni.showToast({
+          title: this.i18n.calendar.customMarkOverwrite,
+          icon: 'none',
+          duration: 2000
+        });
+      }
     },
     pickCustomLeave(l) {
       haptic('light');
@@ -949,6 +965,9 @@ export default {
     },
     applyCustomMark() {
       if (!this.customMarkLeaveId) return;
+      // 同一天只能有一种口径：标了福利假就把当天的出勤/假期标记清掉，
+      // 否则 entries 优先级更高，用户会看到「标了却没反应」
+      wioService.saveEntry(this.customMarkDateStr, null);
       const ok = wioService.setCustomMark(this.customMarkDateStr, this.customMarkLeaveId, this.customMarkPart);
       if (!ok) {
         uni.showToast({ title: this.i18n.calendar.customMarkFailed, icon: 'none' });
@@ -1031,6 +1050,7 @@ export default {
       }
       haptic('medium');
       this.showHalfPanel = false;
+      this.clearMarkIfAny(this.halfDateStr);
       this.loadData();
     },
     clearHalfDay() {
