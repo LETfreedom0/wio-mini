@@ -121,34 +121,12 @@
         <text class="cl-rule-note">{{ ruleNote }}</text>
       </view>
 
-      <!-- 颜色：8 个常用色点选，末尾 + 展开其余 4 色。
-           不换色、不拖动——色板前 8 位就是历史 12 色板的前 8 个，老数据在日历上是哪个色，
-           这里选中的就是哪个色，不出现「日历蓝、面板找不到蓝」的错位。 -->
-      <view class="cl-swatches">
-        <view
-          v-for="c in quickColors"
-          :key="c"
-          class="cl-swatch"
-          :class="{ active: isPicked(c) }"
-          :style="isPicked(c) ? { boxShadow: '0 0 0 2px ' + c } : ''"
-          @click="pickColor(c)"
-        >
-          <view class="cl-swatch-dot" :style="{ background: c }"></view>
-        </view>
-        <view class="cl-swatch cl-swatch-more" @click="toggleMore">
-          <text class="cl-swatch-plus">{{ moreOpen ? '−' : '＋' }}</text>
-        </view>
-      </view>
-      <view v-if="moreOpen" class="cl-swatches cl-swatches-sub">
-        <view
-          v-for="c in moreColors"
-          :key="c"
-          class="cl-swatch"
-          :class="{ active: isPicked(c) }"
-          :style="isPicked(c) ? { boxShadow: '0 0 0 2px ' + c } : ''"
-          @click="pickColor(c)"
-        >
-          <view class="cl-swatch-dot" :style="{ background: c }"></view>
+      <!-- 颜色：整行细彩带 + 圆滑块，任意色相可达。
+           触控绑在整条上而不是滑块上——滑块只有 26px，手指按不准；
+           拖的时候滑块中心跟着手指走，条本身是取色坐标尺。 -->
+      <view id="clHueBar" class="cl-hue-bar" :style="{ background: hueGradient }" @touchstart.stop="onHueTouch" @touchmove.stop="onHueTouch">
+        <view class="cl-hue-knob" :style="{ left: knobLeft + 'px' }">
+          <view class="cl-hue-knob-inner" :style="{ background: form.color }"></view>
         </view>
       </view>
 
@@ -167,9 +145,12 @@ import wioService, { buildWeekStrip } from '@/utils/wioService.js'
 import { locales } from '@/utils/locales.js'
 import { tap as haptic } from '@/utils/haptic.js'
 
-// 首行放 8 个常用色，其余收进「＋」。8 是空间上限：342 - 28 内边距 = 314，
-// 9 个 26 宽（8 点 + ＋）刚好铺满，再加一个就得换行。
-const QUICK_COLOR_COUNT = 8
+// 彩带上的色 = 选出来的色：渐变必须用取值函数同一套 s/l 生成，
+// 不能用色板色拼（色板色明度不一，拖到黄段会「看着亮、选出来暗」）
+const HUE_S = 58
+const HUE_L = 46
+const HUE_STEP = 15
+const KNOB_SIZE = 26
 
 export default {
   name: 'CustomLeaveSheet',
@@ -184,9 +165,8 @@ export default {
       settings: { language: 'zh-CN' },
       form: { mode: 'range', name: '', color: '#0E6E62', start: '', end: '', quota: 0, quotaRule: 'yearly' },
       editingId: null,
-      // 记录里的颜色不在 12 色板内（手改过库/未来扩色）时，临时塞进展开区，避免选中态凭空消失
-      colorExtra: null,
-      moreOpen: false,
+      hue: 168,
+      hueRect: null,
       storedUsage: { used: 0 }
     }
   },
@@ -273,18 +253,30 @@ export default {
         : this.i18n.profile.customLeft
       return tpl.replace('{n}', u.remaining)
     },
-    // 首行 8 色固定取色板前 8 位——和日历渲染用的是同一个数组，改顺序会让老记录的色名对不上
-    quickColors() {
-      return wioService.CUSTOM_LEAVE_COLORS.slice(0, QUICK_COLOR_COUNT)
+    // 滑块按 px 定位并按「可用区间」映射：色相 0 与 360 是同一种红，
+    // 若用百分比，选到 349° 时 26px 的滑块会顶出彩带右端 13px，看着像 bug。
+    // 两端各让出 13px（滑块半径），滑块整个落在彩带内，末端色相依然取得到。
+    knobLeft() {
+      const w = this.hueRect && this.hueRect.width ? this.hueRect.width : 302
+      const usable = Math.max(0, w - KNOB_SIZE)
+      return Math.round(usable * (this.hue / 360))
     },
-    moreColors() {
-      const tail = wioService.CUSTOM_LEAVE_COLORS.slice(QUICK_COLOR_COUNT)
-      return this.colorExtra ? tail.concat([this.colorExtra]) : tail
+    hueGradient() {
+      const stops = []
+      for (let d = 0; d <= 360; d += HUE_STEP) {
+        stops.push(`${this.hslToHex(d % 360, HUE_S, HUE_L)} ${Math.round((d / 360) * 100)}%`)
+      }
+      return `linear-gradient(to right, ${stops.join(', ')})`
     }
   },
   watch: {
     visible(v) {
-      if (v) this.init()
+      if (v) {
+        this.init()
+        this.$nextTick(() => {
+          setTimeout(() => this.measureHueBar(), 120)
+        })
+      }
     }
   },
   methods: {
@@ -323,26 +315,30 @@ export default {
         }
         this.storedUsage = { used: 0 }
       }
-      // 老记录用了后 4 色（橙/黄/橄榄/灰）时直接展开，否则用户会以为自己的颜色丢了
-      this.syncColorVisibility(this.form.color)
+      this.hue = this.hexToHue(this.form.color)
     },
-    // 选中色落在展开区时要自动把展开区打开，否则底部选中态是隐形的
-    syncColorVisibility(color) {
-      const idx = wioService.CUSTOM_LEAVE_COLORS.indexOf(color)
-      this.colorExtra = idx === -1 ? color : null
-      this.moreOpen = idx === -1 || idx >= QUICK_COLOR_COUNT
+    measureHueBar() {
+      const q = uni.createSelectorQuery().in(this)
+      q.select('#clHueBar').boundingClientRect(rect => {
+        if (rect && rect.width) this.hueRect = rect
+      }).exec()
     },
-    isPicked(c) {
-      return String(this.form.color || '').toLowerCase() === String(c).toLowerCase()
-    },
-    pickColor(c) {
-      if (this.isPicked(c)) return
-      haptic('light')
-      this.form.color = c
-    },
-    toggleMore() {
-      haptic('light')
-      this.moreOpen = !this.moreOpen
+    onHueTouch(e) {
+      const t = e.touches && e.touches[0]
+      if (!t) return
+      if (!this.hueRect) {
+        this.measureHueBar()
+        return
+      }
+      // 与 knobLeft 同一套映射：手指坐标、滑块中心、条上该点颜色三者对齐
+      const pad = KNOB_SIZE / 2
+      const usable = Math.max(1, this.hueRect.width - KNOB_SIZE)
+      const p = Math.max(0, Math.min(1, (t.clientX - this.hueRect.left - pad) / usable))
+      // 吸附 5°：不吸附会拖出一堆肉眼难分的近似红
+      const h = (Math.round((p * 360) / 5) * 5) % 360
+      this.hue = h
+      // 饱和度/明度锁在可读区间：日历里这色要当文字色用，太浅会糊
+      this.form.color = this.hslToHex(h, HUE_S, HUE_L)
     },
     stepQuota(delta) {
       haptic('light')
@@ -399,8 +395,7 @@ export default {
       this.form.color = p.color
       // 预设法定期限自带额度规则：婚产陪丧一次性，关爱假/生日假按年发
       if (p.quotaRule) this.form.quotaRule = p.quotaRule
-      // 丧假(#6B7379)、生日假(#C97A3D)在色板后 4 位，选中后要把展开区带出来
-      this.syncColorVisibility(p.color)
+      this.hue = this.hexToHue(p.color)
       haptic('light')
     },
     save() {
@@ -445,6 +440,32 @@ export default {
     close() {
       haptic('light')
       this.$emit('close')
+    },
+    // --- 颜色换算 ---
+    hexToHue(hex) {
+      const h = String(hex || '').replace('#', '')
+      if (h.length !== 6) return 168
+      const r = parseInt(h.slice(0, 2), 16) / 255
+      const g = parseInt(h.slice(2, 4), 16) / 255
+      const b = parseInt(h.slice(4, 6), 16) / 255
+      const max = Math.max(r, g, b)
+      const min = Math.min(r, g, b)
+      const d = max - min
+      if (!d) return 0
+      let deg
+      if (max === r) deg = ((g - b) / d) % 6
+      else if (max === g) deg = (b - r) / d + 2
+      else deg = (r - g) / d + 4
+      return Math.round((deg * 60 + 360) % 360)
+    },
+    hslToHex(hue, s, l) {
+      const S = s / 100
+      const L = l / 100
+      const k = n => (n + hue / 30) % 12
+      const a = S * Math.min(L, 1 - L)
+      const f = n => L - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))
+      const to = x => Math.round(255 * x).toString(16).padStart(2, '0').toUpperCase()
+      return '#' + to(f(0)) + to(f(8)) + to(f(4))
     }
   }
 }
@@ -911,59 +932,31 @@ export default {
   color: #9AA1A8;
 }
 
-/* --- 颜色：8 点选 + ＋展开 --- */
-.cl-swatches {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* --- 颜色：整行细彩带 + 圆滑块 --- */
+.cl-hue-bar {
+  width: 100%;
+  height: 26px;
+  border-radius: 13px;
+  position: relative;
 }
 
-/* 展开区只有 4~5 个点，左对齐 + 固定间距，跟首行位置对得上 */
-.cl-swatches-sub {
-  justify-content: flex-start;
-  gap: 10px;
-  margin-top: -2px;
-}
-
-.cl-swatch {
+.cl-hue-knob {
+  position: absolute;
+  top: 0;
   width: 26px;
   height: 26px;
   border-radius: 50%;
+  background: #FFFFFF;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  transition: box-shadow 0.16s ease;
+  box-shadow: 0 1px 5px rgba(21, 24, 28, 0.28);
 }
 
-/* 选中态用同色描边环，比单纯加阴影在白底上更明确 */
-.cl-swatch.active {
-  background: #FFFFFF;
-}
-
-.cl-swatch-dot {
-  width: 22px;
-  height: 22px;
+.cl-hue-knob-inner {
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-}
-
-.cl-swatch.active .cl-swatch-dot {
-  width: 16px;
-  height: 16px;
-}
-
-.cl-swatch-more {
-  background: #F3F5F6;
-}
-
-.cl-swatch-more:active {
-  background: #E8EBED;
-}
-
-.cl-swatch-plus {
-  font-size: 13px;
-  line-height: 1;
-  color: #6B7379;
 }
 
 /* --- 保存 / 删除 --- */
