@@ -10,11 +10,9 @@
       <view class="cl-mode-seg">
         <view class="cl-mode-item" :class="{ active: form.mode === 'range' }" @click="setMode('range')">
           <text class="cl-mode-title">{{ i18n.profile.customModeRange }}</text>
-          <text class="cl-mode-sub">{{ i18n.profile.customModeRangeSub }}</text>
         </view>
         <view class="cl-mode-item" :class="{ active: form.mode === 'day' }" @click="setMode('day')">
           <text class="cl-mode-title">{{ i18n.profile.customModeDay }}</text>
-          <text class="cl-mode-sub">{{ i18n.profile.customModeDaySub }}</text>
         </view>
       </view>
 
@@ -76,8 +74,7 @@
         </view>
 
         <view class="cl-calc-bar">
-          <text class="cl-calc-note">{{ rangeCalcNote }}</text>
-          <text class="cl-calc-value">{{ rangeDeduct }} {{ i18n.profile.customQuotaUnit }}</text>
+          <text class="cl-calc-value">{{ i18n.profile.customDeductText.replace('{n}', rangeDeduct) }}</text>
         </view>
       </view>
 
@@ -109,16 +106,13 @@
       </view>
 
       <!-- 额度规则：只对按天型有意义，区间型没有额度概念 -->
-      <view v-if="form.mode === 'day'" class="cl-rule-block">
-        <view class="cl-rule-seg">
-          <view class="cl-rule-pill" :class="{ active: form.quotaRule === 'yearly' }" @click="setRule('yearly')">
-            <text class="cl-rule-text">{{ i18n.profile.customRuleYearly }}</text>
-          </view>
-          <view class="cl-rule-pill" :class="{ active: form.quotaRule === 'total' }" @click="setRule('total')">
-            <text class="cl-rule-text">{{ i18n.profile.customRuleTotal }}</text>
-          </view>
+      <view v-if="form.mode === 'day'" class="cl-rule-seg">
+        <view class="cl-rule-pill" :class="{ active: form.quotaRule === 'yearly' }" @click="setRule('yearly')">
+          <text class="cl-rule-text">{{ i18n.profile.customRuleYearly }}</text>
         </view>
-        <text class="cl-rule-note">{{ ruleNote }}</text>
+        <view class="cl-rule-pill" :class="{ active: form.quotaRule === 'total' }" @click="setRule('total')">
+          <text class="cl-rule-text">{{ i18n.profile.customRuleTotal }}</text>
+        </view>
       </view>
 
       <!-- 颜色：整行细彩带 + 圆滑块，任意色相可达。
@@ -202,23 +196,10 @@ export default {
     rangeDeduct() {
       return wioService.countDeductibleDays(this.form.start, this.form.end)
     },
-    rangeWeekend() {
-      return Math.max(0, this.days - this.rangeDeduct)
-    },
-    rangeCalcNote() {
-      if (this.rangeWeekend <= 0) return this.i18n.profile.customRangeNote
-      return this.i18n.profile.customRangeNote + ' · '
-        + this.i18n.profile.customRangeWeekendNote.replace('{n}', this.rangeWeekend)
-    },
     quotaCapLabel() {
       return this.form.quotaRule === 'total'
         ? this.i18n.profile.customQuotaCapTotal
         : this.i18n.profile.customQuotaCap
-    },
-    ruleNote() {
-      return this.form.quotaRule === 'total'
-        ? this.i18n.profile.customRuleTotalNote
-        : this.i18n.profile.customRuleYearlyNote
     },
     usage() {
       if (this.form.mode !== 'day') {
@@ -496,7 +477,7 @@ export default {
   padding: 20px 20px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 15px;
   animation: modal-pop 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
   max-height: 86vh;
 }
@@ -546,13 +527,11 @@ export default {
 
 .cl-mode-item {
   flex: 1;
-  height: 46px;
+  height: 38px;
   border-radius: 8px;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
 }
 
 .cl-mode-item.active {
@@ -561,7 +540,7 @@ export default {
 }
 
 .cl-mode-title {
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 500;
   color: #6B7378;
 }
@@ -569,15 +548,6 @@ export default {
 .cl-mode-item.active .cl-mode-title {
   color: #0B5248;
   font-weight: 600;
-}
-
-.cl-mode-sub {
-  font-size: 9px;
-  color: #8A9299;
-}
-
-.cl-mode-item.active .cl-mode-sub {
-  color: #7E9A94;
 }
 
 /* --- 预设 chips --- */
@@ -621,7 +591,7 @@ export default {
 }
 
 .custom-input {
-  height: 44px;
+  height: 46px;
   border: 1px solid #E7E9EB;
   border-radius: 10px;
   padding: 0 14px;
@@ -635,7 +605,7 @@ export default {
   background: linear-gradient(180deg, #FFFAED, #FFF3DD);
   border: 1px solid #F0DBA7;
   border-radius: 14px;
-  padding: 13px 14px 12px;
+  padding: 16px 14px 15px;
   display: flex;
   flex-direction: column;
   gap: 11px;
@@ -777,20 +747,15 @@ export default {
   line-height: 1;
 }
 
-/* --- 结论条 --- */
+/* --- 结论条：只留一个数，说明交给日期条自己说话 --- */
 .cl-calc-bar {
-  height: 34px;
+  height: 36px;
   border-radius: 10px;
   padding: 0 12px;
   background: rgba(192, 138, 45, 0.09);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-
-.cl-calc-note {
-  font-size: 9.5px;
-  color: #8A6A2A;
+  justify-content: center;
 }
 
 .cl-calc-value {
@@ -891,12 +856,6 @@ export default {
 }
 
 /* --- 额度规则 --- */
-.cl-rule-block {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
 .cl-rule-seg {
   display: flex;
   gap: 6px;
@@ -925,11 +884,6 @@ export default {
 .cl-rule-pill.active .cl-rule-text {
   color: #8A5A00;
   font-weight: 600;
-}
-
-.cl-rule-note {
-  font-size: 9.5px;
-  color: #9AA1A8;
 }
 
 /* --- 颜色：整行细彩带 + 圆滑块 --- */
