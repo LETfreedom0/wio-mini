@@ -447,7 +447,21 @@ export default {
     },
     // ===== 自定义假期 =====
     fmtCustomRange(l) {
-      return `${l.start.slice(5).replace('-', '/')} ~ ${l.end.slice(5).replace('-', '/')}`
+      // 按天型显示额度与用量：一眼分清这是「额度」还是「假期段」
+      if (l.mode !== 'day') {
+        return `${l.start.slice(5).replace('-', '/')} ~ ${l.end.slice(5).replace('-', '/')}`
+      }
+      const u = wioService.getCustomLeaveUsage(l.id)
+      const over = u.over > 0 ? ' · ' + this.i18n.profile.customOver.replace('{n}', u.over) : ''
+      let base
+      if (u.unlimited) {
+        base = this.i18n.profile.customRowUnlimited.replace('{u}', u.used)
+      } else if (l.quotaRule === 'total') {
+        base = this.i18n.profile.customRowTotal.replace('{u}', u.used)
+      } else {
+        base = this.i18n.profile.customRowYearly.replace('{q}', u.quota).replace('{u}', u.used)
+      }
+      return base + over
     },
     openCustomAdd() {
       if (!this.isPro) {

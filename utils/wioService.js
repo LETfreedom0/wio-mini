@@ -129,6 +129,45 @@ export function round1(n) {
 }
 
 /**
+ * 日期条的槽位（连续休假表单用）
+ *
+ * ≤7 天逐日铺开；更长则折叠成「前 5 天 + 空档 + 末日」。
+ * 不折叠的话，10 天婚假、158 天产假都会被画成 7 格，让人误以为假期只有 7 天。
+ *
+ * @returns {Array<{key,weekday,day,weekend,gap}>} gap=true 的那格是省略号占位
+ */
+export function buildWeekStrip(start, end, maxSlots = 7) {
+  const valid = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  if (!valid(start) || !valid(end) || end < start) return [];
+  const base = new Date(start + 'T00:00:00');
+  const last = new Date(end + 'T00:00:00');
+  const total = Math.round((last.getTime() - base.getTime()) / 86400000) + 1;
+  const mk = (d, gap) => {
+    if (gap) return { key: 'gap', weekday: '', day: '', weekend: false, gap: true };
+    const wd = d.getDay();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return {
+      key: `${y}-${m}-${dd}`,
+      weekday: '日一二三四五六'[wd],
+      day: d.getDate(),
+      weekend: wd === 0 || wd === 6,
+      gap: false
+    };
+  };
+  const out = [];
+  if (total <= maxSlots) {
+    for (let i = 0; i < total; i++) out.push(mk(new Date(base.getTime() + i * 86400000), false));
+    return out;
+  }
+  for (let i = 0; i < maxSlots - 2; i++) out.push(mk(new Date(base.getTime() + i * 86400000), false));
+  out.push(mk(null, true));
+  out.push(mk(last, false));
+  return out;
+}
+
+/**
  * 由月度统计推导展示口径（首页率卡 / 分享卡共用，避免两套公式各算各的）
  *
  * 回公司率 = 公司天数 ÷ (全月工作日 − 有效休假)
@@ -352,23 +391,77 @@ export default {
     return ratio;
   },
 
-  // --- 自定义假期（公司福利假，按日期区间配置） ---
-  // 结构：customLeaves: [{ id, name, color, start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' }]
-  // 口径：区间内的工作日计入 WIO 分母扣减（与年假/病假同向）；周末/节假日不扣；
-  //       用户手动标记的日期优先于自定义假期
-  CUSTOM_LEAVE_COLORS: ['#0E6E62', '#41598A', '#8C4F86', '#C08A2D', '#C25B6E', '#C97A3D', '#6B7379'],
-
-  // 法定假期预设（婚假/产假/陪产假/丧假）：一键填充名称 + 推荐色
-  // 各地法定天数不同（如产假 158 天起、各省有差），本应用按日期区间配置，故不预填天数
-  CUSTOM_LEAVE_PRESETS: [
-    { name: '婚假', color: '#C25B6E' },
-    { name: '产假', color: '#41598A' },
-    { name: '陪产假', color: '#8C4F86' },
-    { name: '丧假', color: '#6B7379' }
+  // --- 自定义假期 ---
+  // 一条记录两种落地方式，用 mode 区分：
+  //   range  给起止日期，区间内每个工作日自动上色并计入分母扣减（老形态）
+  //   day    只建额度不铺日历，哪天休了在日历上点哪天，标一天扣一天
+  // 老数据没有 mode 字段，一律按 range 处理——零迁移，老用户无感知。
+  //
+  // 按天型的标记单独存 settings.customMarks：{ 'YYYY-MM-DD': { id, part } }
+  // part 为 'full' | 'am' | 'pm'，半天扣 0.5 天。
+  // 为什么独立存、不塞进 entries：entries 的状态是固定枚举（company/home/vacation…），
+  // 塞进去会污染出勤类型判断；两者并存时 entries 优先（手动打卡优先于假期标记）。
+  //
+  // 口径：range 区间内的工作日、day 模式手动标记的日子，都计入 WIO 分母扣减（与年假/病假同向）；
+  //       周末/节假日不扣；用户手动标记的日期优先于自定义假期。
+  // 12 色按色相冷→暖排列。日历里假期色是唯一识别手段（16% 淡底 + 原色字），
+  // 所以色板要保证两两可辨：相邻两色刻意在明度/饱和度上拉开（如 #A93B78 与 #C25B6E、
+  // #D4A33F 与 #C97A3D）。前 7 色是历史色板，保持不变，避免老数据选中态丢失。
+  CUSTOM_LEAVE_COLORS: [
+    '#0E6E62', '#2F8F6E', '#3C6FB0', '#41598A',
+    '#7A5AA8', '#8C4F86', '#A93B78', '#C25B6E',
+    '#C97A3D', '#D4A33F', '#8A8F4A', '#6B7379'
   ],
+
+  // 预设法定期限，按「使用方式」分组——这一步是必须的：
+  //   range 组是一次事件一段连续日子（婚假连休 10 天、产假连休 158 天）
+  //   day   组是零星发放的额度（每月 1 天关爱假、生日当月 1 天、季度福利）
+  // 如果把婚假放进「按天点选」的预设里，用户会以为婚假要一天天去日历上点。
+  // defaultRule 表达「这类假期天然是什么额度规则」，选预设时自动带过去：
+  // 婚产陪丧一辈子或每次事件一次，谈年度重置没意义；关爱假/生日假按年发放。
+  // 各地法定天数差异很大（产假 158 天起、各省不同），所以不预填额度，让用户自己填。
+  CUSTOM_LEAVE_PRESETS: {
+    range: [
+      { key: 'marriage', color: '#C25B6E' },
+      { key: 'maternity', color: '#41598A' },
+      { key: 'paternity', color: '#8C4F86' },
+      { key: 'bereavement', color: '#6B7379' }
+    ],
+    day: [
+      { key: 'care', color: '#A93B78', quotaRule: 'yearly' },
+      { key: 'birthday', color: '#C97A3D', quotaRule: 'yearly' },
+      { key: 'quarter', color: '#0E6E62', quotaRule: 'total' },
+      { key: 'compOff', color: '#3C6FB0', quotaRule: 'total' }
+    ]
+  },
 
   _isValidDateStr(str) {
     return typeof str === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(str) && !isNaN(new Date(str + 'T00:00:00').getTime());
+  },
+
+  // 单条记录规整：老数据补 mode，脏数据返回 null（丢掉一条，不让整份配置一起坏掉）
+  _normalizeCustomLeave(l) {
+    if (!l || !l.id || !l.name) return null;
+    const mode = l.mode === 'day' ? 'day' : 'range';
+    const base = {
+      id: l.id,
+      name: String(l.name).slice(0, 12),
+      color: l.color || '#0E6E62',
+      mode
+    };
+    if (mode === 'day') {
+      const q = Number(l.quota);
+      return {
+        ...base,
+        start: this._isValidDateStr(l.start) ? l.start : '',
+        end: this._isValidDateStr(l.end) ? l.end : '',
+        // quota 为 0 表示不限额度：有些福利假本来就没明确天数
+        quota: Number.isFinite(q) && q > 0 ? round1(q) : 0,
+        quotaRule: l.quotaRule === 'total' ? 'total' : 'yearly'
+      };
+    }
+    if (!this._isValidDateStr(l.start) || !this._isValidDateStr(l.end) || l.start > l.end) return null;
+    return { ...base, start: l.start, end: l.end };
   },
 
   // 自定义假期是 PRO 权益：权益失效时消费端拿不到任何条目
@@ -378,9 +471,11 @@ export default {
     if (!isProUser()) return [];
     const s = this.getSettings();
     const list = Array.isArray(s.customLeaves) ? s.customLeaves : [];
-    return list
-      .filter(l => l && l.id && l.name && this._isValidDateStr(l.start) && this._isValidDateStr(l.end) && l.start <= l.end)
-      .map(l => ({ id: l.id, name: String(l.name).slice(0, 12), color: l.color || '#0E6E62', start: l.start, end: l.end }));
+    return list.map(l => this._normalizeCustomLeave(l)).filter(Boolean);
+  },
+
+  getCustomLeaveById(id) {
+    return this.getCustomLeaves().find(l => l.id === id) || null;
   },
 
   // 新增或编辑（带 id 即编辑）；校验失败或无权返回 null
@@ -390,15 +485,27 @@ export default {
       if (!isProUser()) return null;
       const settings = this.getSettings();
       const list = Array.isArray(settings.customLeaves) ? settings.customLeaves.filter(Boolean) : [];
+      const mode = leave.mode === 'day' ? 'day' : 'range';
       const item = {
         id: leave.id || ('cl_' + Date.now().toString(36)),
         name: String(leave.name || '').trim().slice(0, 12),
         color: leave.color || '#0E6E62',
-        start: leave.start,
-        end: leave.end
+        mode
       };
-      if (!item.name || !this._isValidDateStr(item.start) || !this._isValidDateStr(item.end) || item.start > item.end) {
-        return null;
+      if (!item.name) return null;
+      if (mode === 'day') {
+        const q = Number(leave.quota);
+        item.quota = Number.isFinite(q) && q > 0 ? round1(q) : 0;
+        item.quotaRule = leave.quotaRule === 'total' ? 'total' : 'yearly';
+        // 按天型不需要日期区间，getCustomLeaveForDate 也不会拿它去铺日历
+        if (this._isValidDateStr(leave.start)) item.start = leave.start;
+        if (this._isValidDateStr(leave.end)) item.end = leave.end;
+      } else {
+        item.start = leave.start;
+        item.end = leave.end;
+        if (!this._isValidDateStr(item.start) || !this._isValidDateStr(item.end) || item.start > item.end) {
+          return null;
+        }
       }
       const idx = list.findIndex(l => l && l.id === item.id);
       if (idx >= 0) {
@@ -417,17 +524,122 @@ export default {
   deleteCustomLeave(id) {
     const settings = this.getSettings();
     const list = (Array.isArray(settings.customLeaves) ? settings.customLeaves : []).filter(l => l && l.id !== id);
-    this.saveSettings({ ...settings, customLeaves: list });
+    // 连带清掉这个假期的所有按天标记，否则会留下指向不存在假期的孤儿记录
+    const marks = { ...(settings.customMarks || {}) };
+    Object.keys(marks).forEach(d => {
+      const m = this._readMark(marks[d]);
+      if (!m || m.id === id) delete marks[d];
+    });
+    this.saveSettings({ ...settings, customLeaves: list, customMarks: marks });
   },
 
-  // 某天命中的自定义假期（日历显示与统计扣减的数据源）
+  // 区间内实际要扣分母的天数（工作日，排除法定节假日、含调休上班）
+  // 与 getMonthStats 用同一套 isOfficialWorkingDay 口径，
+  // 否则表单上写「扣 8 天」、统计里扣 6 天（撞上国庆），用户会以为算错了
+  countDeductibleDays(start, end) {
+    if (!this._isValidDateStr(start) || !this._isValidDateStr(end) || start > end) return 0;
+    let n = 0;
+    const last = new Date(end + 'T00:00:00').getTime();
+    for (let t = new Date(start + 'T00:00:00').getTime(); t <= last; t += 86400000) {
+      if (this.isOfficialWorkingDay(new Date(t))) n++;
+    }
+    return n;
+  },
+
+  // 某天命中的区间型自定义假期（日历显示与统计扣减的数据源）
+  // 按天型不参与：它们只认 customMarks，绝不能被当作"整段都在休假"
   getCustomLeaveForDate(dateStr) {
     if (!this._isValidDateStr(dateStr)) return null;
     const list = this.getCustomLeaves();
     for (const l of list) {
+      if (l.mode === 'day') continue;
       if (dateStr >= l.start && dateStr <= l.end) return l;
     }
     return null;
+  },
+
+  // --- 按天标记（只有 mode:'day' 的假期用） ---
+  // 兼容早期可能写入的纯字符串（只存了 id），读的时候补成整天
+  _readMark(raw) {
+    if (!raw) return null;
+    if (typeof raw === 'string') return { id: raw, part: 'full' };
+    if (typeof raw === 'object' && raw.id) {
+      return { id: raw.id, part: raw.part === 'am' || raw.part === 'pm' ? raw.part : 'full' };
+    }
+    return null;
+  },
+
+  getCustomMarks() {
+    if (!isProUser()) return {};
+    const s = this.getSettings();
+    const raw = s.customMarks && typeof s.customMarks === 'object' ? s.customMarks : {};
+    const out = {};
+    Object.keys(raw).forEach(d => {
+      const m = this._readMark(raw[d]);
+      if (m && this._isValidDateStr(d)) out[d] = m;
+    });
+    return out;
+  },
+
+  // 某天的按天标记，连假期对象一起返回（日历要取颜色，避免二次查找）
+  // 快照参数 marks/leaves 可外部传入，getMonthStats 逐日循环时用它避免反复读存储
+  getCustomMarkForDate(dateStr, marks, leaves) {
+    if (!this._isValidDateStr(dateStr)) return null;
+    const allMarks = marks || this.getCustomMarks();
+    const m = allMarks[dateStr];
+    if (!m) return null;
+    const list = leaves || this.getCustomLeaves();
+    const leave = list.find(l => l.id === m.id && l.mode === 'day');
+    if (!leave) return null;
+    return { ...m, leave };
+  },
+
+  // 标记/取消某天：part 传 'full' | 'am' | 'pm'，leaveId 传空等于取消
+  setCustomMark(dateStr, leaveId, part) {
+    if (!isProUser()) return false;
+    if (!this._isValidDateStr(dateStr)) return false;
+    const settings = this.getSettings();
+    const marks = { ...(settings.customMarks || {}) };
+    if (!leaveId || !part) {
+      delete marks[dateStr];
+    } else {
+      const leave = this.getCustomLeaves().find(l => l.id === leaveId && l.mode === 'day');
+      if (!leave) return false;
+      marks[dateStr] = { id: leaveId, part: part === 'am' || part === 'pm' ? part : 'full' };
+    }
+    this.saveSettings({ ...settings, customMarks: marks });
+    return true;
+  },
+
+  clearCustomMark(dateStr) {
+    return this.setCustomMark(dateStr, null, null);
+  },
+
+  // 额度用量：yearly 只统计当年，total 统计全部；半天记 0.5 天
+  getCustomLeaveUsage(leaveId) {
+    const leave = this.getCustomLeaveById(leaveId);
+    if (!leave || leave.mode !== 'day') {
+      return { used: 0, quota: 0, remaining: 0, over: 0, unlimited: true };
+    }
+    const quota = leave.quota || 0;
+    const marks = this.getCustomMarks();
+    const prefix = `${new Date().getFullYear()}-`;
+    let used = 0;
+    Object.keys(marks).forEach(d => {
+      const m = marks[d];
+      if (!m || m.id !== leaveId) return;
+      if (leave.quotaRule === 'yearly' && !d.startsWith(prefix)) return;
+      used += (m.part === 'am' || m.part === 'pm') ? HALF : 1;
+    });
+    used = round1(used);
+    return {
+      used,
+      quota,
+      remaining: quota > 0 ? round1(Math.max(0, quota - used)) : 0,
+      // 超额不拦截：个人记录工具拦截会让真实请的假记不进去，只提示
+      over: quota > 0 && used > quota ? round1(used - quota) : 0,
+      unlimited: quota <= 0
+    };
   },
 
   // --- Entries (Date: Status) ---
@@ -725,6 +937,10 @@ export default {
       deductibleLeave: 0 // 从分母扣减的假期折算天数（半天口径的唯一准确来源）
     };
 
+    // 自定义假期整月只读一次存储：逐日循环里再读会做 60 次 JSON.parse
+    const customLeavesAll = this.getCustomLeaves();
+    const customMarksAll = this.getCustomMarks();
+
     // Calculate Working Days (Official) in the month
     // Also calculate Public Holidays (if not overridden by user entry)
     const daysInMonth = new Date(year, month, 0).getDate();
@@ -754,16 +970,21 @@ export default {
       }
 
       // 2. Count Stats based on Entry OR Public Holiday default
-      // 2.0 自定义假期：仅在「无手动标记」的日期生效（手动标记优先）；
-      //     工作日 → 分母扣减项；非工作日 → 计入 weekendLeaves 防止误扣分母
+      // 2.0 自定义假期：仅在「无手动标记」的日期生效（手动标记优先）
+      //     按天标记 > 区间型假期；工作日 → 分母扣减项；非工作日 → weekendLeaves 防止误扣
+      //     半天标记记 0.5 天（额度按天扣，半天自然扣半）
       if (!ev.hasEntry) {
-        const customLeave = this.getCustomLeaveForDate(dateStr);
-        if (customLeave) {
+        const mark = this.getCustomMarkForDate(dateStr, customMarksAll, customLeavesAll);
+        const rangeLeave = mark
+          ? null
+          : customLeavesAll.find(l => l.mode !== 'day' && dateStr >= l.start && dateStr <= l.end);
+        if (mark || rangeLeave) {
+          const weight = mark && (mark.part === 'am' || mark.part === 'pm') ? HALF : 1;
           if (isWorkingDay) {
-            stats.custom++;
-            stats.deductibleLeave += 1;
+            stats.custom += weight;
+            stats.deductibleLeave += weight;
           } else {
-            stats.weekendLeaves += 1;
+            stats.weekendLeaves += weight;
           }
         }
       }

@@ -89,6 +89,12 @@
           <view v-for="day in daysInMonth" :key="day" class="day-cell" @click="onDayClick(day)" @longpress="onDayLongPress(day)">
             <view class="day-content" :class="[getDayClass(day), { 'today-highlight': isToday(day) }, { 'day-split': isDaySplit(day) }]" :style="dayStyle(day)">
               <text class="day-number">{{ day }}</text>
+              <!-- 按天型自定义假：只加一根底部色条，不跟出勤状态抢视觉 -->
+              <view
+                v-if="customMarkMap[dateStrOf(day)]"
+                class="custom-mark-bar"
+                :style="{ background: customMarkMap[dateStrOf(day)].leave.color }"
+              ></view>
               <view v-if="getOvertimeDisplay(day)" class="overtime-badge">{{ getOvertimeDisplay(day) }}</view>
               <text v-if="getHolidayName(day)" class="holiday-text" :class="{'text-work': isHolidayWork(day), 'english': settings.language === 'en-US'}">{{ getHolidayDisplayName(day) }}</text>
               <view v-if="isHolidayWork(day)" class="work-badge">{{ i18n.calendar.workBadge }}</view>
@@ -199,6 +205,55 @@
       </view>
     </view>
 
+    <!-- 按天型自定义假的标记面板：先选哪个假，再选整天/上午/下午 -->
+    <view class="modal-overlay" v-if="showCustomMarkPanel" @click="showCustomMarkPanel = false">
+      <view class="modal-content custom-mark-modal" @click.stop>
+        <view class="modal-close-btn" @click="showCustomMarkPanel = false">×</view>
+        <view class="modal-header">
+          <text class="modal-title">{{ i18n.calendar.customMarkTitle }}</text>
+          <text class="modal-subtitle">{{ customMarkDateLabel }}</text>
+        </view>
+
+        <view class="custom-mark-list">
+          <view
+            v-for="l in customDayLeaves"
+            :key="l.id"
+            class="custom-mark-chip"
+            :class="{ on: customMarkLeaveId === l.id }"
+            :style="customMarkChipStyle(l)"
+            @click="pickCustomLeave(l)"
+          >
+            <view class="custom-mark-dot" :style="{ background: l.color }"></view>
+            <text class="custom-mark-name">{{ l.name }}</text>
+            <text class="custom-mark-quota">{{ customQuotaText(l) }}</text>
+          </view>
+        </view>
+
+        <view class="custom-part-row">
+          <view
+            v-for="p in customPartOptions"
+            :key="p.value"
+            class="custom-part-item"
+            :class="{ on: customMarkPart === p.value }"
+            @click="pickCustomPart(p.value)"
+          >
+            <text class="custom-part-text">{{ p.label }}</text>
+          </view>
+        </view>
+
+        <text class="custom-mark-hint">{{ i18n.calendar.customMarkQuotaHint }}</text>
+
+        <view class="half-actions">
+          <view class="half-btn half-btn-ghost" @click="clearCustomMarkDay">
+            <text class="half-btn-text">{{ i18n.common.clear }}</text>
+          </view>
+          <view class="half-btn half-btn-primary" @click="applyCustomMark">
+            <text class="half-btn-text half-btn-text-on">{{ i18n.common.save }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
     <PaywallSheet :visible="showPaywall" @close="showPaywall = false" @upgraded="onProUpgraded" />
 
     <CustomTabBar current="calendar" />
@@ -287,6 +342,12 @@ export default {
       showHalfPanel: false,
       halfDateStr: '',
       halfDayNum: 0,
+      // 按天型自定义假的标记面板（PRO）
+      showCustomMarkPanel: false,
+      customMarkDateStr: '',
+      customMarkLeaveId: '',
+      customMarkPart: 'full',
+      customMarks: {},
       // 上下午各存一份，天然支持任意组合（上午公司 + 下午年假 等）
       halfAm: 'company',
       halfPm: 'company',
@@ -326,6 +387,43 @@ export default {
     // 半天组合只开放四种最常见状态（公司 / 居家 / 年假 / 病假）：
     // 半天假几乎都是「请半天病假」「请半天年假」，剩下的调休、无薪、公共假期
     // 极少出现半天组合，留在图例里批量标记就够，面板只有四格也更好点
+    // 按天型自定义假：只建额度、哪天休了点哪天，所以它们不进图例的固定状态里，
+    // 单独给一个「福利假」入口 + 一个标记面板
+    customDayLeaves() {
+      return (this.customLeaves || []).filter(l => l && l.mode === 'day');
+    },
+    // 日期 → 标记详情。模板里逐格取用，做成 map 避免每格都去查数组
+    customMarkMap() {
+      const marks = this.customMarks || {};
+      const list = this.customDayLeaves;
+      const out = {};
+      Object.keys(marks).forEach(d => {
+        const m = marks[d];
+        if (!m) return;
+        const leave = list.find(l => l.id === m.id);
+        if (leave) out[d] = { part: m.part, leave };
+      });
+      return out;
+    },
+    customPartOptions() {
+      return [
+        { value: 'full', label: this.i18n.calendar.partFull },
+        { value: 'am', label: this.i18n.calendar.amShort },
+        { value: 'pm', label: this.i18n.calendar.pmShort }
+      ];
+    },
+    customMarkDateLabel() {
+      if (!this.customMarkDateStr) return '';
+      const d = new Date(this.customMarkDateStr + 'T00:00:00');
+      if (isNaN(d.getTime())) return '';
+      const wd = this.settings.language === 'en-US'
+        ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
+        : '周' + '日一二三四五六'[d.getDay()];
+      const [, m, day] = this.customMarkDateStr.split('-');
+      return this.settings.language === 'en-US'
+        ? `${+m}/${+day} · ${wd}`
+        : `${+m}月${+day}日 · ${wd}`;
+    },
     halfStatusOptions() {
       const allow = ['company', 'home', 'vacation', 'sick'];
       const list = allow
@@ -438,10 +536,21 @@ export default {
       const monthStart = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-01`;
       const monthEnd = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
       (this.customLeaves || []).forEach(l => {
+        // 按天型不在这里逐个列（可能十几个），合并成下面一个入口
+        if (l.mode === 'day') return;
         if (l.end >= monthStart && l.start <= monthEnd) {
           result.push({ label: l.name, color: 'custom-dot', value: 'custom_' + l.id, dotColor: l.color, isCustom: true });
         }
       });
+      // 按天型：一个「福利假」入口，点选后再点日历格子标记
+      if (this.customDayLeaves.length) {
+        result.push({
+          label: t('calendar.customDayLegend', this.settings.language || 'zh-CN'),
+          color: 'custom-dot',
+          value: 'custom_day',
+          dotColor: this.customDayLeaves[0].color
+        });
+      }
       
       return result;
     },
@@ -547,6 +656,7 @@ export default {
       this.entries = wioService.getEntries();
       this.overtimeEntries = wioService.getOvertimeEntries();
       this.customLeaves = wioService.getCustomLeaves();
+      this.customMarks = wioService.getCustomMarks();
       this.yearStats = wioService.getYearStats(new Date().getFullYear());
       this.updateStats();
     },
@@ -599,6 +709,21 @@ export default {
       if (item.isCustom) return;
       haptic('light');
 
+      // 按天型福利假：同样要先选它，再去点具体哪一天
+      if (item.value === 'custom_day') {
+        if (!this.isPro) {
+          this.showPaywall = true;
+          return;
+        }
+        this.selectedStatus = 'custom_day';
+        uni.showToast({
+          title: this.i18n.calendar.legendHint,
+          icon: 'none',
+          duration: 1500
+        });
+        return;
+      }
+
       // 半天是 PRO 功能：非会员点这里直接拉起付费墙，不给「选了却用不了」的半截体验
       if (item.value === 'half_day') {
         if (!this.isPro) {
@@ -639,6 +764,7 @@ export default {
 
       if (this.lastClickDay === day && (currentTime - this.lastClickTime) < 300) {
         wioService.saveEntry(dateStr, null);
+        wioService.clearCustomMark(dateStr);
         this.loadData();
         this.lastClickTime = 0;
         this.lastClickDay = null;
@@ -649,6 +775,16 @@ export default {
       this.lastClickDay = day;
 
       if (!this.selectedStatus) {
+        return;
+      }
+
+      // 按天型福利假：打开面板选「哪个假 + 整天/上午/下午」
+      if (this.selectedStatus === 'custom_day') {
+        if (!this.isPro) {
+          this.showPaywall = true;
+          return;
+        }
+        this.openCustomMarkPanel(day, dateStr);
         return;
       }
 
@@ -773,6 +909,67 @@ export default {
         };
       }
       return this.getCustomStyle(day);
+    },
+    // --- 按天型自定义假 ---
+    openCustomMarkPanel(day, dateStr) {
+      const existing = this.customMarkMap[dateStr];
+      const first = this.customDayLeaves[0];
+      const leaveId = existing ? existing.leave.id : (first ? first.id : '');
+      // 一条按天型假期都没有时不该走到这里，兜一下防止空面板
+      if (!leaveId) {
+        uni.showToast({ title: this.i18n.profile.customLeaveEmpty, icon: 'none' });
+        return;
+      }
+      this.customMarkDateStr = dateStr;
+      this.customMarkLeaveId = leaveId;
+      // 已有标记就回填原来的半天口径，否则默认整天
+      this.customMarkPart = existing ? existing.part : 'full';
+      this.showCustomMarkPanel = true;
+    },
+    pickCustomLeave(l) {
+      haptic('light');
+      this.customMarkLeaveId = l.id;
+    },
+    pickCustomPart(part) {
+      haptic('light');
+      this.customMarkPart = part;
+    },
+    customMarkChipStyle(l) {
+      const on = this.customMarkLeaveId === l.id;
+      return {
+        background: on ? this.hexToRgba(l.color, 0.14) : '#F3F5F6',
+        borderColor: on ? l.color : 'transparent'
+      };
+    },
+    customQuotaText(l) {
+      const u = wioService.getCustomLeaveUsage(l.id);
+      if (u.unlimited) return this.i18n.profile.customRowUnlimited.replace('{u}', u.used);
+      if (l.quotaRule === 'total') return this.i18n.profile.customRowTotal.replace('{u}', u.used);
+      return this.i18n.profile.customRowYearly.replace('{q}', u.quota).replace('{u}', u.used);
+    },
+    applyCustomMark() {
+      if (!this.customMarkLeaveId) return;
+      const ok = wioService.setCustomMark(this.customMarkDateStr, this.customMarkLeaveId, this.customMarkPart);
+      if (!ok) {
+        uni.showToast({ title: this.i18n.calendar.customMarkFailed, icon: 'none' });
+        return;
+      }
+      this.showCustomMarkPanel = false;
+      this.loadData();
+      // 额度用超不拦截，但要说一声——个人记录工具，拦了真实请的假就记不进去
+      const u = wioService.getCustomLeaveUsage(this.customMarkLeaveId);
+      if (u.over > 0) {
+        uni.showToast({
+          title: this.i18n.profile.customOver.replace('{n}', u.over),
+          icon: 'none',
+          duration: 2000
+        });
+      }
+    },
+    clearCustomMarkDay() {
+      wioService.clearCustomMark(this.customMarkDateStr);
+      this.showCustomMarkPanel = false;
+      this.loadData();
     },
     openHalfPanel(day, dateStr) {
       const parts = parseDayParts(this.entries[dateStr]);
@@ -919,7 +1116,12 @@ export default {
     getCustomStyle(day) {
       const dateStr = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       if (this.entries[dateStr]) return null;
-      const cl = wioService.getCustomLeaveForDate(dateStr);
+      // 按天标记优先于区间型：同一天既在区间里又被单独标过，以单独标记为准
+      const mark = this.customMarkMap[dateStr];
+      if (mark) {
+        return { background: this.hexToRgba(mark.leave.color, 0.16), color: mark.leave.color };
+      }
+      const cl = (this.customLeaves || []).find(l => l.mode !== 'day' && dateStr >= l.start && dateStr <= l.end);
       if (!cl) return null;
       return { background: this.hexToRgba(cl.color, 0.16), color: cl.color };
     },
@@ -1917,5 +2119,98 @@ export default {
 
 .half-btn-text-on {
   color: #FFFFFF;
+}
+
+/* ===== 按天型福利假 ===== */
+/* 格子底部色条：整格淡底 + 一根条，和区间型的区别只有这一条，避免散假抢视觉 */
+.custom-mark-bar {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  margin-left: -7px;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.custom-mark-modal {
+  padding-bottom: 20px;
+  max-height: 78vh;
+  overflow-y: auto;
+}
+
+.custom-mark-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.custom-mark-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 11px;
+  border: 1px solid transparent;
+  box-sizing: border-box;
+}
+
+.custom-mark-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.custom-mark-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #15181C;
+  flex: 1;
+}
+
+.custom-mark-quota {
+  font-size: 9.5px;
+  color: #8A9299;
+}
+
+.custom-part-row {
+  display: flex;
+  gap: 0;
+  padding: 3px;
+  border-radius: 10px;
+  background: #F2F4F6;
+}
+
+.custom-part-item {
+  flex: 1;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.custom-part-item.on {
+  background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(21, 24, 28, 0.08);
+}
+
+.custom-part-text {
+  font-size: 11.5px;
+  color: #6B7378;
+}
+
+.custom-part-item.on .custom-part-text {
+  color: #0B5248;
+  font-weight: 600;
+}
+
+.custom-mark-hint {
+  display: block;
+  font-size: 9.5px;
+  color: #9AA1A8;
+  margin: 8px 0 14px;
 }
 </style>
