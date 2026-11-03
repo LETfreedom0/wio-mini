@@ -21,6 +21,23 @@ const KEY_BACKUP = 'wio_backup'         // 覆盖本地前的备份，防误恢�
 
 let pushTimer = null
 let pushing = false
+// 冲突暂存：冲突可能发生在 App 启动/切后台（此时没有任何页面在监听事件），
+// 不能让它静默丢掉，否则用户永远停在旧数据上还以为已同步
+let pendingConflict = null
+
+/** 取走待处理冲突（页面绑定同步时调用），取一次即清空 */
+export function takePendingConflict() {
+  const c = pendingConflict
+  pendingConflict = null
+  return c
+}
+
+function rememberConflict(info) {
+  pendingConflict = info
+  try {
+    uni.$emit('wio:sync-conflict', info)
+  } catch (e) { /* 无监听者时忽略 */ }
+}
 
 // ---------- 本地状态 ----------
 
@@ -112,7 +129,7 @@ export async function push(force = false) {
     return { ok: true }
   } catch (e) {
     if (e && e.conflict) {
-      uni.$emit('wio:sync-conflict', {
+      rememberConflict({
         cloud: e.cloudData,
         cloudVersion: e.data_version,
         syncedTime: e.synced_time
@@ -151,6 +168,17 @@ export async function pull() {
     }
     const s = getSyncState()
     if (s.dirty) {
+      // 本地有未推的改动，但云端版本已经比本地基线新 → 两台都改过。
+      // 这里绝不能再 push 覆盖（哪怕非 force 也会被判冲突、force 更会直接
+      // 用旧快照盖掉另一台的删除），直接把云端交给 UI 让用户选。
+      if (res.exists && (res.data_version || 0) > (s.dataVersion || 0)) {
+        rememberConflict({
+          cloud: res.data,
+          cloudVersion: res.data_version,
+          syncedTime: res.synced_time
+        })
+        return { ok: false, conflict: true }
+      }
       return await push()
     }
     if ((res.data_version || 0) > (s.dataVersion || 0)) {
@@ -239,13 +267,18 @@ export function flush() {
   if (!isLogin() || !s.dirty) return Promise.resolve({ ok: true })
   if (!isAutoSyncOn()) return Promise.resolve({ ok: false, reason: 'auto_sync_off' })
   if (pushTimer) clearTimeout(pushTimer)
-  return push(true)
+  // 注意：这里必须是普通 push。原先是 push(true)（force），会绕过版本校验
+  // 拿本机旧快照强盖云端——「A 设备删了数据，B 设备切后台就把它推回来」
+  // 就是这么来的。force 只允许在用户手动选择「使用本机」时出现。
+  return push()
 }
 
 /** 「立即同步」按钮：有脏数据推、否则拉一次 */
 export async function syncNow() {
   const s = getSyncState()
-  if (s.dirty) return push(true)
+  // 同样不能 force：手动点同步不等于「我要用本机覆盖云端」。
+  // 真冲突时交给冲突弹窗，用户选「使用本机」才 force。
+  if (s.dirty) return push()
   return pull()
 }
 

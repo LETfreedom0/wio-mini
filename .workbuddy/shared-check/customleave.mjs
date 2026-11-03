@@ -24,7 +24,9 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { execSync } from 'child_process'
 
-const BASE_COMMIT = 'HEAD'
+// 基线固定在「周末口径修复前」的那一版，否则 HEAD 会跟着往前走，
+// 回归对比会退化成「自己跟自己比」，形同虚设
+const BASE_COMMIT = '794f107'
 // 每次都强制重取：这个文件名与 halfday.mjs 用的 Old 副本不同，
 // 若复用会被上一次的基准占坑，导致回归对比静默失效
 const oldFile = fileURLToPath(new URL('./utils/wioServicePrev.js', import.meta.url))
@@ -65,7 +67,7 @@ const FUTURE = Date.now() + 86400000 * 30
 store['wio_pro_trial'] = JSON.stringify({ expiresAt: FUTURE })
 
 /** 直接铺一份 settings + entries，绕开 save 路径做题设 */
-function seed({ leaves = [], marks = {}, entries = {}, settings = {} } = {}) {
+function seed({ leaves = [], marks = {}, entries = {}, overtime = {}, settings = {} } = {}) {
   Object.keys(store).forEach(k => { if (k !== 'wio_pro_trial') delete store[k] })
   store['wio_pro_trial'] = JSON.stringify({ expiresAt: FUTURE })
   store['wio_settings'] = JSON.stringify({
@@ -76,6 +78,7 @@ function seed({ leaves = [], marks = {}, entries = {}, settings = {} } = {}) {
     ...settings
   })
   store['wio_entries'] = JSON.stringify(entries)
+  store['wio_overtime'] = JSON.stringify(overtime)
 }
 
 const RANGE_LEAVE = { id: 'r1', name: '婚假', color: '#C25B6E', start: '2026-03-02', end: '2026-03-08' }
@@ -225,14 +228,15 @@ S.deleteCustomLeave('d1')
 eq('删除假期后标记清空', Object.keys(S.getCustomMarks()).length, 0)
 eq('删除假期后只剩另一个', S.getCustomLeaves().length, 1)
 
-// 未使用自定义假期时，新旧实现必须逐字段一致
+// 未使用自定义假期时，新旧实现必须逐字段一致。
+// 注意：这里不能放周末标记——周末口径是本次有意修改的（周末不再进分母），
+// 周末场景单独在 O 组断言。
 seed({
   entries: {
     '2026-03-02': 'company',
     '2026-03-03': 'home',
     '2026-03-04': { am: 'company', pm: 'vacation' },
-    '2026-03-05': 'sick',
-    '2026-03-07': 'company'
+    '2026-03-05': 'sick'
   }
 })
 const a = S.getMonthStats(2026, 3)
@@ -397,6 +401,50 @@ store['wio_pro_trial'] = JSON.stringify({ expiresAt: 1 })
 eq('非会员看不到假期', S.getCustomLeaves().length, 0)
 eq('非会员看不到标记', Object.keys(S.getCustomMarks()).length, 0)
 ok('非会员写不进标记', S.setCustomMark('2026-03-10', 'd1', 'full') === false)
+
+// ---------- O. 周末不进 WIO（只有 OT 算） ----------
+// 业务口径：周末 / 法定节假日，不管标公司、居家还是假期，都不进 WIO 的口径；
+// 只有「记录加班」单独统计。调休上班日由 isOfficialWorkingDay 判为工作日，照常计入。
+console.log('O. 周末不进 WIO')
+seed({ entries: { '2026-03-07': 'home', '2026-03-08': 'home' } })
+const wkHome = S.getMonthStats(2026, 3)
+eq('周末标居家 → 工作日不变（3 月 22 天）', wkHome.workingDays, 22)
+eq('周末标居家 → 不计入居家天数', wkHome.homeDays, 0)
+eq('周末标居家 → 分母不变', S.getMonthlyReport(2026, 3).denominator, 22)
+eq('周末标居家 → 比率仍是 0', S.getMonthlyReport(2026, 3).rate, 0)
+
+seed({ entries: { '2026-03-07': 'company' } })
+const wkCompany = S.getMonthStats(2026, 3)
+eq('周末标公司 → 工作日不变', wkCompany.workingDays, 22)
+eq('周末标公司 → 不计入公司天数', wkCompany.companyDays, 0)
+
+seed({ entries: { '2026-03-07': 'vacation' } })
+const wkLeave = S.getMonthStats(2026, 3)
+eq('周末标年假 → 不扣分母', wkLeave.deductibleLeave, 0)
+eq('周末标年假 → 不算进假期天数', wkLeave.vacationDays, 0)
+eq('周末标年假 → 落到 weekendLeaves', wkLeave.weekendLeaves, 1)
+
+// 周末标记不影响整月比率：同月加个工作日公司，比率保持 1/22
+seed({ entries: { '2026-03-02': 'company', '2026-03-07': 'home', '2026-03-08': 'company' } })
+eq('周末乱标不改变月比率', S.getMonthlyReport(2026, 3).rate, Math.round((1 / 22) * 100))
+
+// 调休上班日照常计入（打开国庆调休开关后，10/10 周六算工作日）
+seed({ settings: { compOffRules: { 国庆节: false } } })
+const noMakeup = S.getMonthStats(2026, 10)
+seed({ settings: { compOffRules: { 国庆节: true } } })
+const withMakeup = S.getMonthStats(2026, 10)
+eq('调休开关打开后多一个工作日', withMakeup.workingDays, noMakeup.workingDays + 1)
+seed({ entries: { '2026-10-10': 'home' }, settings: { compOffRules: { 国庆节: true } } })
+const makeupHome = S.getMonthStats(2026, 10)
+eq('调休上班日标居家照常计入居家天数', makeupHome.homeDays, 1)
+eq('调休上班日的居家不扣分母', makeupHome.deductibleLeave, 0)
+eq('调休上班日标居家不改工作日', makeupHome.workingDays, withMakeup.workingDays)
+
+// 周末只认加班：标了 OT 就统计，标什么都不影响 WIO
+seed({ entries: { '2026-03-07': 'home' }, overtime: { '2026-03-07': 4 } })
+const wkOt = S.getMonthStats(2026, 3)
+eq('周末加班小时照常统计', wkOt.totalOvertime, 4)
+eq('周末加班不影响比率', S.getMonthlyReport(2026, 3).rate, 0)
 
 console.log(`\n${fail === 0 ? '全部通过' : '有失败项'}：${pass} 通过 / ${fail} 失败`)
 process.exit(fail === 0 ? 0 : 1)

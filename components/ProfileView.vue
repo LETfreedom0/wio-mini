@@ -805,6 +805,10 @@ export default {
       uni.$off('wio:data-restored', this.onDataRestored);
       uni.$on('wio:sync-conflict', this.onSyncConflict);
       uni.$on('wio:data-restored', this.onDataRestored);
+      // 冲突常发生在启动 / 切后台（那时没有任何页面在监听事件），
+      // 事件会丢；这里补捞一次暂存的冲突，保证弹窗一定会出现
+      const pending = syncService.takePendingConflict();
+      if (pending) this.onSyncConflict(pending);
     },
     unbindSync() {
       uni.$off('wio:sync-conflict', this.onSyncConflict);

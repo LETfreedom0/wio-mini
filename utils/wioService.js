@@ -1089,19 +1089,10 @@ export default {
         l => l.mode !== 'day' && dateStr >= l.start && dateStr <= l.end
       );
 
-      // 先按「是工作日」探一次，用来判断要不要把这天拉回分母（规则 A）
-      const probe = rangeLeave
-        ? null
-        : evaluateDayParts(rawEntry, { halfDayAsFull, isWorkingDay: true });
-
-      // Special handling:
-      // A. 非工作日只要有出勤段（公司 / 居家），这天就拉回分母（workingDays +1）
-      if (!isWorkingDay && probe && (probe.companyParts > 0 || probe.homeParts > 0)) {
-        isWorkingDay = true;
-      }
-      // B. 非工作日标假期不会变成工作日——保持 false 即可
-
-      // 用最终的是否工作日再算一次，deductible 才算得准
+      // 周末 / 法定节假日：不论标了什么（公司、居家、假期）都不进 WIO 口径，
+      // 只有加班（OT）单独统计。这里绝不把标记过的周末「拉回分母」——
+      // 那样周末随手补个居家就会把分母 +1、比率被拉低，和「周末不算 WIO」矛盾。
+      // 调休上班日由 isOfficialWorkingDay 判为工作日，照常计入。
       const ev = rangeLeave ? null : evaluateDayParts(rawEntry, { halfDayAsFull, isWorkingDay });
 
       if (isWorkingDay) {
@@ -1120,14 +1111,19 @@ export default {
           stats.weekendLeaves += 1;
         }
       } else if (ev.hasEntry) {
-        // 按段折算：半天出勤看开关，居家与各类假期恒定 0.5 天
-        stats.company += ev.company;
-        stats.home += ev.home;
-        Object.keys(ev.leave).forEach(k => {
-          if (stats.hasOwnProperty(k)) stats[k] += ev.leave[k];
-        });
-        stats.weekendLeaves += ev.weekendLeave;
-        stats.deductibleLeave += ev.deductible;
+        if (isWorkingDay) {
+          // 按段折算：半天出勤看开关，居家与各类假期恒定 0.5 天
+          stats.company += ev.company;
+          stats.home += ev.home;
+          Object.keys(ev.leave).forEach(k => {
+            if (stats.hasOwnProperty(k)) stats[k] += ev.leave[k];
+          });
+          stats.deductibleLeave += ev.deductible;
+        } else {
+          // 非工作日的标记只落到 weekendLeaves（用于「这假本不该扣分母」的自检），
+          // 不进 company / home / 各类假期：否则「剩余未记录」会被周末虚耗掉
+          stats.weekendLeaves += ev.weekendLeave;
+        }
         stats.totalRecorded++;
       } else {
         // 没有当天的两段标记：老版本按天标记仍然生效（只读兼容，不再写入）
