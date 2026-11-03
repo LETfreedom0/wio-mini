@@ -162,17 +162,17 @@
           <view class="half-part-head">
             <text class="half-part-title">{{ part.title }}</text>
             <text class="half-part-current" :style="{ color: halfCurrentColor(part.key) }">{{ halfCurrentLabel(part.key) }}</text>
-            <view v-if="part.key === 'pm'" class="half-copy" @click="copyAmToPm">
-              <text class="half-copy-text">{{ i18n.calendar.halfSameAsAm }}</text>
-            </view>
           </view>
           <view class="half-status-grid">
             <view
               v-for="opt in halfStatusOptions"
               :key="opt.value"
               class="half-status-item"
-              :class="{ 'half-status-on': partValue(part.key) === opt.value, 'half-status-off': opt.disabled }"
-              :style="halfChipStyle(partValue(part.key) === opt.value, opt)"
+              :class="{
+                'half-status-on': partValue(part.key) === opt.value,
+                'half-status-off': halfChipDisabled(opt, part.key)
+              }"
+              :style="[halfChipStyle(partValue(part.key) === opt.value, opt, part.key), { flexBasis: halfChipBasis }]"
               @click="setHalfPart(part.key, opt)"
             >
               <view
@@ -372,24 +372,25 @@ export default {
       // 调休放按天假后面（设计稿顺序），无额度概念不禁用
       const compOff = this.legends.find(item => item.value === 'comp_off');
       if (compOff) list.push(compOff);
-      // 年假 / 病假同样受额度硬约束：用满置灰，当天已用的段落例外
-      list.forEach(item => {
-        if (item.value !== 'vacation' && item.value !== 'sick') return;
-        if (this.halfAm === item.value || this.halfPm === item.value) return;
+      // 年假 / 病假同样受额度硬约束：用满置灰，当天已用的段落例外。
+      // 用 map 生成新对象，避免把 disabled 写回 legends 缓存对象
+      const patched = list.map(item => {
+        if (item.value !== 'vacation' && item.value !== 'sick') return item;
+        if (this.halfAm === item.value || this.halfPm === item.value) return item;
         const year = String(this.halfDateStr || '').slice(0, 4) || String(this.currentYear);
         const quota = wioService.getLeaveQuota(item.value, year);
-        item.disabled = !!(quota && quota.full);
+        return { ...item, disabled: !!(quota && quota.full) };
       });
       // 兼容旧数据 / 图例标的其它状态：把当前值补进选项，
       // 否则打开面板选中态会凭空消失，用户也没法原样保存
       const current = [this.halfAm, this.halfPm];
       current.forEach(value => {
         if (!value || allow.indexOf(value) !== -1) return;
-        if (list.some(item => item.value === value)) return;
+        if (patched.some(item => item.value === value)) return;
         const item = this.legends.find(i => i.value === value);
-        if (item) list.push(item);
+        if (item) patched.push(item);
         else if (customIdOf(value)) {
-          list.push({
+          patched.push({
             label: this.statusLabel(value),
             value: value,
             isCustom: true,
@@ -397,7 +398,19 @@ export default {
           });
         }
       });
-      return list;
+      return patched;
+    },
+    // 一行放几个 chip：能整除就整数排满（6 个 → 3 列 × 2 行），
+    // 除不尽时多出来的靠 flex-grow 补齐，右边不留空
+    halfGridCols() {
+      const n = this.halfStatusOptions.length || 4;
+      if (n % 4 === 0) return 4;
+      if (n % 3 === 0) return 3;
+      return n <= 4 ? n : 4;
+    },
+    halfChipBasis() {
+      const cols = this.halfGridCols;
+      return `calc((100% - ${(cols - 1) * 8}px) / ${cols})`;
     },
     halfPartRows() {
       const c = this.i18n.calendar;
@@ -864,8 +877,9 @@ export default {
         const p = parseDayParts(raw);
         const a = this.statusColor(p.am);
         const b = this.statusColor(p.pm);
+        // 左半 = 上午，右半 = 下午，中间一根竖线分开
         return {
-          background: `linear-gradient(to bottom right, ${a.bg} 0%, ${a.bg} 50%, ${b.bg} 50%, ${b.bg} 100%)`,
+          background: `linear-gradient(to right, ${a.bg} 0%, ${a.bg} 50%, ${b.bg} 50%, ${b.bg} 100%)`,
           color: a.color
         };
       }
@@ -930,15 +944,21 @@ export default {
       return key === 'am' ? this.halfAm : this.halfPm;
     },
     setHalfPart(key, opt) {
+      if (!opt) return;
+      const other = key === 'am' ? this.halfPm : this.halfAm;
+      // 按天型福利假是「半天天性」的假：一天只该标一段，两段都选等于重复扣
+      if (opt.isCustom && other === opt.value) {
+        uni.showToast({ title: this.i18n.calendar.customHalfOnlyOnePart, icon: 'none' });
+        return;
+      }
       // 额度用完的 chip 置灰不可选，点了只提示原因
-      if (opt && opt.disabled) {
+      if (opt.disabled) {
         uni.showToast({ title: this.i18n.calendar.leaveQuotaEmpty, icon: 'none' });
         return;
       }
       haptic('light');
-      const value = opt ? opt.value : null;
-      if (key === 'am') this.halfAm = value;
-      else this.halfPm = value;
+      if (key === 'am') this.halfAm = opt.value;
+      else this.halfPm = opt.value;
     },
     // 行头右侧的当前选中回显（设计稿：上午行右端「居家」、下午行右端「育儿假」）
     // 注意必须在 methods：模板是带参数调用，放 computed 会变成「不是函数」而崩掉面板
@@ -957,11 +977,6 @@ export default {
       const v = this.partValue(key);
       if (!v) return '#8A8F96';
       return this.statusColor(v).color;
-    },
-    // 常见操作「下午和上午一样」，省一次点击
-    copyAmToPm() {
-      haptic('light');
-      this.halfPm = this.halfAm;
     },
     // 按天型福利假用自己的颜色（存档色），其余走固定状态色板
     leaveByCustomId(id) {
@@ -987,10 +1002,17 @@ export default {
       const item = this.legends.find(i => i.value === value);
       return item ? item.label : value;
     },
+    // chip 是否不可点：额度用尽，或这一天另一段已经占用了同一个按天福利假
+    halfChipDisabled(opt, key) {
+      if (!opt) return true;
+      if (opt.disabled) return true;
+      const other = key === 'am' ? this.halfPm : this.halfAm;
+      return !!(opt.isCustom && other === opt.value);
+    },
     // 选中的 chip 用该状态自己的颜色做浅底 + 描边，比统一的主题色更好认；
-    // 置灰 chip（额度用完）不上选中色
-    halfChipStyle(on, opt) {
-      if (!on || (opt && opt.disabled)) return {};
+    // 置灰 chip 不上选中色
+    halfChipStyle(on, opt, key) {
+      if (!on || !opt || this.halfChipDisabled(opt, key)) return {};
       const c = this.statusColor(opt.value);
       return { background: this.hexToRgba(c.color, 0.1), borderColor: c.color };
     },
@@ -1957,20 +1979,20 @@ export default {
 
 /* 图例圆点：斜切两色，直观表示「上下午可以不同」 */
 .legend-dot.half {
-  background: linear-gradient(to bottom right, #C8E6C9 0%, #C8E6C9 50%, #FFE0B2 50%, #FFE0B2 100%);
+  background: linear-gradient(to right, #C8E6C9 0%, #C8E6C9 50%, #FFE0B2 50%, #FFE0B2 100%);
   border: 1px solid #B0A08A;
 }
 
-/* 斜切格子上的那条对角线：光靠渐变在浅色组合下边界发糊，补一根细线 */
+/* 上下午分色的竖线：左半上午、右半下午，中间一根细线把两段切开 */
 .day-split::before {
   content: '';
   position: absolute;
-  left: 0;
+  left: 50%;
   top: 0;
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(to bottom right, transparent calc(50% - 0.5px), rgba(21, 24, 28, 0.16) calc(50% - 0.5px), rgba(21, 24, 28, 0.16) calc(50% + 0.5px), transparent calc(50% + 0.5px));
+  bottom: 0;
+  width: 1px;
+  margin-left: -0.5px;
+  background: rgba(21, 24, 28, 0.18);
   pointer-events: none;
 }
 
@@ -2006,25 +2028,12 @@ export default {
 /* 行头右侧的当前选中回显：用状态自己的颜色（设计稿「上午 · 居家」蓝字） */
 .half-part-current {
   margin-left: auto;
-  margin-right: 10px;
   font-size: 12px;
   font-weight: 600;
-  max-width: 40%;
+  max-width: 45%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.half-copy {
-  padding: 2px 8px;
-  border-radius: 8px;
-  background-color: #EAF2F0;
-}
-
-.half-copy-text {
-  font-size: 10px;
-  font-weight: 500;
-  color: #0E6E62;
 }
 
 .half-status-grid {
@@ -2034,9 +2043,10 @@ export default {
   gap: 8px;
 }
 
-/* 一行 4 个 chip（对齐 29 屏 A 卡），福利假带额度时靠 ellipsis 兜底 */
+/* 列数由 JS 按 chip 数量算（halfChipBasis），最后一行用 flex-grow 补齐不留空 */
 .half-status-item {
-  flex: 0 0 calc(25% - 6px);
+  flex-grow: 1;
+  flex-shrink: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: row;
