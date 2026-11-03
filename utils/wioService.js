@@ -765,6 +765,20 @@ export default {
           if (quota && quota.full) return false;
         }
       }
+      // 按天型自定义假（福利假）走同一条路：图例直标整天，额度同样硬约束
+      if (isCustomEntry(status)) {
+        // 整套是 PRO 权益，非会员连整天标记也不放行
+        if (!isProUser()) return false;
+        const id = customIdOf(status);
+        const leave = this.getCustomLeaveById(id);
+        // 引用了不存在（或已改成区间型）的假就拒绝写入，避免留下孤儿值
+        if (!leave || leave.mode !== 'day') return false;
+        // 同一天重复标同一个假是幂等的，不能因为「已用满」而拦掉
+        if (entries[dateStr] !== status) {
+          const usage = this.getCustomLeaveUsage(id);
+          if (!usage.unlimited && usage.remaining <= 0) return false;
+        }
+      }
       if (status) {
         entries[dateStr] = status;
       } else {
@@ -841,6 +855,14 @@ export default {
         const status = keys[i];
         const delta = deltaByStatus[status];
         if (delta <= 0) continue;
+        // 按天型自定义假单独算：额度统计在 getCustomLeaveUsage（entries + 老 marks 合并），
+        // 不能走 getLeaveQuota（那只认年假/病假）。口径与图例直标、面板置灰一致：
+        // 剩余为 0 才拒绝；还有 0.5 时允许标（超额只提示不拦，个人记录工具不该卡住真实请假）
+        if (isCustomEntry(status)) {
+          const usage = this.getCustomLeaveUsage(customIdOf(status));
+          if (!usage.unlimited && usage.remaining <= 0) return false;
+          continue;
+        }
         const quota = this.getLeaveQuota(status, year);
         // quota.used 已包含改动前的占用，所以只要 增加量 <= 剩余 就是合法的
         if (quota && delta > quota.left + 1e-9) return false;
@@ -867,7 +889,8 @@ export default {
     const add = (map, sign) => {
       ['am', 'pm'].forEach(k => {
         const s = map[k];
-        if (s && DAY_LEAVE_KEYS.indexOf(s) !== -1) {
+        // 年假 / 病假等固定状态与按天假（custom:<id>）都要参与额度差额计算
+        if (s && (DAY_LEAVE_KEYS.indexOf(s) !== -1 || isCustomEntry(s))) {
           delta[s] = (delta[s] || 0) + sign * HALF;
         }
       });

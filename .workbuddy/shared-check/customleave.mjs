@@ -15,6 +15,7 @@
 //  K. 区间假整天占用（拦写入 + 残留标记不参与统计）
 //  L. 福利假进两段（上午公司 + 下午福利假 = 0.5 / 0.5，额度不双算）
 //  M. 删除按天假连带清理 entries，避免孤儿值继续扣分母
+//  N. 图例直标整天（custom:<id> 写入 / 额度硬约束 / 幂等 / 孤儿值拒绝）
 //
 // 注：utils/ 下的副本需从项目根目录同步：
 //   cp utils/wioService.js .workbuddy/shared-check/utils/
@@ -374,6 +375,22 @@ eq('额度 0 是不限', unlimitedUsage.unlimited, true)
 // 1.5 额度：半天 + 整天
 S.saveCustomLeave({ name: '一天半', color: '#0E6E62', mode: 'day', quota: 1.5, quotaRule: 'total' })
 eq('1.5 额度存得住', S.getCustomLeaves().find(l => l.name === '一天半').quota, 1.5)
+
+// ---------- N. 图例直标整天 ----------
+// 图例选中按天假后点日期 = saveEntry('custom:<id>') 一整天，额度与面板共用一套口径
+console.log('N. 图例直标整天')
+const DAY2 = { id: 'n1', name: '育儿假', color: '#A93B78', mode: 'day', quota: 2, quotaRule: 'yearly' }
+seed({ leaves: [DAY2], entries: {} })
+ok('整天直标写入成功', S.saveEntry('2026-11-10', 'custom:n1') === true)
+eq('写的是整天', S.getEntries()['2026-11-10'], 'custom:n1')
+eq('额度扣 1 天', S.getCustomLeaveUsage('n1').used, 1)
+eq('统计按 1 天假期', S.getMonthStats(2026, 11).customLeaveDays >= 1, true)
+ok('同一天重复标同一假是幂等的', S.saveEntry('2026-11-10', 'custom:n1') === true)
+ok('额度还有 1 天时可再标一天', S.saveEntry('2026-11-11', 'custom:n1') === true)
+eq('额度用满', S.getCustomLeaveUsage('n1').remaining, 0)
+ok('用满后拒绝新的一天', S.saveEntry('2026-11-12', 'custom:n1') === false)
+ok('用满后仍可清空', S.saveEntry('2026-11-10', null) === true)
+ok('指向已删的假被拒绝', S.saveEntry('2026-11-13', 'custom:ghost') === false)
 
 // 非会员：条目与标记都拿不到（但存储保留）
 store['wio_pro_trial'] = JSON.stringify({ expiresAt: 1 })

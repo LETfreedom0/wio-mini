@@ -505,8 +505,22 @@ export default {
       const daysInMonth = new Date(this.currentYear, this.currentMonth, 0).getDate();
       const monthStart = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-01`;
       const monthEnd = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+      // 按天型福利假：每个假单列一项，选中后点日期 = 整天标记（半天仍在「半天」面板里拆）。
+      // 先列按天假，再列区间假，图例尾部顺序稳定，不会随创建先后跳动
       (this.customLeaves || []).forEach(l => {
-        // 按天型不在这里逐个列（可能十几个），统一从「半天」入口进面板选
+        if (l.mode !== 'day') return;
+        result.push({
+          label: l.name,
+          color: 'custom-dot',
+          value: 'custom:' + l.id,
+          dotColor: l.color,
+          isCustom: true,
+          isDayLeave: true,
+          isPro: true
+        });
+      });
+      // 区间型自定义假：仅当前月有交集时列出，只作展示（区间在设置里配）
+      (this.customLeaves || []).forEach(l => {
         if (l.mode === 'day') return;
         if (l.end >= monthStart && l.start <= monthEnd) {
           result.push({ label: l.name, color: 'custom-dot', value: 'custom_' + l.id, dotColor: l.color, isCustom: true });
@@ -666,9 +680,24 @@ export default {
              now.getFullYear() === this.currentDate.getFullYear();
     },
     selectLegend(item) {
-      // 自定义假期图例仅作展示，不支持点选标记（区间在设置中配置）
-      if (item.isCustom) return;
+      // 区间型自定义假仅作展示（区间在设置里配）；按天型可以选中后直标
+      if (item.isCustom && !item.isDayLeave) return;
       haptic('light');
+
+      // 按天型福利假：选中哪个假，点哪天就是整天那个假（PRO）
+      if (item.isDayLeave) {
+        if (!this.isPro) {
+          this.showPaywall = true;
+          return;
+        }
+        this.selectedStatus = item.value;
+        uni.showToast({
+          title: this.i18n.calendar.legendHint,
+          icon: 'none',
+          duration: 1500
+        });
+        return;
+      }
 
       // 半天是 PRO 功能：非会员点这里直接拉起付费墙，不给「选了却用不了」的半截体验
       // 按天型福利假也从这个入口进（面板里就是一组 chip），不再单列图例
@@ -781,6 +810,27 @@ export default {
         }
       }
 
+      // 按天型福利假：额度用满同样拒绝，并说清是哪个假没额度了
+      const selectedCustomId = customIdOf(this.selectedStatus);
+      if (selectedCustomId) {
+        if (!this.isPro) {
+          this.showPaywall = true;
+          return;
+        }
+        const alreadySame = this.entries[dateStr] === this.selectedStatus;
+        if (!alreadySame) {
+          const usage = wioService.getCustomLeaveUsage(selectedCustomId);
+          if (!usage.unlimited && usage.remaining <= 0) {
+            uni.showToast({
+              title: this.i18n.calendar.leaveQuotaEmpty,
+              icon: 'none',
+              duration: 2000
+            });
+            return;
+          }
+        }
+      }
+
       if (this.selectedStatus === 'clear') {
         wioService.saveEntry(dateStr, null);
       } else if (this.selectedStatus === 'overtime_record') {
@@ -873,6 +923,15 @@ export default {
       const range = this.rangeLeaveForDate(dateStr);
       if (range) return { background: this.hexToRgba(range.color, 0.16), color: range.color };
       const raw = this.entries[dateStr];
+      // 整天是同一个按天假（图例直标的结果）：铺该假的浅底，和区间假同一套视觉
+      const rawParts = parseDayParts(raw);
+      const wholeCustomId = customIdOf(rawParts.am);
+      if (wholeCustomId && wholeCustomId === customIdOf(rawParts.pm)) {
+        const leave = this.leaveByCustomId(wholeCustomId);
+        if (leave) {
+          return { background: this.hexToRgba(leave.color, 0.16), color: leave.color };
+        }
+      }
       if (isSplitDay(raw)) {
         const p = parseDayParts(raw);
         const a = this.statusColor(p.am);
@@ -899,6 +958,8 @@ export default {
       const idB = customIdOf(p.pm);
       const a = this.leaveByCustomId(idA);
       const b = this.leaveByCustomId(idB);
+      // 整天同一个按天假：格子已铺浅底，不再叠色条
+      if (idA && idA === idB) return null;
       if (a && b && idA !== idB) {
         return {
           background: `linear-gradient(to right, ${a.color} 0%, ${a.color} 50%, ${b.color} 50%, ${b.color} 100%)`
