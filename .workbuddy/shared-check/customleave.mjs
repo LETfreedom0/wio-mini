@@ -1,7 +1,7 @@
 // 自定义假期「按天取用」离线校验
 // 运行：node .workbuddy/shared-check/customleave.mjs
 //
-// 七组断言：
+// 九组断言：
 //  A. 记录规整（老数据无 mode 默认 range / 脏数据丢弃 / 额度与规则默认值）
 //  B. 区间命中（range 只认区间；day 绝不被当成整段休假）
 //  C. 按天标记存储（写入 / 半天 / 清除 / 老字符串兼容 / 不能标到 range 假期上）
@@ -10,6 +10,7 @@
 //  F. 删除假期连带清理标记 + 与改动前版本的回归对比
 //  G. 表单日期条与扣减天数
 //  H. 色板一致性（12 色去重 / 格式 / 预设色回落）
+//  I. 半天额度（0.5 额度存得住 / 半天按 0.5 扣 / 额度 0 = 不限 / 1.5 额度）
 //
 // 注：utils/ 下的副本需从项目根目录同步：
 //   cp utils/wioService.js .workbuddy/shared-check/utils/
@@ -272,6 +273,28 @@ ok('色相条取色格式与色板一致', /^#[0-9A-F]{6}$/.test('#A33333'))
 // 预设色必须落在色板内：点预设后若色值不在色板，日历兜底色与列表色会对不上
 const presetColors = S.CUSTOM_LEAVE_PRESETS.range.concat(S.CUSTOM_LEAVE_PRESETS.day).map(p => p.color)
 ok('预设色都在色板内', presetColors.every(c => palette.indexOf(c) !== -1))
+
+// ---------- I. 半天额度 ----------
+// 表单里额度可以给到 0.5（半天假），数据层要能存住、用量要按 0.5 扣。
+console.log('I. 半天额度')
+store['wio_pro_trial'] = JSON.stringify({ expiresAt: Date.now() + 86400000 * 3650 })
+store['wio_settings'] = JSON.stringify({ language: 'zh-CN' })
+S.saveCustomLeave({ name: '半天假', color: '#0E6E62', mode: 'day', quota: 0.5, quotaRule: 'yearly' })
+const halfList = S.getCustomLeaves()
+eq('半天额度存得住', halfList[0].quota, 0.5)
+const halfId = halfList[0].id
+S.setCustomMark('2026-03-10', halfId, 'am')
+const halfUsage = S.getCustomLeaveUsage(halfId)
+eq('半天假已用 0.5', halfUsage.used, 0.5)
+eq('半天假用满', halfUsage.remaining, 0)
+eq('半天假不超额', halfUsage.over, 0)
+// 额度 0 = 不限
+S.saveCustomLeave({ name: '不限假', color: '#0E6E62', mode: 'day', quota: 0, quotaRule: 'total' })
+const unlimitedUsage = S.getCustomLeaveUsage(S.getCustomLeaves().find(l => l.name === '不限假').id)
+eq('额度 0 是不限', unlimitedUsage.unlimited, true)
+// 1.5 额度：半天 + 整天
+S.saveCustomLeave({ name: '一天半', color: '#0E6E62', mode: 'day', quota: 1.5, quotaRule: 'total' })
+eq('1.5 额度存得住', S.getCustomLeaves().find(l => l.name === '一天半').quota, 1.5)
 
 // 非会员：条目与标记都拿不到（但存储保留）
 store['wio_pro_trial'] = JSON.stringify({ expiresAt: 1 })

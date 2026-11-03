@@ -6,12 +6,19 @@
         <view class="cl-pro-chip"><text class="cl-pro-chip-text">{{ i18n.profile.customProChip }}</text></view>
       </view>
 
-      <!-- 使用方式：放最前面，因为下面每个字段都跟着它变 -->
+      <!-- 使用方式：放最前面，因为下面每个字段都跟着它变。
+           左边的小图标是「一段」与「一天」的符号，光看形状就知道自己在哪个模式。 -->
       <view class="cl-mode-seg">
         <view class="cl-mode-item" :class="{ active: form.mode === 'range' }" @click="setMode('range')">
+          <view class="cl-mode-icon cl-mode-icon-range">
+            <view class="cl-mode-range-end l"></view>
+            <view class="cl-mode-range-link"></view>
+            <view class="cl-mode-range-end r"></view>
+          </view>
           <text class="cl-mode-title">{{ i18n.profile.customModeRange }}</text>
         </view>
         <view class="cl-mode-item" :class="{ active: form.mode === 'day' }" @click="setMode('day')">
+          <view class="cl-mode-icon cl-mode-icon-day"></view>
           <text class="cl-mode-title">{{ i18n.profile.customModeDay }}</text>
         </view>
       </view>
@@ -72,36 +79,39 @@
             </view>
           </view>
         </view>
-
-        <view class="cl-calc-bar">
-          <text class="cl-calc-value">{{ i18n.profile.customDeductText.replace('{n}', rangeDeduct) }}</text>
-        </view>
       </view>
 
       <!-- ===== 按天点选：只建额度，哪天休了点哪天 ===== -->
       <view v-else class="cl-range-card">
-        <view class="cl-quota-row">
-          <view class="cl-quota-left">
-            <text class="cl-date-cap">{{ quotaCapLabel }}</text>
-            <view class="cl-quota-num-row">
-              <text class="cl-quota-num">{{ form.quota || '—' }}</text>
-              <text class="cl-quota-unit">{{ i18n.profile.customQuotaUnit }}</text>
-            </view>
-          </view>
-          <view class="cl-stepper">
-            <view class="cl-step-btn" @click="stepQuota(-1)"><text class="cl-step-sign">−</text></view>
-            <text class="cl-step-val">{{ form.quota }}</text>
-            <view class="cl-step-btn" @click="stepQuota(1)"><text class="cl-step-sign">＋</text></view>
-          </view>
+        <view class="cl-quota-head">
+          <text class="cl-quota-cap">{{ i18n.profile.customQuotaCap }}</text>
+          <text class="cl-quota-head-text">{{ quotaHeadText }}</text>
         </view>
 
-        <view v-if="form.quota > 0" class="cl-quota-bar">
+        <!-- 数字只出现这一处：两个圆钮直接夹着它，改的时候不用满屏找数字 -->
+        <view class="cl-stepper">
+          <view class="cl-step-btn" :class="{ off: usage.unlimited }" @click="stepQuota(-1)"><text class="cl-step-sign">−</text></view>
+          <view class="cl-step-num-row">
+            <text class="cl-step-num" :class="{ word: usage.unlimited }">{{ quotaNumText }}</text>
+            <text v-if="quotaUnitText" class="cl-step-unit">{{ quotaUnitText }}</text>
+          </view>
+          <view class="cl-step-btn" @click="stepQuota(1)"><text class="cl-step-sign">＋</text></view>
+        </view>
+
+        <view v-if="!usage.unlimited" class="cl-quota-bar">
           <view class="cl-quota-fill" :style="{ width: quotaPercent + '%', background: form.color }"></view>
         </view>
 
-        <view class="cl-quota-stats">
-          <text class="cl-quota-used" :style="{ color: form.color }">{{ usedLabel }}</text>
-          <text class="cl-quota-left-text">{{ leftLabel }}</text>
+        <!-- 两枚 chip：加半天 / 不限额度。
+             半天是给「上午请事假、下午照常上班」这类场景留的入口，
+             不限额度则必须显式点，不能靠一路减到 0 误触。 -->
+        <view class="cl-quota-chips">
+          <view class="cl-quota-chip" :class="{ off: usage.unlimited }" @click="addHalfDay">
+            <text class="cl-quota-chip-text">{{ i18n.profile.customQuotaAddHalf }}</text>
+          </view>
+          <view class="cl-quota-chip plain" :class="{ on: usage.unlimited }" @click="toggleUnlimited">
+            <text class="cl-quota-chip-text">{{ i18n.profile.customQuotaUnlimited }}</text>
+          </view>
         </view>
       </view>
 
@@ -161,7 +171,9 @@ export default {
       editingId: null,
       hue: 168,
       hueRect: null,
-      storedUsage: { used: 0 }
+      storedUsage: { used: 0 },
+      // 上一次设过的有限额度：点「不限额度」退出时回到这个值，而不是归零
+      lastQuota: 5
     }
   },
   computed: {
@@ -192,14 +204,20 @@ export default {
     weekStrip() {
       return buildWeekStrip(this.form.start, this.form.end)
     },
-    // 区间型：真实要扣的天数（排除法定节假日，调休上班要算进来）
-    rangeDeduct() {
-      return wioService.countDeductibleDays(this.form.start, this.form.end)
+    // 大号数字：不限额度时显示「不限额度」，否则显示额度本身（可带 0.5）
+    quotaNumText() {
+      if (this.usage.unlimited) return this.i18n.profile.customQuotaUnlimited
+      const q = Number(this.form.quota) || 0
+      return String(Math.round(q * 10) / 10)
     },
-    quotaCapLabel() {
-      return this.form.quotaRule === 'total'
-        ? this.i18n.profile.customQuotaCapTotal
-        : this.i18n.profile.customQuotaCap
+    quotaUnitText() {
+      return this.usage.unlimited ? '' : this.i18n.profile.customQuotaUnit
+    },
+    // 卡片右上角只留一处数字：有限额度看剩余，不限或超额了看已用
+    quotaHeadText() {
+      const u = this.usage
+      if (u.unlimited || u.over > 0) return this.usedLabel
+      return this.leftLabel
     },
     usage() {
       if (this.form.mode !== 'day') {
@@ -282,6 +300,7 @@ export default {
         this.storedUsage = this.form.mode === 'day'
           ? wioService.getCustomLeaveUsage(l.id)
           : { used: 0 }
+        if (this.form.quota > 0) this.lastQuota = this.form.quota
       } else {
         const today = this.todayStr()
         this.editingId = null
@@ -321,10 +340,45 @@ export default {
       // 饱和度/明度锁在可读区间：日历里这色要当文字色用，太浅会糊
       this.form.color = this.hslToHex(h, HUE_S, HUE_L)
     },
+    // 额度步进：±1 天。下限卡在 0.5 —— 再往下就是「不限额度」了，
+    // 那必须由用户显式点 chip，不该一路减 1 减 0 误触。
+    // 不限状态下 ＋ 给 1 天（否则新建的按天假额度是 0，按钮全废没法调），
+    // − 无意义（0 已经是下限）。
     stepQuota(delta) {
       haptic('light')
-      const next = Math.max(0, Math.min(365, (Number(this.form.quota) || 0) + delta))
+      const cur = Math.round((Number(this.form.quota) || 0) * 10) / 10
+      if (cur <= 0) {
+        if (delta < 0) return
+        this.form.quota = 1
+        this.lastQuota = 1
+        return
+      }
+      let next = Math.round((cur + delta) * 10) / 10
+      if (next < 0.5) next = 0.5
+      if (next > 365) next = 365
       this.form.quota = next
+      this.lastQuota = next
+    },
+    // 加半天：额度本身可以是 0.5 的倍数（半天假按 0.5 天扣）
+    addHalfDay() {
+      if (this.usage.unlimited) return
+      haptic('light')
+      const cur = Math.round((Number(this.form.quota) || 0) * 10) / 10
+      let next = Math.round((cur + 0.5) * 10) / 10
+      if (next > 365) next = 365
+      this.form.quota = next
+      this.lastQuota = next
+    },
+    // 不限额度：0 表示不限。退出时回到上一次设过的值
+    toggleUnlimited() {
+      haptic('light')
+      if (this.usage.unlimited) {
+        this.form.quota = this.lastQuota || 5
+      } else {
+        const q = Number(this.form.quota) || 0
+        if (q > 0) this.lastQuota = q
+        this.form.quota = 0
+      }
     },
     setMode(mode) {
       if (this.form.mode === mode) return
@@ -521,33 +575,86 @@ export default {
   display: flex;
   gap: 3px;
   padding: 3px;
-  border-radius: 10px;
-  background: #F2F4F6;
+  border-radius: 12px;
+  background: #EFF1F0;
 }
 
 .cl-mode-item {
   flex: 1;
-  height: 38px;
-  border-radius: 8px;
+  height: 40px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 7px;
 }
 
 .cl-mode-item.active {
   background: #FFFFFF;
-  box-shadow: 0 1px 3px rgba(21, 24, 28, 0.08);
+  box-shadow: 0 2px 9px rgba(14, 110, 98, 0.15);
+}
+
+/* 图标：区间 = 两端方块连一线，一天 = 一个点 */
+.cl-mode-icon {
+  flex-shrink: 0;
+}
+
+.cl-mode-icon-range {
+  position: relative;
+  width: 13px;
+  height: 4.5px;
+}
+
+.cl-mode-range-end {
+  position: absolute;
+  top: 0;
+  width: 4.5px;
+  height: 4.5px;
+  border-radius: 1.5px;
+  background: #A9B2B8;
+}
+
+.cl-mode-range-end.l {
+  left: 0;
+}
+
+.cl-mode-range-end.r {
+  right: 0;
+}
+
+.cl-mode-range-link {
+  position: absolute;
+  left: 4.5px;
+  top: 1.5px;
+  width: 4px;
+  height: 1.5px;
+  border-radius: 0.75px;
+  background: #A9B2B8;
+}
+
+.cl-mode-icon-day {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #A9B2B8;
+}
+
+.cl-mode-item.active .cl-mode-range-end,
+.cl-mode-item.active .cl-mode-range-link,
+.cl-mode-item.active .cl-mode-icon-day {
+  background: #0E6E62;
 }
 
 .cl-mode-title {
   font-size: 13.5px;
   font-weight: 500;
-  color: #6B7378;
+  color: #9AA1A8;
 }
 
 .cl-mode-item.active .cl-mode-title {
-  color: #0B5248;
+  font-size: 14px;
   font-weight: 600;
+  color: #0B5248;
 }
 
 /* --- 预设 chips --- */
@@ -747,87 +854,77 @@ export default {
   line-height: 1;
 }
 
-/* --- 结论条：只留一个数，说明交给日期条自己说话 --- */
-.cl-calc-bar {
-  height: 36px;
-  border-radius: 10px;
-  padding: 0 12px;
-  background: rgba(192, 138, 45, 0.09);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.cl-calc-value {
-  font-size: 13px;
-  font-weight: 600;
-  color: #8A5A00;
-}
-
 /* --- 额度 --- */
-.cl-quota-row {
+.cl-quota-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.cl-quota-left {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.cl-quota-cap {
+  font-size: 11.5px;
+  color: #8A9299;
 }
 
-.cl-quota-num-row {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-}
-
-.cl-quota-num {
-  font-size: 28px;
-  font-weight: 700;
-  color: #15181C;
-  line-height: 1.1;
-}
-
-.cl-quota-unit {
-  font-size: 11px;
-  color: #6B7378;
+.cl-quota-head-text {
+  font-size: 10.5px;
+  color: #8A9299;
 }
 
 .cl-stepper {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 14px;
 }
 
 .cl-step-btn {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(21, 24, 28, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+.cl-step-btn.off {
+  opacity: 0.4;
+}
+
 .cl-step-sign {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
   color: #B07A22;
   line-height: 1;
 }
 
-.cl-step-val {
-  font-size: 14px;
-  font-weight: 500;
+.cl-step-num-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.cl-step-num {
+  font-size: 30px;
+  font-weight: 700;
   color: #15181C;
-  min-width: 20px;
-  text-align: center;
+  line-height: 1.1;
+}
+
+.cl-step-num.word {
+  font-size: 21px;
+  font-weight: 600;
+}
+
+.cl-step-unit {
+  font-size: 12px;
+  color: #6B7378;
 }
 
 .cl-quota-bar {
-  height: 6px;
+  height: 5px;
   border-radius: 100px;
   background: #F2E5C6;
   overflow: hidden;
@@ -839,20 +936,46 @@ export default {
   opacity: 0.85;
 }
 
-.cl-quota-stats {
+.cl-quota-chips {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
 }
 
-.cl-quota-used {
-  font-size: 9.5px;
+.cl-quota-chip {
+  height: 26px;
+  padding: 0 11px;
+  border-radius: 100px;
+  background: #FFF3DC;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cl-quota-chip.off {
+  opacity: 0.45;
+}
+
+.cl-quota-chip.plain {
+  background: #F3F5F6;
+}
+
+.cl-quota-chip.plain.on {
+  background: #FFF3DC;
+}
+
+.cl-quota-chip-text {
+  font-size: 11px;
   font-weight: 500;
+  color: #B07A22;
 }
 
-.cl-quota-left-text {
-  font-size: 9.5px;
+.cl-quota-chip.plain .cl-quota-chip-text {
   color: #6B7378;
+}
+
+.cl-quota-chip.plain.on .cl-quota-chip-text {
+  color: #B07A22;
 }
 
 /* --- 额度规则 --- */
