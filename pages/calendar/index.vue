@@ -289,6 +289,9 @@ export default {
       // 上下午各存一份，天然支持任意组合（上午公司 + 下午年假 等）
       halfAm: 'company',
       halfPm: 'company',
+      // 打开面板时抓一份各按天假的已用天数作基线，选 chip 时在它上面做增量，
+      // 这样余额能实时扣减显示，真正落库仍然只在点「保存」时发生
+      halfUsageBase: {},
       showPaywall: false,
       // 权益变化后用它打点，让 isPro 这个 computed 重算
       proStamp: 0
@@ -986,11 +989,37 @@ export default {
     },
     // --- 按天型自定义假 ---
     // 额度短文案：存在 chip 的右侧（「3.5/10」「不限 2」）
+    // 一段里某个按天假占了多少天（0 / 0.5），入参可以是原始 entries 值或 {am,pm}
+    customSegWeight(raw, id) {
+      if (!id) return 0;
+      const p = parseDayParts(raw);
+      let w = 0;
+      if (customIdOf(p.am) === id) w += 0.5;
+      if (customIdOf(p.pm) === id) w += 0.5;
+      return w;
+    },
+    // 面板内的预览用量：已落库的基线 − 这天原来的贡献 + 本次选择的贡献。
+    // 只影响显示，写库仍由「保存」触发
+    customPreviewUsed(id) {
+      // 面板没打开时没有预览上下文，直接读存储，避免基线过期算出脏值
+      if (!this.halfDateStr) return wioService.getCustomLeaveUsage(id).used;
+      const base = (this.halfUsageBase && this.halfUsageBase[id]) || 0;
+      const before = this.customSegWeight(this.entries[this.halfDateStr], id);
+      const after = this.customSegWeight({ am: this.halfAm, pm: this.halfPm }, id);
+      return Math.round((base - before + after) * 10) / 10;
+    },
+    customPreviewRemaining(l) {
+      if (!l) return 0;
+      const quota = l.quota || 0;
+      if (quota <= 0) return 0;
+      return Math.max(0, Math.round((quota - this.customPreviewUsed(l.id)) * 10) / 10);
+    },
     customQuotaShort(l) {
       if (!l) return '';
-      const u = wioService.getCustomLeaveUsage(l.id);
-      if (u.unlimited) return String(u.used);
-      return `${u.used}/${u.quota}`;
+      // chip 上的余额跟着选择实时变化（选中即扣减），保存后才写进存储
+      const used = this.customPreviewUsed(l.id);
+      if (!l.quota) return String(used);
+      return `${used}/${l.quota}`;
     },
     openHalfPanel(day, dateStr) {
       // 连续休假整天占用：这段日子人不在，出勤入口直接关掉并说明原因
@@ -1009,10 +1038,19 @@ export default {
       // 两段都预填当前值；没有记录就给「公司办公」，打开即可直接保存
       this.halfAm = parts.am || parts.pm || 'company';
       this.halfPm = parts.pm || parts.am || 'company';
+      // 抓额度基线：面板里的余额 = 基线 + 本次选择带来的增量，保存前不写库
+      const base = {};
+      (this.customDayLeaves || []).forEach(l => {
+        base[l.id] = wioService.getCustomLeaveUsage(l.id).used;
+      });
+      this.halfUsageBase = base;
       this.showHalfPanel = true;
     },
     closeHalfPanel() {
       this.showHalfPanel = false;
+      // 取消没有落库，清掉预览上下文即可（reopen 会重抓基线）
+      this.halfUsageBase = {};
+      this.halfDateStr = '';
     },
     // 面板里两行各自的当前值
     partValue(key) {
@@ -1044,8 +1082,10 @@ export default {
       if (id) {
         const l = this.leaveByCustomId(id);
         if (!l) return '—';
-        // 按天假是「半天天性」的假：本段固定扣 0.5 天，按设计稿附在后缀里
-        return l.name + this.i18n.calendar.customDeductSuffix;
+        // 设计稿：选中按天假时行头显示「育儿假 · 余 0.5」，余额同样按预览值算
+        if (!l.quota) return l.name + this.i18n.calendar.customUnlimitedSuffix;
+        const remain = this.customPreviewRemaining(l);
+        return l.name + this.i18n.calendar.customRemainSuffix.replace('{n}', remain);
       }
       const item = this.legends.find(i => i.value === v);
       return item ? item.label : v;
@@ -1129,6 +1169,9 @@ export default {
       }
       haptic('medium');
       this.showHalfPanel = false;
+      // 落库后基线过期：清掉预览上下文，避免关面板后还算出脏余额
+      this.halfUsageBase = {};
+      this.halfDateStr = '';
       this.loadData();
       // 福利假超额不拦截，但要说一声——个人记录工具，拦了真实请的假就记不进去
       const over = customIds
@@ -1146,6 +1189,8 @@ export default {
       haptic('medium');
       wioService.saveDayParts(this.halfDateStr, null, null);
       this.showHalfPanel = false;
+      this.halfUsageBase = {};
+      this.halfDateStr = '';
       this.loadData();
     },
     onProUpgraded() {
