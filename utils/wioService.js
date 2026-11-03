@@ -46,6 +46,19 @@ const HALF = 0.5;
 /** 计入分母扣减的假期状态 */
 const DAY_LEAVE_KEYS = ['vacation', 'birthday', 'sick', 'unpaid', 'comp_off', 'exclude_wio'];
 
+// 按天型自定义假在 entries 里的写法：'custom:<leaveId>'
+// 这样它就能像年假/病假一样参与上下午两段（上午公司 + 下午育儿假），
+// 不必再单独维护一套 customMarks —— 老数据仍然读得到，只是不再写入。
+const CUSTOM_PREFIX = 'custom:';
+
+export function isCustomEntry(v) {
+  return typeof v === 'string' && v.indexOf(CUSTOM_PREFIX) === 0;
+}
+
+export function customIdOf(v) {
+  return isCustomEntry(v) ? v.slice(CUSTOM_PREFIX.length) : null;
+}
+
 /** 存储原始值 → { am, pm }；老字符串自动补成两段相同 */
 export function parseDayParts(raw) {
   if (!raw) return { am: null, pm: null };
@@ -90,7 +103,9 @@ export function evaluateDayParts(raw, opts) {
     company: 0, home: 0,
     leave: {}, leaveTotal: 0,
     deductible: 0, weekendLeave: 0,
-    hasEntry: false, companyParts: 0, homeParts: 0
+    hasEntry: false, companyParts: 0, homeParts: 0,
+    // 按天假各自用了多少天（额度校验按 id 分开算，半天 0.5）
+    customUsed: {}
   };
 
   ['am', 'pm'].forEach(k => {
@@ -99,6 +114,13 @@ export function evaluateDayParts(raw, opts) {
     out.hasEntry = true;
     if (s === 'company') { out.companyParts++; return; }
     if (s === 'home') { out.homeParts++; out.home += HALF; return; }
+    if (isCustomEntry(s)) {
+      const id = customIdOf(s);
+      out.leave.custom = (out.leave.custom || 0) + HALF;
+      out.leaveTotal += HALF;
+      out.customUsed[id] = (out.customUsed[id] || 0) + HALF;
+      return;
+    }
     if (DAY_LEAVE_KEYS.indexOf(s) !== -1) {
       out.leave[s] = (out.leave[s] || 0) + HALF;
       out.leaveTotal += HALF;
@@ -530,7 +552,52 @@ export default {
       const m = this._readMark(marks[d]);
       if (!m || m.id === id) delete marks[d];
     });
+    // entries 里的 custom:<id> 同样要清：留着的话统计会继续按假期扣分母，
+    // 日历却已经找不到这个假，用户会觉得「这天凭空少了一天」
+    const entries = this.getEntries();
+    let entriesChanged = false;
+    const tag = CUSTOM_PREFIX + id;
+    Object.keys(entries).forEach(d => {
+      const p = parseDayParts(entries[d]);
+      if (p.am !== tag && p.pm !== tag) return;
+      const next = packDayParts(p.am === tag ? null : p.am, p.pm === tag ? null : p.pm);
+      if (next) entries[d] = next;
+      else delete entries[d];
+      entriesChanged = true;
+    });
+    if (entriesChanged) {
+      uni.setStorageSync(KEY_ENTRIES, JSON.stringify(entries));
+      markDirty();
+    }
     this.saveSettings({ ...settings, customLeaves: list, customMarks: marks });
+  },
+
+  // 把指向已删除按天假的段清掉（历史脏数据兜底）：否则「孤儿值」会被当成假期扣分母
+  _sanitizeCustomSegments(raw, dayIds) {
+    if (!raw) return raw;
+    const p = parseDayParts(raw);
+    const fix = v => (isCustomEntry(v) && dayIds.indexOf(customIdOf(v)) === -1 ? null : v);
+    const am = fix(p.am);
+    const pm = fix(p.pm);
+    if (am === p.am && pm === p.pm) return raw;
+    return packDayParts(am, pm);
+  },
+
+  // 区间内已有标记的天数（含出勤/假期/老按天标记）
+  // 建连续休假前用它提示「这几天原本的记录会按休假算」，
+  // 不去删用户已有数据——取消这段假，原标记原样回来
+  countMarkedDays(start, end) {
+    if (!this._isValidDateStr(start) || !this._isValidDateStr(end) || start > end) return 0;
+    const entries = this.getEntries();
+    const marks = this.getCustomMarks();
+    let n = 0;
+    const last = new Date(end + 'T00:00:00').getTime();
+    for (let t = new Date(start + 'T00:00:00').getTime(); t <= last; t += 86400000) {
+      const d = new Date(t);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (entries[dateStr] || marks[dateStr]) n++;
+    }
+    return n;
   },
 
   // 区间内实际要扣分母的天数（工作日，排除法定节假日、含调休上班）
@@ -598,6 +665,8 @@ export default {
   setCustomMark(dateStr, leaveId, part) {
     if (!isProUser()) return false;
     if (!this._isValidDateStr(dateStr)) return false;
+    // 区间假涵盖的日子不允许再叠按天标记（整天占用优先）
+    if (leaveId && this.getCustomLeaveForDate(dateStr)) return false;
     const settings = this.getSettings();
     const marks = { ...(settings.customMarks || {}) };
     if (!leaveId || !part) {
@@ -616,21 +685,40 @@ export default {
   },
 
   // 额度用量：yearly 只统计当年，total 统计全部；半天记 0.5 天
+  // 两个数据源：新的 entries（custom:<id>，支持上下午拆开）优先，
+  // 老 customMarks 只补 entries 里没有的日期，同一天绝不重复计。
   getCustomLeaveUsage(leaveId) {
     const leave = this.getCustomLeaveById(leaveId);
     if (!leave || leave.mode !== 'day') {
       return { used: 0, quota: 0, remaining: 0, over: 0, unlimited: true };
     }
     const quota = leave.quota || 0;
-    const marks = this.getCustomMarks();
     const prefix = `${new Date().getFullYear()}-`;
+    const inPeriod = d => leave.quotaRule !== 'yearly' || String(d).startsWith(prefix);
     let used = 0;
+    const taken = {};
+
+    const entries = this.getEntries();
+    Object.keys(entries).forEach(d => {
+      const p = parseDayParts(entries[d]);
+      const segs = [p.am, p.pm].filter(isCustomEntry);
+      if (!segs.length) return;
+      taken[d] = true;
+      if (!inPeriod(d)) return;
+      segs.forEach(s => {
+        if (customIdOf(s) === leaveId) used += HALF;
+      });
+    });
+
+    const marks = this.getCustomMarks();
     Object.keys(marks).forEach(d => {
+      if (taken[d]) return;
       const m = marks[d];
       if (!m || m.id !== leaveId) return;
-      if (leave.quotaRule === 'yearly' && !d.startsWith(prefix)) return;
+      if (!inPeriod(d)) return;
       used += (m.part === 'am' || m.part === 'pm') ? HALF : 1;
     });
+
     used = round1(used);
     return {
       used,
@@ -665,6 +753,9 @@ export default {
   saveEntry(dateStr, status) {
     try {
       const entries = this.getEntries();
+      // 连续休假（区间型）覆盖的日子里不允许再标任何出勤方式；
+      // 清空操作放行，用户想改口径得先取消那段假
+      if (status && this.getCustomLeaveForDate(dateStr)) return false;
       // 额度硬约束（不只做 UI 提示）：年假 / 病假用满后不允许再标记。
       // 放在数据层，返回键 / 脚本绕过 UI 时同样拦得住；清空操作始终放行。
       // 同一天重复标记同一状态是幂等的，不能因为「已用满」而拦掉。
@@ -725,8 +816,21 @@ export default {
       const nextAm = am || null;
       const nextPm = pm || null;
 
+      // 连续休假（区间型）是「整天占用」：这几天人不在，不允许再标任何出勤方式。
+      // 这里拦在数据层，返回键 / 脚本绕过 UI 时同样拦得住；清空操作始终放行。
+      if ((nextAm || nextPm) && this.getCustomLeaveForDate(dateStr)) return false;
+
       // 拆半天是 PRO 能力：整天标记（两段相同）永远免费
       if (nextAm !== nextPm && !isProUser()) return false;
+
+      // 按天型自定义假整套是 PRO 权益：非会员连整天标记也不放行
+      const customSegs = [nextAm, nextPm].filter(isCustomEntry);
+      if (customSegs.length && !isProUser()) return false;
+      // 引用了不存在（或已被删）的按天假就拒绝写入，避免留下孤儿值
+      for (let i = 0; i < customSegs.length; i++) {
+        const leave = this.getCustomLeaveById(customIdOf(customSegs[i]));
+        if (!leave || leave.mode !== 'day') return false;
+      }
 
       // 假期额度硬约束：按折算天数（半天 = 0.5）与「改动前后」的差额判断，
       // 同一天重复保存同一状态是幂等的，不能因为已用满而拦掉。
@@ -940,6 +1044,7 @@ export default {
     // 自定义假期整月只读一次存储：逐日循环里再读会做 60 次 JSON.parse
     const customLeavesAll = this.getCustomLeaves();
     const customMarksAll = this.getCustomMarks();
+    const customDayIds = customLeavesAll.filter(l => l.mode === 'day').map(l => l.id);
 
     // Calculate Working Days (Official) in the month
     // Also calculate Public Holidays (if not overridden by user entry)
@@ -951,44 +1056,47 @@ export default {
       // 1. Calculate Working Days
       let isWorkingDay = this.isOfficialWorkingDay(date);
       
-      const rawEntry = entries[dateStr];
+      const rawEntry = this._sanitizeCustomSegments(entries[dateStr], customDayIds);
+
+      // 0. 区间型自定义假（连续休假）是「整天占用」，优先级最高：
+      //    这几天人不在，当天残留的出勤标记一律不参与统计（不删数据，删假即恢复）。
+      //    跨月时只对本月内被覆盖的日期生效——未被覆盖的工作日照常进分母，
+      //    该回公司的天数一天都不会少。
+      const rangeLeave = customLeavesAll.find(
+        l => l.mode !== 'day' && dateStr >= l.start && dateStr <= l.end
+      );
+
       // 先按「是工作日」探一次，用来判断要不要把这天拉回分母（规则 A）
-      const probe = evaluateDayParts(rawEntry, { halfDayAsFull, isWorkingDay: true });
+      const probe = rangeLeave
+        ? null
+        : evaluateDayParts(rawEntry, { halfDayAsFull, isWorkingDay: true });
 
       // Special handling:
       // A. 非工作日只要有出勤段（公司 / 居家），这天就拉回分母（workingDays +1）
-      if (!isWorkingDay && (probe.companyParts > 0 || probe.homeParts > 0)) {
+      if (!isWorkingDay && probe && (probe.companyParts > 0 || probe.homeParts > 0)) {
         isWorkingDay = true;
       }
       // B. 非工作日标假期不会变成工作日——保持 false 即可
 
       // 用最终的是否工作日再算一次，deductible 才算得准
-      const ev = evaluateDayParts(rawEntry, { halfDayAsFull, isWorkingDay });
+      const ev = rangeLeave ? null : evaluateDayParts(rawEntry, { halfDayAsFull, isWorkingDay });
 
       if (isWorkingDay) {
         stats.workingDays++;
       }
 
       // 2. Count Stats based on Entry OR Public Holiday default
-      // 2.0 自定义假期：仅在「无手动标记」的日期生效（手动标记优先）
-      //     按天标记 > 区间型假期；工作日 → 分母扣减项；非工作日 → weekendLeaves 防止误扣
-      //     半天标记记 0.5 天（额度按天扣，半天自然扣半）
-      if (!ev.hasEntry) {
-        const mark = this.getCustomMarkForDate(dateStr, customMarksAll, customLeavesAll);
-        const rangeLeave = mark
-          ? null
-          : customLeavesAll.find(l => l.mode !== 'day' && dateStr >= l.start && dateStr <= l.end);
-        if (mark || rangeLeave) {
-          const weight = mark && (mark.part === 'am' || mark.part === 'pm') ? HALF : 1;
-          if (isWorkingDay) {
-            stats.custom += weight;
-            stats.deductibleLeave += weight;
-          } else {
-            stats.weekendLeaves += weight;
-          }
+      // 优先级：区间假（整天占用） > 当天两段标记 > 按天假老标记 > 法定假日
+      //   工作日 → 记 custom 并扣分母；非工作日 → 记 weekendLeaves 防止误扣
+      //   按天标记半天记 0.5 天（额度按天扣，半天自然扣半）
+      if (rangeLeave) {
+        if (isWorkingDay) {
+          stats.custom += 1;
+          stats.deductibleLeave += 1;
+        } else {
+          stats.weekendLeaves += 1;
         }
-      }
-      if (ev.hasEntry) {
+      } else if (ev.hasEntry) {
         // 按段折算：半天出勤看开关，居家与各类假期恒定 0.5 天
         stats.company += ev.company;
         stats.home += ev.home;
@@ -999,10 +1107,22 @@ export default {
         stats.deductibleLeave += ev.deductible;
         stats.totalRecorded++;
       } else {
-        // No manual entry, check if it's a public holiday (off day)
-        const holiday = this.getPublicHoliday(dateStr);
-        if (holiday && holiday.isOffDay) {
-          stats.public++;
+        // 没有当天的两段标记：老版本按天标记仍然生效（只读兼容，不再写入）
+        const mark = this.getCustomMarkForDate(dateStr, customMarksAll, customLeavesAll);
+        if (mark) {
+          const weight = (mark.part === 'am' || mark.part === 'pm') ? HALF : 1;
+          if (isWorkingDay) {
+            stats.custom += weight;
+            stats.deductibleLeave += weight;
+          } else {
+            stats.weekendLeaves += weight;
+          }
+        } else {
+          // No manual entry, check if it's a public holiday (off day)
+          const holiday = this.getPublicHoliday(dateStr);
+          if (holiday && holiday.isOffDay) {
+            stats.public++;
+          }
         }
       }
 

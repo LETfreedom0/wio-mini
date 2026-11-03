@@ -448,10 +448,29 @@ export default {
       if (this.form.mode === 'day') {
         payload.quota = this.form.quota
         payload.quotaRule = this.form.quotaRule
-      } else {
-        payload.start = this.form.start
-        payload.end = this.form.end
+        this.doSave(payload)
+        return
       }
+      payload.start = this.form.start
+      payload.end = this.form.end
+      // 连续休假是整天占用：区间内已有的出勤标记会按休假算。
+      // 先讲清楚再保存，别让用户以为那几天的记录被悄悄改了（数据不删，取消假即恢复）
+      const marked = wioService.countMarkedDays(this.form.start, this.form.end)
+      if (marked > 0) {
+        uni.showModal({
+          title: this.i18n.profile.customRangeOverlapTitle,
+          content: this.i18n.profile.customRangeOverlapBody.replace('{n}', marked),
+          confirmText: this.i18n.common.confirm,
+          cancelText: this.i18n.common.cancel,
+          success: (res) => {
+            if (res.confirm) this.doSave(payload)
+          }
+        })
+        return
+      }
+      this.doSave(payload)
+    },
+    doSave(payload) {
       const saved = wioService.saveCustomLeave(payload)
       if (!saved) {
         uni.showToast({ title: this.i18n.profile.customNameRequired, icon: 'none', duration: 1500 })

@@ -11,6 +11,10 @@
 //  G. 表单日期条与扣减天数
 //  H. 色板一致性（12 色去重 / 格式 / 预设色回落）
 //  I. 半天额度（0.5 额度存得住 / 半天按 0.5 扣 / 额度 0 = 不限 / 1.5 额度）
+//  J. 区间假跨月（每月只扣本月被覆盖的工作日，其余照常进分母）
+//  K. 区间假整天占用（拦写入 + 残留标记不参与统计）
+//  L. 福利假进两段（上午公司 + 下午福利假 = 0.5 / 0.5，额度不双算）
+//  M. 删除按天假连带清理 entries，避免孤儿值继续扣分母
 //
 // 注：utils/ 下的副本需从项目根目录同步：
 //   cp utils/wioService.js .workbuddy/shared-check/utils/
@@ -273,6 +277,81 @@ ok('色相条取色格式与色板一致', /^#[0-9A-F]{6}$/.test('#A33333'))
 // 预设色必须落在色板内：点预设后若色值不在色板，日历兜底色与列表色会对不上
 const presetColors = S.CUSTOM_LEAVE_PRESETS.range.concat(S.CUSTOM_LEAVE_PRESETS.day).map(p => p.color)
 ok('预设色都在色板内', presetColors.every(c => palette.indexOf(c) !== -1))
+
+// ---------- J. 区间假跨月 ----------
+// 连续休假是逐日扣分母的：跨月时每个月只扣「本月内被覆盖的工作日」，
+// 没被覆盖的日子照常进分母（该回公司的天数一天都不能少）。
+console.log('J. 区间假跨月只扣被覆盖的工作日')
+const SPAN_LEAVE = { id: 'r2', name: '探亲假', color: '#2F6D9E', mode: 'range', start: '2026-03-27', end: '2026-04-03' }
+seed({ leaves: [SPAN_LEAVE] })
+const marSpan = S.getMonthStats(2026, 3)
+const aprSpan = S.getMonthStats(2026, 4)
+eq('3 月只扣 27/30/31 三个工作日', marSpan.deductibleLeave, 3)
+eq('3 月假期 3 天', marSpan.customLeaveDays, 3)
+eq('4 月只扣 1/2/3 三个工作日', aprSpan.deductibleLeave, 3)
+eq('4 月假期 3 天', aprSpan.customLeaveDays, 3)
+eq('3 月分母 = 全月工作日 − 3', S.getMonthlyReport(2026, 3).denominator, marSpan.workingDays - 3)
+eq('4 月分母 = 全月工作日 − 3', S.getMonthlyReport(2026, 4).denominator, aprSpan.workingDays - 3)
+// 区间外的工作日必须还在分母里：否则「整段休假」会把两个月的工作日一起吞掉
+ok('4 月没被覆盖的工作日仍在分母', aprSpan.workingDays - 3 > 3)
+
+// ---------- K. 区间假是整天占用 ----------
+// 标了连续休假之后，这段日子不能再标任何出勤方式；
+// 数据层拦写入，统计层也无视历史残留的标记（不删数据，取消假即恢复）。
+console.log('K. 区间假整天占用')
+seed({
+  leaves: [RANGE_LEAVE],
+  entries: { '2026-03-02': 'company', '2026-03-03': { am: 'company', pm: 'home' } }
+})
+const kst = S.getMonthStats(2026, 3)
+eq('区间内残留的出勤不计 companyDays', kst.companyDays, 0)
+eq('区间内残留的居家不计 homeDays', kst.homeDays, 0)
+eq('区间内仍按 5 个工作日休假', kst.customLeaveDays, 5)
+eq('分母扣满 5 天', kst.deductibleLeave, 5)
+ok('拒绝再标整天出勤', S.saveEntry('2026-03-02', 'home') === false)
+ok('拒绝再标两段', S.saveDayParts('2026-03-03', 'company', 'home') === false)
+ok('拒绝再叠按天标记', S.setCustomMark('2026-03-04', 'd1', 'full') === false)
+ok('清空操作仍然放行', S.saveEntry('2026-03-02', null) === true)
+
+// ---------- L. 福利假进两段（上午公司 + 下午福利假） ----------
+console.log('L. 福利假进两段')
+const customVal = 'custom:d1'
+seed({ leaves: [DAY_LEAVE] })
+ok('两段写入成功', S.saveDayParts('2026-03-11', 'company', customVal) === true)
+const lst = S.getMonthStats(2026, 3)
+eq('上午公司记 0.5 天', lst.companyDays, 0.5)
+eq('下午福利假记 0.5 天', lst.customLeaveDays, 0.5)
+eq('分母只扣 0.5', lst.deductibleLeave, 0.5)
+eq('额度用掉 0.5', S.getCustomLeaveUsage('d1').used, 0.5)
+ok('整天福利假写入成功', S.saveDayParts('2026-03-12', customVal, customVal) === true)
+eq('整天福利假累计 1.5 天', S.getMonthStats(2026, 3).customLeaveDays, 1.5)
+eq('额度累计 1.5', S.getCustomLeaveUsage('d1').used, 1.5)
+ok('引用不存在的假被拒', S.saveDayParts('2026-03-13', 'custom:nope', 'custom:nope') === false)
+
+// 老 customMarks 与新 entries 同一天：只按 entries 算一次，绝不双计
+seed({
+  leaves: [DAY_LEAVE],
+  marks: { '2026-03-11': { id: 'd1', part: 'full' } },
+  entries: { '2026-03-11': { am: 'company', pm: customVal } }
+})
+eq('同日不双算（额度）', S.getCustomLeaveUsage('d1').used, 0.5)
+eq('同日不双算（统计）', S.getMonthStats(2026, 3).customLeaveDays, 0.5)
+
+store['wio_pro_trial'] = JSON.stringify({ expiresAt: 1 })
+ok('非会员不能标福利假', S.saveDayParts('2026-03-16', customVal, customVal) === false)
+
+// ---------- M. 删除按天假连带清理 ----------
+console.log('M. 删除按天假连带清理')
+seed({
+  leaves: [DAY_LEAVE],
+  entries: { '2026-03-11': { am: 'company', pm: customVal }, '2026-03-12': customVal }
+})
+eq('删除前扣 1.5 天', S.getMonthStats(2026, 3).deductibleLeave, 1.5)
+S.deleteCustomLeave('d1')
+const afterDel = S.getMonthStats(2026, 3)
+eq('删除后不再扣分母', afterDel.deductibleLeave, 0)
+eq('删除后不记假期', afterDel.customLeaveDays, 0)
+eq('删除后同日上午的公司段保留', afterDel.companyDays, 0.5)
 
 // ---------- I. 半天额度 ----------
 // 表单里额度可以给到 0.5（半天假），数据层要能存住、用量要按 0.5 扣。
