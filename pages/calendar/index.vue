@@ -116,7 +116,7 @@
         </view>
         
         <view class="legend-grid">
-          <view class="legend-item" v-for="(item, index) in filteredLegends" :key="index" @click="selectLegend(item)" :class="{ active: selectedStatus === item.value }">
+          <view class="legend-item" v-for="(item, index) in filteredLegends" :key="index" @click="selectLegend(item)" :class="{ active: selectedStatus === item.value, disabled: item.legendDisabled }">
             <view class="legend-dot" :class="item.color" :style="item.dotColor ? { background: item.dotColor } : null"></view>
             <text class="legend-label">{{ item.label }}</text>
             <text v-if="item.isPro" class="legend-pro">PRO</text>
@@ -481,15 +481,13 @@ export default {
       return Math.round((numerator / denominator) * 100);
     },
     filteredLegends() {
-      const order = [
-        'company', 'home', 'vacation',
-        'sick', 'overtime_record', 'public',
-        'comp_off', 'unpaid', 'exclude_wio',
-        'half_day' // PRO：按上午/下午分别标记
-      ];
-      
-      let result = order.map(key => this.legends.find(item => item.value === key)).filter(Boolean);
-      
+      // 顺序：出勤与固定假期在前，「半天」后紧跟按天假（同一族），
+      // 公共假期与其他假期垫底，区间假最后（仅展示）
+      const head = ['company', 'home', 'vacation', 'sick', 'overtime_record', 'half_day'];
+      const tail = ['public', 'comp_off', 'unpaid', 'exclude_wio'];
+
+      let result = head.map(key => this.legends.find(item => item.value === key)).filter(Boolean);
+
       if (this.settings.birthdayEnabled && this.settings.birthdayMonth) {
         const currentMonthStr = String(this.currentMonth).padStart(2, '0');
         if (currentMonthStr === this.settings.birthdayMonth) {
@@ -500,15 +498,15 @@ export default {
           }
         }
       }
-      
-      // 自定义假期图例：仅显示与当前月有交集的，颜色用假期自带色
+
       const daysInMonth = new Date(this.currentYear, this.currentMonth, 0).getDate();
       const monthStart = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-01`;
       const monthEnd = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
-      // 按天型福利假：每个假单列一项，选中后点日期 = 整天标记（半天仍在「半天」面板里拆）。
-      // 先列按天假，再列区间假，图例尾部顺序稳定，不会随创建先后跳动
+      // 按天型福利假：每个假单列一项，图例只做整天标记（半天去「半天」面板）。
+      // 剩余额度不足 1 天时置灰：整天标不动了，引导去半天面板把最后半天用掉
       (this.customLeaves || []).forEach(l => {
         if (l.mode !== 'day') return;
+        const usage = wioService.getCustomLeaveUsage(l.id);
         result.push({
           label: l.name,
           color: 'custom-dot',
@@ -516,9 +514,16 @@ export default {
           dotColor: l.color,
           isCustom: true,
           isDayLeave: true,
-          isPro: true
+          isPro: true,
+          legendDisabled: !usage.unlimited && usage.remaining < 1
         });
       });
+
+      tail.forEach(key => {
+        const item = this.legends.find(i => i.value === key);
+        if (item) result.push(item);
+      });
+
       // 区间型自定义假：仅当前月有交集时列出，只作展示（区间在设置里配）
       (this.customLeaves || []).forEach(l => {
         if (l.mode === 'day') return;
@@ -688,6 +693,15 @@ export default {
       if (item.isDayLeave) {
         if (!this.isPro) {
           this.showPaywall = true;
+          return;
+        }
+        // 图例只做整天标记：剩余不足 1 天就置灰，最后半天去「半天」面板用
+        if (item.legendDisabled) {
+          uni.showToast({
+            title: this.i18n.calendar.customDayNeedFull.replace('{name}', item.label),
+            icon: 'none',
+            duration: 2000
+          });
           return;
         }
         this.selectedStatus = item.value;
@@ -1021,7 +1035,7 @@ export default {
       if (key === 'am') this.halfAm = opt.value;
       else this.halfPm = opt.value;
     },
-    // 行头右侧的当前选中回显（设计稿：上午行右端「居家」、下午行右端「育儿假」）
+    // 行头右侧的当前选中回显（设计稿：上午行右端「居家」、下午行右端「育儿假 · 扣 0.5 天」）
     // 注意必须在 methods：模板是带参数调用，放 computed 会变成「不是函数」而崩掉面板
     halfCurrentLabel(key) {
       const v = this.partValue(key);
@@ -1029,7 +1043,9 @@ export default {
       const id = customIdOf(v);
       if (id) {
         const l = this.leaveByCustomId(id);
-        return l ? l.name : '—';
+        if (!l) return '—';
+        // 按天假是「半天天性」的假：本段固定扣 0.5 天，按设计稿附在后缀里
+        return l.name + this.i18n.calendar.customDeductSuffix;
       }
       const item = this.legends.find(i => i.value === v);
       return item ? item.label : v;
@@ -1788,6 +1804,16 @@ export default {
 .legend-item:active {
   transform: scale(0.96);
   background-color: #EBEEF5;
+}
+
+/* 额度不足 1 天的按天假：图例只做整天标记，标不动就置灰引导去半天面板 */
+.legend-item.disabled {
+  opacity: 0.38;
+}
+
+.legend-item.disabled:active {
+  transform: none;
+  background-color: #F5F7FA;
 }
 
 .legend-item.active {
