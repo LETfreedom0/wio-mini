@@ -422,23 +422,7 @@ export default {
       const [, m, day] = this.halfDateStr.split('-');
       return lang === 'en-US' ? `${wd}, ${+m}/${+day}` : `${+m}月${+day}日 · ${wd}`;
     },
-    // 行头右侧的当前选中回显（设计稿：上午行右端「居家」、下午行右端「育儿假」）
-    halfCurrentLabel(key) {
-      const v = this.partValue(key);
-      if (!v) return '—';
-      const id = customIdOf(v);
-      if (id) {
-        const l = this.leaveByCustomId(id);
-        return l ? l.name : '—';
-      }
-      const item = this.legends.find(i => i.value === v);
-      return item ? item.label : v;
-    },
-    halfCurrentColor(key) {
-      const v = this.partValue(key);
-      if (!v) return '#8A8F96';
-      return this.statusColor(v).color;
-    },
+    // 行头右侧的当前选中回显在 methods 里（模板带参数调用，computed 不行）
     monthYearText() {
       return getMonthYearName(this.currentMonth, this.currentYear, this.settings.language);
     },
@@ -955,6 +939,24 @@ export default {
       const value = opt ? opt.value : null;
       if (key === 'am') this.halfAm = value;
       else this.halfPm = value;
+    },
+    // 行头右侧的当前选中回显（设计稿：上午行右端「居家」、下午行右端「育儿假」）
+    // 注意必须在 methods：模板是带参数调用，放 computed 会变成「不是函数」而崩掉面板
+    halfCurrentLabel(key) {
+      const v = this.partValue(key);
+      if (!v) return '—';
+      const id = customIdOf(v);
+      if (id) {
+        const l = this.leaveByCustomId(id);
+        return l ? l.name : '—';
+      }
+      const item = this.legends.find(i => i.value === v);
+      return item ? item.label : v;
+    },
+    halfCurrentColor(key) {
+      const v = this.partValue(key);
+      if (!v) return '#8A8F96';
+      return this.statusColor(v).color;
     },
     // 常见操作「下午和上午一样」，省一次点击
     copyAmToPm() {
