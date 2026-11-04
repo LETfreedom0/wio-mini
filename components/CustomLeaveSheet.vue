@@ -145,10 +145,6 @@
           <text class="cl-palette-refresh-icon" :style="{ transform: 'rotate(' + paletteTurns * 360 + 'deg)' }">↻</text>
         </view>
       </view>
-      <view class="cl-palette-foot">
-        <text class="cl-palette-cap">{{ i18n.profile.customColorLabel }}</text>
-        <text class="cl-palette-hint">{{ i18n.profile.customColorHint }}</text>
-      </view>
 
       <view class="custom-save-btn" @click="save">
         <text class="custom-save-text">{{ i18n.profile.customSave }}</text>
@@ -1022,7 +1018,7 @@ export default {
 /* --- 颜色：一组协调配色 + 换一组 --- */
 .cl-palette-row {
   display: flex;
-  align-items: stretch;
+  align-items: center;
 }
 
 .cl-palette {
@@ -1049,7 +1045,8 @@ export default {
 .cl-palette-refresh {
   margin-left: 8px;
   width: 44px;
-  border-radius: 15px;
+  height: 46px;
+  border-radius: 11px;
   background: #E9E4D6;
   display: flex;
   align-items: center;
@@ -1066,24 +1063,6 @@ export default {
   color: #8A5A00;
   /* 每次换组转满 360°，停下来始终是正的 */
   transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-/* 说明行紧贴色块，负外边距抵消卡片 15px 的段间距，读起来是同一条 */
-.cl-palette-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: -9px;
-}
-
-.cl-palette-cap {
-  font-size: 11.5px;
-  color: #8A9299;
-}
-
-.cl-palette-hint {
-  font-size: 10.5px;
-  color: #B3B8BD;
 }
 
 /* --- 保存 / 删除 --- */
