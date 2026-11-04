@@ -125,13 +125,29 @@
         </view>
       </view>
 
-      <!-- 颜色：整行细彩带 + 圆滑块，任意色相可达。
-           触控绑在整条上而不是滑块上——滑块只有 26px，手指按不准；
-           拖的时候滑块中心跟着手指走，条本身是取色坐标尺。 -->
-      <view id="clHueBar" class="cl-hue-bar" :style="{ background: hueGradient }" @touchstart.stop="onHueTouch" @touchmove.stop="onHueTouch">
-        <view class="cl-hue-knob" :style="{ left: knobLeft + 'px' }">
-          <view class="cl-hue-knob-inner" :style="{ background: form.color }"></view>
+      <!-- 颜色：一组协调配色，点色块选中，点 ↻ 换下一组。
+           比原来的色相条好在「挑出来的色一定配得上」：色相条能取任意色，
+           也能轻易取出两个肉眼难分的相近色；这里每组都由人工配好关系。
+           当前选中色永远留在行内（不在这一组就顶掉最后一格），
+           否则换组之后选中态会凭空消失，看着像没选上。 -->
+      <view class="cl-palette-row">
+        <view class="cl-palette">
+          <view
+            v-for="(c, i) in paletteColors"
+            :key="i + ':' + c"
+            class="cl-swatch"
+            hover-class="cl-swatch-hover"
+            :style="swatchStyle(c)"
+            @click="pickColor(c)"
+          ></view>
         </view>
+        <view class="cl-palette-refresh" hover-class="cl-palette-refresh-hover" @click="refreshPalette">
+          <text class="cl-palette-refresh-icon" :style="{ transform: 'rotate(' + paletteTurns * 360 + 'deg)' }">↻</text>
+        </view>
+      </view>
+      <view class="cl-palette-foot">
+        <text class="cl-palette-cap">{{ i18n.profile.customColorLabel }}</text>
+        <text class="cl-palette-hint">{{ i18n.profile.customColorHint }}</text>
       </view>
 
       <view class="custom-save-btn" @click="save">
@@ -149,12 +165,17 @@ import wioService, { buildWeekStrip } from '@/utils/wioService.js'
 import { locales } from '@/utils/locales.js'
 import { tap as haptic } from '@/utils/haptic.js'
 
-// 彩带上的色 = 选出来的色：渐变必须用取值函数同一套 s/l 生成，
-// 不能用色板色拼（色板色明度不一，拖到黄段会「看着亮、选出来暗」）
-const HUE_S = 58
-const HUE_L = 46
-const HUE_STEP = 15
-const KNOB_SIZE = 26
+// 一组颜色放在一起要「配得上」：每组 4 色取自不同色系，但共用同一冷暖调。
+// 12 个旧色板色全部覆盖且各有 1~3 次出场——预设假期套色时能稳定落进某一组，
+// 选中态不会因为「色不在当前组」而丢。
+const PALETTES = [
+  ['#0E6E62', '#3C6FB0', '#7A5AA8', '#D4A33F'], // 湖光
+  ['#C25B6E', '#C97A3D', '#D4A33F', '#8A8F4A'], // 暖釉
+  ['#2F8F6E', '#8A8F4A', '#0E6E62', '#6B7379'], // 林野
+  ['#41598A', '#3C6FB0', '#6B7379', '#7A5AA8'], // 夜蓝
+  ['#A93B78', '#8C4F86', '#7A5AA8', '#C25B6E'], // 莓紫
+  ['#2F8F6E', '#D4A33F', '#41598A', '#C97A3D']  // 苔金
+]
 
 export default {
   name: 'CustomLeaveSheet',
@@ -169,8 +190,9 @@ export default {
       settings: { language: 'zh-CN' },
       form: { mode: 'range', name: '', color: '#0E6E62', start: '', end: '', quota: 0, quotaRule: 'yearly' },
       editingId: null,
-      hue: 168,
-      hueRect: null,
+      // 当前展示的配色组下标；paletteTurns 只用来驱动 ↻ 每次转一整圈
+      paletteIndex: 0,
+      paletteTurns: 0,
       storedUsage: { used: 0 },
       // 上一次设过的有限额度：点「不限额度」退出时回到这个值，而不是归零
       lastQuota: 5
@@ -252,30 +274,18 @@ export default {
         : this.i18n.profile.customLeft
       return tpl.replace('{n}', u.remaining)
     },
-    // 滑块按 px 定位并按「可用区间」映射：色相 0 与 360 是同一种红，
-    // 若用百分比，选到 349° 时 26px 的滑块会顶出彩带右端 13px，看着像 bug。
-    // 两端各让出 13px（滑块半径），滑块整个落在彩带内，末端色相依然取得到。
-    knobLeft() {
-      const w = this.hueRect && this.hueRect.width ? this.hueRect.width : 302
-      const usable = Math.max(0, w - KNOB_SIZE)
-      return Math.round(usable * (this.hue / 360))
-    },
-    hueGradient() {
-      const stops = []
-      for (let d = 0; d <= 360; d += HUE_STEP) {
-        stops.push(`${this.hslToHex(d % 360, HUE_S, HUE_L)} ${Math.round((d / 360) * 100)}%`)
-      }
-      return `linear-gradient(to right, ${stops.join(', ')})`
+    // 当前组 4 色。选中色不在组里（刚套了预设，或是旧版色相条存的色）时
+    // 顶掉最后一格——宁可少一个备选，也不能让选中态消失
+    paletteColors() {
+      const g = PALETTES[this.paletteIndex % PALETTES.length]
+      const cur = String(this.form.color || '').toUpperCase()
+      if (!cur || g.indexOf(cur) !== -1) return g
+      return [g[0], g[1], g[2], cur]
     }
   },
   watch: {
     visible(v) {
-      if (v) {
-        this.init()
-        this.$nextTick(() => {
-          setTimeout(() => this.measureHueBar(), 120)
-        })
-      }
+      if (v) this.init()
     }
   },
   methods: {
@@ -315,30 +325,37 @@ export default {
         }
         this.storedUsage = { used: 0 }
       }
-      this.hue = this.hexToHue(this.form.color)
+      this.syncPaletteToColor()
     },
-    measureHueBar() {
-      const q = uni.createSelectorQuery().in(this)
-      q.select('#clHueBar').boundingClientRect(rect => {
-        if (rect && rect.width) this.hueRect = rect
-      }).exec()
-    },
-    onHueTouch(e) {
-      const t = e.touches && e.touches[0]
-      if (!t) return
-      if (!this.hueRect) {
-        this.measureHueBar()
-        return
+    // 打开/套预设/换组后，把 paletteIndex 定位到「含当前色的那一组」，
+    // 找不到就留在第 0 组（此时 paletteColors 会顶掉最后一格保住选中态）
+    syncPaletteToColor() {
+      const cur = String(this.form.color || '').toUpperCase()
+      let hit = -1
+      for (let i = 0; i < PALETTES.length; i++) {
+        if (PALETTES[i].indexOf(cur) !== -1) { hit = i; break }
       }
-      // 与 knobLeft 同一套映射：手指坐标、滑块中心、条上该点颜色三者对齐
-      const pad = KNOB_SIZE / 2
-      const usable = Math.max(1, this.hueRect.width - KNOB_SIZE)
-      const p = Math.max(0, Math.min(1, (t.clientX - this.hueRect.left - pad) / usable))
-      // 吸附 5°：不吸附会拖出一堆肉眼难分的近似红
-      const h = (Math.round((p * 360) / 5) * 5) % 360
-      this.hue = h
-      // 饱和度/明度锁在可读区间：日历里这色要当文字色用，太浅会糊
-      this.form.color = this.hslToHex(h, HUE_S, HUE_L)
+      if (hit > -1) this.paletteIndex = hit
+      this.paletteTurns = 0
+    },
+    refreshPalette() {
+      haptic('light')
+      this.paletteIndex = (this.paletteIndex + 1) % PALETTES.length
+      this.paletteTurns += 1
+    },
+    pickColor(c) {
+      const next = String(c || '').toUpperCase()
+      if (!next || next === String(this.form.color || '').toUpperCase()) return
+      haptic('light')
+      this.form.color = next
+    },
+    // 选中态：色块本身 + 一圈同色外环，中间留一道白，浅色/深色底都看得清
+    swatchStyle(c) {
+      const sel = String(c).toUpperCase() === String(this.form.color || '').toUpperCase()
+      return {
+        background: c,
+        boxShadow: sel ? `0 0 0 2px #FFFFFF, 0 0 0 3.5px ${c}` : '0 0 0 0 rgba(0,0,0,0)'
+      }
     },
     // 额度步进：±1 天。下限卡在 0.5 —— 再往下就是「不限额度」了，
     // 那必须由用户显式点 chip，不该一路减 1 减 0 误触。
@@ -430,7 +447,7 @@ export default {
       this.form.color = p.color
       // 预设法定期限自带额度规则：婚产陪丧一次性，关爱假/生日假按年发
       if (p.quotaRule) this.form.quotaRule = p.quotaRule
-      this.hue = this.hexToHue(p.color)
+      this.syncPaletteToColor()
       haptic('light')
     },
     save() {
@@ -494,32 +511,6 @@ export default {
     close() {
       haptic('light')
       this.$emit('close')
-    },
-    // --- 颜色换算 ---
-    hexToHue(hex) {
-      const h = String(hex || '').replace('#', '')
-      if (h.length !== 6) return 168
-      const r = parseInt(h.slice(0, 2), 16) / 255
-      const g = parseInt(h.slice(2, 4), 16) / 255
-      const b = parseInt(h.slice(4, 6), 16) / 255
-      const max = Math.max(r, g, b)
-      const min = Math.min(r, g, b)
-      const d = max - min
-      if (!d) return 0
-      let deg
-      if (max === r) deg = ((g - b) / d) % 6
-      else if (max === g) deg = (b - r) / d + 2
-      else deg = (r - g) / d + 4
-      return Math.round((deg * 60 + 360) % 360)
-    },
-    hslToHex(hue, s, l) {
-      const S = s / 100
-      const L = l / 100
-      const k = n => (n + hue / 30) % 12
-      const a = S * Math.min(L, 1 - L)
-      const f = n => L - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))
-      const to = x => Math.round(255 * x).toString(16).padStart(2, '0').toUpperCase()
-      return '#' + to(f(0)) + to(f(8)) + to(f(4))
     }
   }
 }
@@ -1028,31 +1019,71 @@ export default {
   font-weight: 600;
 }
 
-/* --- 颜色：整行细彩带 + 圆滑块 --- */
-.cl-hue-bar {
-  width: 100%;
-  height: 26px;
-  border-radius: 13px;
-  position: relative;
+/* --- 颜色：一组协调配色 + 换一组 --- */
+.cl-palette-row {
+  display: flex;
+  align-items: stretch;
 }
 
-.cl-hue-knob {
-  position: absolute;
-  top: 0;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: #FFFFFF;
+.cl-palette {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 15px;
+  background: #F3F1EA;
+}
+
+.cl-swatch {
+  flex: 1;
+  height: 46px;
+  border-radius: 11px;
+  /* 换组时颜色从左到右依次淡入，比硬切有「morph」的连续感 */
+  transition: background-color 0.34s ease, box-shadow 0.34s ease, transform 0.18s ease;
+}
+
+.cl-swatch-hover {
+  transform: scale(0.94);
+}
+
+.cl-palette-refresh {
+  margin-left: 8px;
+  width: 44px;
+  border-radius: 15px;
+  background: #E9E4D6;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 1px 5px rgba(21, 24, 28, 0.28);
 }
 
-.cl-hue-knob-inner {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
+.cl-palette-refresh-hover {
+  background: #DED7C5;
+}
+
+.cl-palette-refresh-icon {
+  font-size: 20px;
+  line-height: 1;
+  color: #8A5A00;
+  /* 每次换组转满 360°，停下来始终是正的 */
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* 说明行紧贴色块，负外边距抵消卡片 15px 的段间距，读起来是同一条 */
+.cl-palette-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: -9px;
+}
+
+.cl-palette-cap {
+  font-size: 11.5px;
+  color: #8A9299;
+}
+
+.cl-palette-hint {
+  font-size: 10.5px;
+  color: #B3B8BD;
 }
 
 /* --- 保存 / 删除 --- */
