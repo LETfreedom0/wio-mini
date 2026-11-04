@@ -99,19 +99,43 @@ const selectedIn = colors => colors.filter(c => hexOf(c.shadow).length > 0)
   ok(sel.length === 1 && up(sel[0]) === up(target), '点完色块，选中态应移到新色上')
 }
 
-// ---- P3 换组：整圈循环，不卡组、不漏组 ----
+// ---- P3 换组：整圈循环，不卡组、不漏组（换组现在是动画，颜色在收缩点才落） ----
+const sleep = ms => new Promise(r => setTimeout(r, ms))
 {
   const i = newInst()
   i.form.color = '#0E6E62'
-  i.syncPaletteToColor(0)
+  i.syncPaletteToColor()
   const seen = new Set()
   for (let n = 0; n < PALETTES.length; n++) {
     seen.add(i.paletteIndex)
     i.refreshPalette()
+    ok(i.morphing === true, `第 ${n + 1} 次换组应进入动画态`)
+    await sleep(620)
   }
+  ok(i.morphing === false, '动画结束后 morphing 应复位')
   ok(i.paletteIndex === 0, `转一圈应回到第 1 组，实际 index=${i.paletteIndex}`)
   ok(seen.size === PALETTES.length, `一圈应覆盖全部 ${PALETTES.length} 组，实际 ${seen.size}`)
   ok(i.paletteTurns === PALETTES.length, `旋转计数应累加 ${PALETTES.length}，实际 ${i.paletteTurns}`)
+}
+
+// ---- P3b 动画期间连点：只能前进一组，颜色不能被连点跳级 ----
+{
+  const i = newInst()
+  i.form.color = '#0E6E62'
+  i.syncPaletteToColor()
+  const start = i.paletteIndex
+  i.refreshPalette()
+  i.refreshPalette()
+  i.refreshPalette()
+  await sleep(620)
+  ok(i.paletteIndex === (start + 1) % PALETTES.length, `连点三下应只换一组，实际 ${i.paletteIndex}`)
+  ok(i.paletteTurns === 1, `连点三下旋转计数应只加 1，实际 ${i.paletteTurns}`)
+  // 动画期间点色块应被忽略
+  const before = i.form.color
+  i.refreshPalette()
+  i.pickColor('#C25B6E')
+  ok(i.form.color === before, '动画期间点色块应被忽略')
+  await sleep(620)
 }
 
 // ---- P4 选中色永远可见：任何历史色 × 任何组 都还在行内且有选中态 ----

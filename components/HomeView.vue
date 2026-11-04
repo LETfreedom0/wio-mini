@@ -196,7 +196,7 @@
 </template>
 
 <script>
-import wioService, { computeMonthlyReport, parseDayParts, isSplitDay } from '@/utils/wioService.js'
+import wioService, { computeMonthlyReport, parseDayParts, isSplitDay, customIdOf } from '@/utils/wioService.js'
 import { locales, getMonthName, getWeekdayName } from '@/utils/locales.js'
 import { getAuth, isLogin } from '@/utils/auth.js'
 import { tap as haptic } from '@/utils/haptic.js'
@@ -534,18 +534,6 @@ export default {
       const lang = this.settings.language
       const dates = Object.keys(entries).sort().reverse().slice(0, 3)
 
-      const meta = {
-        company: { label: this.i18n.home.workFromCompany, color: '#0E6E62', bg: '#E7F1EF' },
-        home: { label: this.i18n.home.workFromHome, color: '#B26B18', bg: '#FBF0E2' },
-        vacation: { label: this.i18n.calendar.legends.vacation, color: '#41598A', bg: '#E9EDF5' },
-        birthday: { label: this.i18n.calendar.legends.birthday, color: '#C24A7E', bg: '#FBF0F4' },
-        sick: { label: this.i18n.calendar.legends.sick, color: '#8C4F86', bg: '#F4ECF3' },
-        unpaid: { label: this.i18n.calendar.legends.unpaid, color: '#6B7379', bg: '#EFF1F3' },
-        comp_off: { label: this.i18n.calendar.legends.comp_off, color: '#1E7A8C', bg: '#E5F2F4' },
-        public: { label: this.i18n.calendar.legends.public, color: '#B23A32', bg: '#F9EAE8' },
-        exclude_wio: { label: this.i18n.calendar.legends.exclude_wio, color: '#8B95A1', bg: '#EFF1F3' }
-      }
-
       this.recentRecords = dates.map(dateStr => {
         const [y, m, d] = dateStr.split('-')
         const dt = new Date(Number(y), Number(m) - 1, Number(d))
@@ -558,7 +546,7 @@ export default {
         // 这里单独拆开成「上午X · 下午Y」，颜色跟上午段走（与今天打卡卡片的取色一致）
         if (isSplitDay(raw)) {
           const p = parseDayParts(raw)
-          const head = meta[p.am] || meta[p.pm] || { color: '#6B7379', bg: '#EFF1F3' }
+          const head = this.statusMeta(p.am || p.pm)
           return {
             dateLabel,
             label: this.i18n.home.recentHalf
@@ -568,12 +556,52 @@ export default {
             bgColor: head.bg
           }
         }
-        const m2 = meta[raw] || { label: raw, color: '#6B7379', bg: '#EFF1F3' }
+        const m2 = this.statusMeta(raw)
         return { dateLabel, label: m2.label, color: m2.color, bgColor: m2.bg }
       })
     },
+    // 状态 → 展示用的 { label, color, bg }。
+    // 自定义假期（custom:<id>）必须现查假期对象：名字和颜色都存在那边，
+    // 光靠固定表查不到，界面就会把 "custom:1735..." 这种键原样印给用户看。
+    statusMeta(status) {
+      const id = customIdOf(status)
+      if (id) {
+        const leave = wioService.getCustomLeaveById(id)
+        if (leave) {
+          return { label: leave.name, color: leave.color, bg: this.hexToRgba(leave.color, 0.12) }
+        }
+        return { label: '—', color: '#6B7379', bg: '#EFF1F3' }
+      }
+      const map = {
+        company: { label: this.i18n.home.workFromCompany, color: '#0E6E62', bg: '#E7F1EF' },
+        home: { label: this.i18n.home.workFromHome, color: '#B26B18', bg: '#FBF0E2' },
+        vacation: { label: this.i18n.calendar.legends.vacation, color: '#41598A', bg: '#E9EDF5' },
+        birthday: { label: this.i18n.calendar.legends.birthday, color: '#C24A7E', bg: '#FBF0F4' },
+        sick: { label: this.i18n.calendar.legends.sick, color: '#8C4F86', bg: '#F4ECF3' },
+        unpaid: { label: this.i18n.calendar.legends.unpaid, color: '#6B7379', bg: '#EFF1F3' },
+        comp_off: { label: this.i18n.calendar.legends.comp_off, color: '#1E7A8C', bg: '#E5F2F4' },
+        public: { label: this.i18n.calendar.legends.public, color: '#B23A32', bg: '#F9EAE8' },
+        overtime_record: { label: this.i18n.calendar.legends.overtime_record, color: '#A9722A', bg: '#FAF1E4' },
+        exclude_wio: { label: this.i18n.calendar.legends.exclude_wio, color: '#8B95A1', bg: '#EFF1F3' }
+      }
+      return map[status] || { label: status || '—', color: '#6B7379', bg: '#EFF1F3' }
+    },
+    // 自定义假期的颜色是用户选的，没有配套的浅底色，按 12% 透明度现算一个
+    hexToRgba(hex, alpha) {
+      const h = String(hex || '').replace('#', '')
+      if (h.length !== 6) return `rgba(107, 115, 121, ${alpha})`
+      const r = parseInt(h.slice(0, 2), 16)
+      const g = parseInt(h.slice(2, 4), 16)
+      const b = parseInt(h.slice(4, 6), 16)
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`
+    },
     // 紧凑位置（最近记录那条 pill）用的短标签：公司 / 居家 / 年假 / 病假
     shortStatusLabel(status) {
+      const id = customIdOf(status)
+      if (id) {
+        const leave = wioService.getCustomLeaveById(id)
+        if (leave) return leave.name
+      }
       const map = {
         company: this.i18n.home.shortCompany,
         home: this.i18n.home.shortHome,
@@ -583,18 +611,7 @@ export default {
       return map[status] || this.statusLabel(status)
     },
     statusLabel(status) {
-      const map = {
-        company: this.i18n.home.workFromCompany,
-        home: this.i18n.home.workFromHome,
-        vacation: this.i18n.calendar.legends.vacation,
-        birthday: this.i18n.calendar.legends.birthday,
-        sick: this.i18n.calendar.legends.sick,
-        unpaid: this.i18n.calendar.legends.unpaid,
-        comp_off: this.i18n.calendar.legends.comp_off,
-        public: this.i18n.calendar.legends.public,
-        exclude_wio: this.i18n.calendar.legends.exclude_wio
-      }
-      return map[status] || status || '—'
+      return this.statusMeta(status).label
     },
     setStatus(status) {
       haptic('light')

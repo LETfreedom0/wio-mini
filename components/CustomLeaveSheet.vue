@@ -134,15 +134,19 @@
         <view class="cl-palette">
           <view
             v-for="(c, i) in paletteColors"
-            :key="i + ':' + c"
+            :key="i"
             class="cl-swatch"
+            :class="{ morph: morphing }"
             hover-class="cl-swatch-hover"
             :style="swatchStyle(c)"
             @click="pickColor(c)"
           ></view>
         </view>
-        <view class="cl-palette-refresh" hover-class="cl-palette-refresh-hover" @click="refreshPalette">
-          <text class="cl-palette-refresh-icon" :style="{ transform: 'rotate(' + paletteTurns * 360 + 'deg)' }">↻</text>
+        <!-- ↻ 也装在自己的米色槽里，否则一个裸按钮挨着四个带槽的色块，看着就小一号 -->
+        <view class="cl-palette-refresh">
+          <view class="cl-palette-refresh-btn" hover-class="cl-palette-refresh-hover" @click="refreshPalette">
+            <text class="cl-palette-refresh-icon" :style="{ transform: 'rotate(' + paletteTurns * 360 + 'deg)' }">↻</text>
+          </view>
         </view>
       </view>
 
@@ -173,6 +177,10 @@ const PALETTES = [
   ['#2F8F6E', '#D4A33F', '#41598A', '#C97A3D']  // 苔金
 ]
 
+// 收缩到位 → 换色 → 弹回：与 keyframes 里的 42% / 58% 同源（0.52s * 0.48 ≈ 250ms）
+const MORPH_SWAP_MS = 250
+const MORPH_END_MS = 540
+
 export default {
   name: 'CustomLeaveSheet',
   props: {
@@ -189,6 +197,8 @@ export default {
       // 当前展示的配色组下标；paletteTurns 只用来驱动 ↻ 每次转一整圈
       paletteIndex: 0,
       paletteTurns: 0,
+      // 换组动画进行中：色块正在收缩/回弹，此间不响应点选
+      morphing: false,
       storedUsage: { used: 0 },
       // 上一次设过的有限额度：点「不限额度」退出时回到这个值，而不是归零
       lastQuota: 5
@@ -284,12 +294,18 @@ export default {
       if (v) this.init()
     }
   },
+  beforeUnmount() {
+    this.clearMorphTimers()
+  },
   methods: {
     todayStr() {
       const n = new Date()
       return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
     },
     init() {
+      // 面板重开时把上一轮没跑完的换色动画清干净，否则定时器会在新面板上改色
+      this.clearMorphTimers()
+      this.morphing = false
       this.settings = wioService.getSettings()
       const l = this.leave
       if (l && l.id) {
@@ -335,11 +351,28 @@ export default {
       this.paletteTurns = 0
     },
     refreshPalette() {
+      if (this.morphing) return
       haptic('light')
-      this.paletteIndex = (this.paletteIndex + 1) % PALETTES.length
       this.paletteTurns += 1
+      this.morphing = true
+      // 色块先收成圆点，在「收拢」的那一小段里换色，再弹回方块。
+      // 两个时刻必须跟 CSS keyframes 的 42%/58% 对齐，否则会看到
+      // 「还没缩到位颜色就变了」或者「弹回来才变色」。
+      this.clearMorphTimers()
+      this._morphTimers = [
+        setTimeout(() => {
+          this.paletteIndex = (this.paletteIndex + 1) % PALETTES.length
+        }, MORPH_SWAP_MS),
+        setTimeout(() => { this.morphing = false }, MORPH_END_MS)
+      ]
     },
+    clearMorphTimers() {
+      ;(this._morphTimers || []).forEach(t => clearTimeout(t))
+      this._morphTimers = []
+    },
+    // 动画期间不接受点选：此刻格子是缩着的，点下去也容易点到隔壁
     pickColor(c) {
+      if (this.morphing) return
       const next = String(c || '').toUpperCase()
       if (!next || next === String(this.form.color || '').toUpperCase()) return
       haptic('light')
@@ -1034,16 +1067,37 @@ export default {
   flex: 1;
   height: 46px;
   border-radius: 11px;
-  /* 换组时颜色从左到右依次淡入，比硬切有「morph」的连续感 */
+  /* 换色本身也留过渡：动画收拢时颜色是「化」过去的，不是硬切 */
   transition: background-color 0.34s ease, box-shadow 0.34s ease, transform 0.18s ease;
+}
+
+.cl-swatch.morph {
+  animation: swatch-morph 0.52s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* 换组动效：方形 → 圆点（此时换色）→ 弹回方形。
+   0.52s 里 42%~58% 是「缩到位」的静止窗口，JS 在 250ms 换色正好落在这段 */
+@keyframes swatch-morph {
+  0%   { border-radius: 11px; transform: scale(1); }
+  42%  { border-radius: 50%; transform: scale(0.24); }
+  58%  { border-radius: 50%; transform: scale(0.24); }
+  100% { border-radius: 11px; transform: scale(1); }
 }
 
 .cl-swatch-hover {
   transform: scale(0.94);
 }
 
+/* ↻ 的米色槽：与色块槽同宽内外边距，两个「槽」并排才等高 */
 .cl-palette-refresh {
   margin-left: 8px;
+  padding: 6px;
+  border-radius: 15px;
+  background: #F3F1EA;
+  display: flex;
+}
+
+.cl-palette-refresh-btn {
   width: 44px;
   height: 46px;
   border-radius: 11px;
