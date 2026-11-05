@@ -23,7 +23,7 @@
         </view>
       </view>
 
-      <!-- 预设跟随模式换整行：婚产陪丧探亲是一次性连休（含周末），
+      <!-- 预设跟随模式换整行：婚产陪探亲是一次性连休（含周末），
            公益/育儿/节育是零星按天请 -->
       <view v-if="!editingId" class="custom-preset-row">
         <view
@@ -213,12 +213,10 @@ export default {
         marriage: this.i18n.profile.presetMarriage,
         maternity: this.i18n.profile.presetMaternity,
         paternity: this.i18n.profile.presetPaternity,
-        bereavement: this.i18n.profile.presetBereavement,
         family: this.i18n.profile.presetFamily,
         volunteer: this.i18n.profile.presetVolunteer,
         childcare: this.i18n.profile.presetChildcare,
-        sterilM: this.i18n.profile.presetSterilM,
-        sterilF: this.i18n.profile.presetSterilF
+        steril: this.i18n.profile.presetSteril
       }
       const group = (wioService.CUSTOM_LEAVE_PRESETS || {})[this.form.mode] || []
       return group.map(p => ({ ...p, name: dict[p.key] || p.key }))

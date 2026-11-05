@@ -442,21 +442,19 @@ export default {
   // 婚产陪丧一辈子或每次事件一次，谈年度重置没意义；关爱假/生日假按年发放。
   // 各地法定天数差异很大（产假 158 天起、各省不同），所以不预填额度，让用户自己填。
   CUSTOM_LEAVE_PRESETS: {
-    // 区间型＝「一次性连续休」的公休假：婚产陪丧探亲都含周末与法定节假日，
+    // 区间型＝「一次性连续休」的公休假：婚产陪探亲都含周末与法定节假日，
     // 按自然日整段占用（skipOffDays: false），不顺延、不加天数。
     range: [
       { key: 'marriage', color: '#C25B6E', skipOffDays: false },
       { key: 'maternity', color: '#8C4F86', skipOffDays: false },
       { key: 'paternity', color: '#41598A', skipOffDays: false },
-      { key: 'bereavement', color: '#6B7379', skipOffDays: false },
       { key: 'family', color: '#C97A3D', skipOffDays: false }
     ],
     // 按天型＝零星请的福利假，逐天点选、按额度扣
     day: [
       { key: 'volunteer', color: '#2F8F6E', quotaRule: 'yearly' },
       { key: 'childcare', color: '#D4A33F', quotaRule: 'yearly' },
-      { key: 'sterilM', color: '#3C6FB0', quotaRule: 'total' },
-      { key: 'sterilF', color: '#7A5AA8', quotaRule: 'total' }
+      { key: 'steril', color: '#3C6FB0', quotaRule: 'total' }
     ]
   },
 
