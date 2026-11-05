@@ -1,5 +1,5 @@
-// 首页「最近记录」文案离线校验：这里最容易把内部键直接印给用户看
-// （custom:cl_xxx / overtime_record）。真身驱动，避免断言跟实现漂移。
+// 首页「年进度 + 下个假期」卡片离线校验：年进度拆段精度、下个假期查询、
+// 文案不落内部键。真身驱动，避免断言跟实现漂移。
 // 运行：node .workbuddy/shared-check/home-labels.mjs
 
 import fs from 'fs'
@@ -12,19 +12,9 @@ const root = path.resolve(here, '../..')
 const require = createRequire(import.meta.url)
 const esbuild = require('esbuild')
 
-const day = 86400000
 const store = {
-  wio_auth: JSON.stringify({ user: { openid: 'test' }, subscription: { plan: 'monthly', expiresAt: Date.now() + 30 * day } }),
-  wio_settings: JSON.stringify({
-    language: 'zh-CN',
-    customLeaves: [{ id: 'cl_test', name: '育儿假', color: '#A93B78', mode: 'day', quota: 5, quotaRule: 'yearly' }]
-  }),
-  wio_entries: JSON.stringify({
-    '2026-11-04': 'custom:cl_test',
-    '2026-11-03': 'overtime_record',
-    '2026-11-02': { am: 'company', pm: 'custom:cl_test' },
-    '2026-11-01': 'home'
-  })
+  wio_auth: JSON.stringify({ user: { openid: 'test' }, subscription: { plan: 'monthly', expiresAt: Date.now() + 86400000 * 30 } }),
+  wio_settings: JSON.stringify({ language: 'zh-CN' })
 }
 globalThis.uni = {
   getStorageSync: k => (k in store ? store[k] : ''),
@@ -64,129 +54,76 @@ let pass = 0
 const fails = []
 const ok = (cond, msg) => { if (cond) pass++; else fails.push(msg) }
 
+// --- Y1 年进度拆段：main 4 位小数 + tail 4 位小数 ---
 const i = newInst()
-const i18n = i.i18n
-i.buildRecentRecords()
-const rows = i.recentRecords
-const byDate = d => rows.find(r => r.dateLabel && r.dateLabel.indexOf(d) !== -1)
+{
+  // 2026 年 7 月 2 日 18:00：182.75 / 365 ≈ 50.0685%（非整点，防巧合命中）
+  const t = new Date(2026, 6, 2, 18, 0, 0)
+  const p = i.yearProgressOf(t)
+  ok(p.main === '50.0684', `main 应是 50.0684（182.75/365 截断 4 位），实际 ${p.main}`)
+  ok(/^\d{4}$/.test(p.tail), `tail 应是 4 位数字，实际 ${p.tail}`)
+  ok(/%$/.test(p.pctWidth) && p.pctWidth.indexOf('NaN') === -1, `pctWidth 应以 % 结尾且无 NaN，实际 ${p.pctWidth}`)
+}
+{
+  // 年初 1 月 1 日 0 点（毫秒级）：约等于 0.0000
+  const p = i.yearProgressOf(new Date(2026, 0, 1, 0, 0, 0, 300))
+  ok(/^0\.0000$/.test(p.main), `年初应约 0.0000，实际 ${p.main}`)
+}
+{
+  // 年末 12 月 31 日 23:59 也不能超过 100：toFixed 进位要被钳住
+  const p = i.yearProgressOf(new Date(2026, 11, 31, 23, 59, 59, 999))
+  ok(parseFloat(p.main) <= 100, `年末不得超 100，实际 ${p.main}`)
+  ok(p.pctWidth.indexOf('NaN') === -1, 'pctWidth 不得出现 NaN')
+}
 
-// --- H1 任何一行都不能把内部键漏给用户 ---
-ok(rows.length === 3, `最近记录只取最近 3 条，实际 ${rows.length}`)
-rows.forEach(r => {
-  ok(!/custom:/.test(r.label), `标签里出现内部键 custom: → ${r.label}`)
-  ok(!/overtime_record/.test(r.label), `标签里出现内部键 overtime_record → ${r.label}`)
-  ok(!/^\[object/.test(r.label), `标签渲染成了对象 → ${r.label}`)
-  ok(/^#[0-9A-Fa-f]{6}$/.test(r.color) || /^rgba?\(/.test(r.color), `颜色值异常 → ${r.color}`)
-})
+// --- Y2 holidayText computed：依赖 todayStr，联动 wioService.getNextHoliday ---
+{
+  const svc = (await import(pathToFileURL(path.join(here, 'utils/wioService.js')).href)).default
+  const inst = newInst()
+  // 12月30日 → 下一个假期是跨年的 2027 元旦，还差 2 天（假日表必须能跨年，否则年底全是「已结束」）
+  inst.todayStr = '2026-12-30'
+  const h = inst.holidayText
+  ok(h && h.name === '元旦', `12月30日应是元旦，实际 ${h && h.name}`)
+  ok(h && h.ongoing === false && /2/.test(h.gap), `应显示还有 2 天，实际 ${h && h.gap}`)
+  ok(svc.getNextHoliday('2026-12-30').date === '2027-01-01', '服务层应命中 2027-01-01')
+}
+{
+  const inst = newInst()
+  // 元旦首日：显示「正在放假」
+  inst.todayStr = '2027-01-01'
+  const h = inst.holidayText
+  ok(h && h.ongoing === true, `元旦首日应显示正在放假，实际 ${h && h.gap}`)
+  ok(h && h.name === '元旦', `名称应为元旦，实际 ${h && h.name}`)
+}
 
-// --- H2 自定义按天假：显示假期名 + 用假期自己的颜色 ---
-const r4 = byDate('11月4日')
-ok(r4 && r4.label === '育儿假', `自定义假期应显示「育儿假」，实际 ${r4 && r4.label}`)
-ok(r4 && r4.color.toUpperCase() === '#A93B78', `自定义假期应用假期色，实际 ${r4 && r4.color}`)
-ok(r4 && /^rgba\(/.test(r4.bgColor), `自定义假期底色应现算 rgba，实际 ${r4 && r4.bgColor}`)
+// --- Y3 下个假期的天数口径：目标日 - 起始日 ---
+{
+  const svc = (await import(pathToFileURL(path.join(here, 'utils/wioService.js')).href)).default
+  const h = svc.getNextHoliday('2026-11-05')
+  ok(h && h.name === '元旦' && h.date === '2027-01-01', `11月5日的下个假期应是 2027 元旦，实际 ${h && h.date}`)
+  ok(h && h.days === 57, `11月5日→1月1日应差 57 天，实际 ${h && h.days}`)
+  // 假期内再查：仍是同一个假期（不含已过去的日子）天数不回撤
+  const mid = svc.getNextHoliday('2026-01-02')
+  ok(mid && mid.name === '元旦' && mid.date === '2026-01-02' && mid.days === 0, '元旦次日应 days=0')
+  // 边界：格式不合法要返回 null，而不是抛错
+  ok(svc.getNextHoliday('bad-date') === null, '非法日期应返回 null')
+}
 
-// --- H3 加班记录 & 普通状态 ---
-const r3 = byDate('11月3日')
-ok(r3 && r3.label === i18n.calendar.legends.overtime_record, `加班记录文案不对 → ${r3 && r3.label}`)
-const homeMeta = i.statusMeta('home')
-ok(homeMeta && homeMeta.label === i18n.home.workFromHome, `居家办公文案不对 → ${homeMeta && homeMeta.label}`)
-
-// --- H4 半天 + 自定义混排 ---
-const r2 = byDate('11月2日')
-ok(r2 && r2.label.indexOf('育儿假') !== -1, `半天里的自定义假期没翻译 → ${r2 && r2.label}`)
-ok(r2 && /公司|Office/.test(r2.label), `半天的公司段没翻译 → ${r2 && r2.label}`)
-
-// --- H5 假期被删但标记还在（孤儿）：宁可显示占位符，也不泄露键名 ---
-store.wio_settings = JSON.stringify({ language: 'zh-CN', customLeaves: [] })
-const i2 = newInst()
-i2.buildRecentRecords()
-const orphan = i2.recentRecords.find(r => r.dateLabel.indexOf('11月4日') !== -1)
-ok(orphan && orphan.label === '—', `孤儿标记应显示占位符，实际 ${orphan && orphan.label}`)
-
-// --- H6 只标了假期、没打卡：最近记录也要跟着变 ---
-// 之前数据源只有 entries，标完假回首页毫无变化，用户以为没保存
-store.wio_settings = JSON.stringify({
-  language: 'zh-CN',
-  customLeaves: [
-    { id: 'cl_day', name: '公益假', color: '#2F8F6E', mode: 'day', quota: 2, quotaRule: 'yearly' },
-    { id: 'cl_range', name: '婚假', color: '#C25B6E', mode: 'range', start: '2026-11-06', end: '2026-11-12' }
-  ],
-  customMarks: { '2026-11-05': { id: 'cl_day', part: 'am' } }
-})
-store.wio_entries = JSON.stringify({ '2026-11-01': 'home' })
-const i3 = newInst()
-i3.buildRecentRecords()
-const markRow = i3.recentRecords.find(r => r.dateLabel.indexOf('11月5日') !== -1)
-ok(!!markRow, '按天标记的日期应出现在最近记录里')
-ok(markRow && markRow.label.indexOf('公益假') !== -1, `标记应显示假期名，实际 ${markRow && markRow.label}`)
-ok(markRow && markRow.label.indexOf('上午') !== -1, `半天标记应标出上午，实际 ${markRow && markRow.label}`)
-ok(markRow && markRow.color === '#2F8F6E', `标记应用假期色，实际 ${markRow && markRow.color}`)
-
-const rangeRow = i3.recentRecords.find(r => r.label.indexOf('婚假') !== -1)
-ok(!!rangeRow, '区间假应出现在最近记录里')
-ok(rangeRow && rangeRow.label.indexOf('至 11月12日') !== -1, `区间假应带结束日，实际 ${rangeRow && rangeRow.label}`)
-ok(rangeRow && rangeRow.dateLabel.indexOf('11月6日') !== -1, `区间假按开始日记一条，实际 ${rangeRow && rangeRow.dateLabel}`)
-
-// --- H7 同一天既打卡又标假：只出一条，且是打卡（与日历取色优先级一致） ---
-store.wio_entries = JSON.stringify({ '2026-11-05': 'company', '2026-11-01': 'home' })
-const i4 = newInst()
-i4.buildRecentRecords()
-const dup = i4.recentRecords.filter(r => r.dateLabel.indexOf('11月5日') !== -1)
-ok(dup.length === 1, `同一天不该出现两条，实际 ${dup.length} 条`)
-ok(dup[0] && dup[0].label === i4.i18n.home.workFromCompany, `应保留打卡那条，实际 ${dup[0] && dup[0].label}`)
-
-// --- H8 排序按「操作时间」，不是「目标日期」 ---
-// 今天补标一个上个月的日子，它必须排最前：否则用户标完看不到任何变化
-const now = Date.now()
-store.wio_settings = JSON.stringify({
-  language: 'zh-CN',
-  customLeaves: [],
-  touchedAt: {
-    '2026-10-02': now,              // 刚补标的上个月
-    '2026-11-04': now - 3 * day,
-    '2026-11-03': now - 2 * day
-  }
-})
-store.wio_entries = JSON.stringify({
-  '2026-10-02': 'home',
-  '2026-11-04': 'company',
-  '2026-11-03': 'home'
-})
-const i5 = newInst()
-i5.buildRecentRecords()
-const order = i5.recentRecords.map(r => r.dateLabel)
-ok(order[0] && order[0].indexOf('10月2日') !== -1, `最后操作的应排第一，实际 ${order[0]}`)
-ok(order[1] && order[1].indexOf('11月3日') !== -1, `第二应是 11月3日，实际 ${order[1]}`)
-ok(order[2] && order[2].indexOf('11月4日') !== -1, `第三应是 11月4日，实际 ${order[2]}`)
-
-// 没有操作时间的老数据：仍按日期倒序，且不会插到新操作前面
-store.wio_settings = JSON.stringify({
-  language: 'zh-CN',
-  customLeaves: [],
-  touchedAt: { '2026-02-01': now, '2026-11-04': 'oops' }
-})
-store.wio_entries = JSON.stringify({
-  '2026-02-01': 'home',
-  '2026-11-04': 'company',
-  '2026-11-03': 'home'
-})
-const i6 = newInst()
-i6.buildRecentRecords()
-const order6 = i6.recentRecords.map(r => r.dateLabel)
-ok(order6[0] && order6[0].indexOf('2月1日') !== -1, `有操作时间的应排最前，实际 ${order6[0]}`)
-ok(order6[1] && order6[1].indexOf('11月4日') !== -1, `无操作时间的按日期倒序，实际 ${order6[1]}`)
-
-// --- H9 写入端确实会记操作时间（否则排序永远退化成按日期） ---
-const svc = (await import(pathToFileURL(path.join(here, 'utils/wioService.js')).href)).default
-store.wio_settings = JSON.stringify({ language: 'zh-CN', customLeaves: [], customMarks: {} })
-store.wio_entries = JSON.stringify({})
-svc.saveEntry('2026-09-15', 'home')
-const afterEntry = JSON.parse(store.wio_settings)
-ok((afterEntry.touchedAt || {})['2026-09-15'] > 0, 'saveEntry 应记录操作时间')
-svc.saveEntry('2026-09-16', 'home')
-svc.saveEntry('2026-09-16', null) // 清空 = 撤销，不该把那天顶上去
-const afterClear = JSON.parse(store.wio_settings)
-ok(!(afterClear.touchedAt || {})['2026-09-16'], '清空记录不应打操作时间')
+// --- Y4 状态文案不落内部键（原有防线保留） ---
+{
+  store.wio_settings = JSON.stringify({
+    language: 'zh-CN',
+    customLeaves: [{ id: 'cl_test', name: '育儿假', color: '#A93B78', mode: 'day', quota: 5, quotaRule: 'yearly' }]
+  })
+  const inst = newInst()
+  const meta = inst.statusMeta('custom:cl_test')
+  ok(meta && meta.label === '育儿假', `自定义假期应显示名字，实际 ${meta && meta.label}`)
+  ok(meta && /^rgba\(/.test(meta.bg), `自定义假期底色应现算 rgba`)
+  const orphan = inst.statusMeta('custom:gone')
+  ok(orphan && orphan.label === '—', `孤儿标记应显示占位符，实际 ${orphan && orphan.label}`)
+  const home = inst.statusMeta('home')
+  ok(home && home.label === inst.i18n.home.workFromHome, '居家办公文案不对')
+}
 
 fs.rmSync(entry, { force: true })
 fs.rmSync(bundle, { force: true })

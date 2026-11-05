@@ -170,21 +170,40 @@
           <text class="today-hint">{{ i18n.home.hint }}</text>
         </view>
 
-        <!-- ===== 最近记录 ===== -->
-        <view class="recent-section anim-entry" style="animation-delay: 0.25s;">
-          <view class="recent-header">
-            <text class="section-title">{{ i18n.home.recentRecords }}</text>
-            <text class="recent-all" @click="goCalendar">{{ i18n.home.viewAll }}</text>
-          </view>
-          <view class="recent-list">
-            <view v-if="recentRecords.length === 0" class="record-empty">
-              <text class="empty-text">{{ i18n.home.noRecord }}</text>
+        <!-- ===== 年进度 + 下个假期 ===== -->
+        <view class="year-section anim-entry" style="animation-delay: 0.25s;">
+          <view class="year-header">
+            <text class="section-title">{{ i18n.home.yearGone }}</text>
+            <view class="live-badge">
+              <view class="live-dot"></view>
+              <text class="live-text">{{ i18n.home.liveTag }}</text>
             </view>
-            <view v-for="(item, index) in recentRecords" :key="index" class="record-row">
-              <text class="record-date">{{ item.dateLabel }}</text>
-              <view class="status-pill" :style="{ backgroundColor: item.bgColor }">
-                <text class="status-text" :style="{ color: item.color }">{{ item.label }}</text>
+          </view>
+          <view class="year-card">
+            <view class="year-num-row">
+              <text class="year-num">{{ yearProgress.main }}</text>
+              <text class="year-num-pct">%</text>
+              <text class="year-num-tail">{{ yearProgress.tail }}</text>
+            </view>
+            <view class="year-bar">
+              <view class="year-bar-fill" :style="{ width: yearProgress.pctWidth }">
+                <view class="year-bar-knob"></view>
               </view>
+            </view>
+            <view class="year-scale">
+              <text class="year-scale-text">{{ i18n.home.yearStart }}</text>
+              <text class="year-scale-text">{{ i18n.home.yearEnd }}</text>
+            </view>
+
+            <view class="year-holiday">
+              <view class="holiday-flag">
+                <text class="holiday-flag-icon">⚑</text>
+              </view>
+              <view class="holiday-info">
+                <text class="holiday-label">{{ i18n.home.nextHoliday }}</text>
+                <text class="holiday-name">{{ holidayText.name }}</text>
+              </view>
+              <text class="holiday-gap" :class="{ on: holidayText.ongoing }">{{ holidayText.gap }}</text>
             </view>
           </view>
         </view>
@@ -196,7 +215,7 @@
 </template>
 
 <script>
-import wioService, { computeMonthlyReport, parseDayParts, isSplitDay, customIdOf } from '@/utils/wioService.js'
+import wioService, { computeMonthlyReport, customIdOf } from '@/utils/wioService.js'
 import { locales, getMonthName, getWeekdayName } from '@/utils/locales.js'
 import { getAuth, isLogin } from '@/utils/auth.js'
 import { tap as haptic } from '@/utils/haptic.js'
@@ -226,7 +245,8 @@ export default {
         vacationDaysUsed: 0,
         sickDaysUsed: 0
       },
-      recentRecords: []
+      // 年进度卡的毫秒跳动：computed 不感知时间流逝，靠定时器打点驱动
+      msTick: Date.now()
     }
   },
   computed: {
@@ -364,6 +384,24 @@ export default {
     vacationPercent() {
       if (!this.vacationTotal) return 0
       return Math.max(0, Math.min(100, (this.vacationLeft / this.vacationTotal) * 100))
+    },
+    // 年进度：精确到毫秒（一年约 3.15e10 ms，1ms ≈ 0.0000003%）。
+    // 全部 8 位小数每 3ms 变一次，肉眼追不上还狂刷 setData——
+    // 折中：前 4 位小数大字（约 0.3s 一变），后 4 位小灰字，跳动照样看得见
+    yearProgress() {
+      void this.msTick
+      return this.yearProgressOf(new Date())
+    },
+    // 下一个假期（今天就在假里则显示「正在放假」）
+    holidayText() {
+      void this.nowStamp
+      const h = wioService.getNextHoliday(this.todayStr)
+      const u = this.i18n.home
+      if (!h) return { name: u.noHolidayLeft, gap: '', ongoing: false }
+      if (h.days === 0) {
+        return { name: h.name, gap: u.holidayOngoing, ongoing: true }
+      }
+      return { name: h.name, gap: u.holidayIn.replace('{n}', h.days), ongoing: false }
     }
   },
   mounted() {
@@ -372,9 +410,12 @@ export default {
     uni.$on('wio:data-restored', this.onDataRestored)
     // 布局完成后再量卡宽，翻页拖动才有像素基准
     this.$nextTick(() => this.measureReportCard())
+    // 年进度毫秒跳动：80ms 一拍，肉眼连续又不会把 setData 刷爆
+    this.msTimer = setInterval(() => { this.msTick = Date.now() }, 80)
   },
   beforeUnmount() {
     uni.$off('wio:data-restored', this.onDataRestored)
+    if (this.msTimer) clearInterval(this.msTimer)
   },
   methods: {
     initData() {
@@ -399,7 +440,7 @@ export default {
       const name = session && session.user && session.user.nickname
       return name ? String(name).trim() : ''
     },
-    // 只读时间轴内每个月的统计 + 年度假期统计 + 最近记录（不改动存储结构）
+    // 只读时间轴内每个月的统计 + 年度假期统计（不改动存储结构）
     loadStats() {
       const now = new Date()
       const year = now.getFullYear()
@@ -419,7 +460,6 @@ export default {
       } catch (e) {
         console.error('loadStats year failed', e)
       }
-      this.buildRecentRecords()
       // 页数可能变少（清空数据/最早记录变近），页码要落回有效范围
       if (this.reportIndex > this.reportPageCount - 1) this.reportIndex = 0
     },
@@ -529,113 +569,21 @@ export default {
       haptic('medium')
       this.reportIndex = 0
     },
-    // 最近记录＝「最近有内容的日子」，不能只认打卡。
-    // 假期的按天标记、区间假的开始日同样算一条——否则用户在日历上标完假，
-    // 回首页看不出任何变化，会以为没保存。取舍优先级与日历一致：
-    // 手动打卡 > 按天标记 > 区间假
-    buildRecentRecords() {
-      const entries = wioService.getEntries() || {}
-      const marks = wioService.getCustomMarks() || {}
-      const leaves = (wioService.getCustomLeaves() || []).filter(l => l.mode !== 'day' && l.start)
-      const u = this.i18n.home
-      const rows = []
-
-      Object.keys(entries).forEach(dateStr => {
-        const raw = entries[dateStr]
-        // 半天记录是 { am, pm } 对象，直接拿去查 meta 会得到 [object Object] 渲染出来，
-        // 这里单独拆开成「上午X · 下午Y」，颜色跟上午段走（与今天打卡卡片的取色一致）
-        if (isSplitDay(raw)) {
-          const p = parseDayParts(raw)
-          const head = this.statusMeta(p.am || p.pm)
-          rows.push({
-            dateStr,
-            label: u.recentHalf
-              .replace('{am}', this.shortStatusLabel(p.am))
-              .replace('{pm}', this.shortStatusLabel(p.pm)),
-            color: head.color,
-            bgColor: head.bg
-          })
-          return
-        }
-        const m2 = this.statusMeta(raw)
-        rows.push({ dateStr, label: m2.label, color: m2.color, bgColor: m2.bg })
-      })
-
-      Object.keys(marks).forEach(dateStr => {
-        if (entries[dateStr]) return // 同一天有打卡就以打卡为准
-        const info = wioService.getCustomMarkForDate(dateStr, marks)
-        if (!info) return
-        const leave = info.leave
-        // part: am/pm 时标出半天，否则只写假期名
-        let label = leave.name
-        if (info.part === 'am') label = u.recentMarkAM.replace('{n}', leave.name)
-        else if (info.part === 'pm') label = u.recentMarkPM.replace('{n}', leave.name)
-        rows.push({
-          dateStr,
-          label,
-          color: leave.color,
-          bgColor: this.hexToRgba(leave.color, 0.12)
-        })
-      })
-
-      // 区间假整段会覆盖很多天，只记「开始那天」一条，否则列表会被同一个假期刷屏
-      leaves.forEach(l => {
-        if (!l.name) return
-        rows.push({
-          dateStr: l.start,
-          label: u.recentTill.replace('{n}', l.name).replace('{d}', this.fmtMonthDay(l.end)),
-          color: l.color || '#0E6E62',
-          bgColor: this.hexToRgba(l.color || '#0E6E62', 0.12)
-        })
-      })
-
-      // 同一天只留一条（前面的优先级更高），再按「操作时间」倒序取最近三条：
-      // 排序依据是「什么时候标的」，不是「标的是哪天」——今天补记上个月的一天，
-      // 它就该出现在最上面，否则用户标完看不到任何变化。
-      const touched = wioService.getTouchedAt()
-      const seen = {}
-      this.recentRecords = rows
-        .filter(r => {
-          if (seen[r.dateStr]) return false
-          seen[r.dateStr] = true
-          return true
-        })
-        .sort((a, b) => {
-          const ta = this.touchedAtOf(a.dateStr, touched)
-          const tb = this.touchedAtOf(b.dateStr, touched)
-          if (tb !== ta) return tb - ta
-          return a.dateStr < b.dateStr ? 1 : -1
-        })
-        .slice(0, 3)
-        .map(r => ({ ...r, dateLabel: this.dateLabelOf(r.dateStr) }))
-    },
-    // 某天的排序时间戳：优先用写入时记下的操作时间；
-    // 老数据没有这个字段，退回「当天 0 点且不晚于此刻」，
-    // 这样任何一次新操作都排在历史条目之前，历史条目之间仍按日期倒序。
-    touchedAtOf(dateStr, touched) {
-      const t = Number((touched || {})[dateStr])
-      if (Number.isFinite(t) && t > 0) return t
-      const [y, m, d] = String(dateStr || '').split('-')
-      const midnight = new Date(Number(y), Number(m) - 1, Number(d)).getTime()
-      if (!Number.isFinite(midnight)) return 0
-      return Math.min(midnight, Date.now())
-    },
-    dateLabelOf(dateStr) {
-      const [y, m, d] = String(dateStr).split('-')
-      const dt = new Date(Number(y), Number(m) - 1, Number(d))
-      const lang = this.settings.language
-      const weekday = getWeekdayName(dt.getDay(), lang)
-      return lang === 'en-US'
-        ? `${getMonthName(Number(m), lang)} ${Number(d)}`
-        : `${Number(m)}月${Number(d)}日 · 周${weekday}`
-    },
-    fmtMonthDay(dateStr) {
-      const [y, m, d] = String(dateStr || '').split('-')
-      if (!y || !m || !d) return ''
-      const lang = this.settings.language
-      return lang === 'en-US'
-        ? `${getMonthName(Number(m), lang)} ${Number(d)}`
-        : `${Number(m)}月${Number(d)}日`
+    // 年进度拆段：main = 「84.6499」，tail = 「4910」（余下 4 位小数）。
+    // 独立成方法是为了断言可以直接喂固定时间，不依赖真实时钟。
+    yearProgressOf(now) {
+      const year = now.getFullYear()
+      const start = new Date(year, 0, 1).getTime()
+      const end = new Date(year + 1, 0, 1).getTime()
+      const pct = Math.max(0, Math.min(100, ((now.getTime() - start) / (end - start)) * 100))
+      // toFixed(8) 在 99.99999…% 时可能进位成 100.00000000，钳一下
+      const s = (pct >= 100 ? 100 : pct).toFixed(8)
+      const [int, dec = ''] = s.split('.')
+      return {
+        main: `${int}.${(dec.slice(0, 4) || '0000').padEnd(4, '0')}`,
+        tail: (dec.slice(4) || '0000').padEnd(4, '0'),
+        pctWidth: `${Math.min(pct, 100)}%`
+      }
     },
     // 状态 → 展示用的 { label, color, bg }。
     // 自定义假期（custom:<id>）必须现查假期对象：名字和颜色都存在那边，
@@ -672,21 +620,6 @@ export default {
       const b = parseInt(h.slice(4, 6), 16)
       return `rgba(${r}, ${g}, ${b}, ${alpha})`
     },
-    // 紧凑位置（最近记录那条 pill）用的短标签：公司 / 居家 / 年假 / 病假
-    shortStatusLabel(status) {
-      const id = customIdOf(status)
-      if (id) {
-        const leave = wioService.getCustomLeaveById(id)
-        if (leave) return leave.name
-      }
-      const map = {
-        company: this.i18n.home.shortCompany,
-        home: this.i18n.home.shortHome,
-        vacation: this.i18n.home.shortVacation,
-        sick: this.i18n.home.shortSick
-      }
-      return map[status] || this.statusLabel(status)
-    },
     statusLabel(status) {
       return this.statusMeta(status).label
     },
@@ -720,10 +653,6 @@ export default {
       this.todayParts = { am: status, pm: status }
       wioService.saveEntry(this.todayStr, status)
       this.loadStats()
-    },
-    goCalendar() {
-      haptic('light')
-      uni.switchTab({ url: '/pages/calendar/index' })
     },
     goShare() {
       haptic('light')
@@ -805,7 +734,7 @@ export default {
 .progress-card,
 .leave-card,
 .today-section,
-.recent-section {
+.year-section {
   width: 100%;
 }
 
@@ -1347,71 +1276,185 @@ export default {
   line-height: 1.4;
 }
 
-/* ===== 最近记录 ===== */
-.recent-section {
+/* ===== 年进度 + 下个假期 ===== */
+.year-section {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.recent-header {
+.year-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  /* 标题与「查看全部」一起右落，与列表右边界 16px 更接近 */
   padding: 0 4px;
 }
 
-.recent-all {
-  font-size: 12px;
-  color: #6B737B;
-  line-height: 1.4;
-}
-
-.recent-list {
-  background: #FFFFFF;
-  border-radius: 18px;
-  overflow: hidden;
-}
-
-.record-row {
+/* 「实时」小徽标：绿点 + 字，提示这个数字自己在走 */
+.live-badge {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 44px;
-  padding: 11px 16px;
-  box-sizing: border-box;
-}
-
-.record-row + .record-row {
-  border-top: 1px solid #F2F4F5;
-}
-
-.record-date {
-  font-size: 13px;
-  color: #15181C;
-  line-height: 1.4;
-}
-
-.status-pill {
-  padding: 4px 10px;
+  gap: 5px;
+  padding: 3px 9px;
   border-radius: 100px;
+  background: #E7F1EF;
 }
 
-.status-text {
-  font-size: 11px;
-  font-weight: 500;
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0E6E62;
+}
+
+.live-text {
+  font-size: 10.5px;
+  color: #0E6E62;
   line-height: 1.3;
 }
 
-.record-empty {
-  padding: 14px 16px;
+.year-card {
+  background: #FFFFFF;
+  border-radius: 18px;
+  padding: 18px 16px 14px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
-.empty-text {
-  font-size: 12px;
+.year-num-row {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.year-num {
+  font-size: 44px;
+  font-weight: 700;
+  color: #0E6E62;
+  line-height: 1.05;
+  letter-spacing: -0.5px;
+}
+
+.year-num-pct {
+  font-size: 20px;
+  font-weight: 600;
+  color: #0E6E62;
+}
+
+/* 尾数 4 位：小一号灰字，像「毫秒尾巴」一样在后面跳 */
+.year-num-tail {
+  font-size: 14px;
+  color: #B9C1C6;
+  margin-left: 3px;
+  /* 尾数每 80ms 变一次，等宽数字防止抖动 */
+  font-family: 'DIN Alternate', 'Helvetica Neue', monospace;
+}
+
+.year-bar {
+  margin-top: 14px;
+  height: 6px;
+  border-radius: 100px;
+  background: #EDF0F1;
+  overflow: visible;
+  position: relative;
+}
+
+.year-bar-fill {
+  height: 100%;
+  border-radius: 100px;
+  background: #0E6E62;
+  position: relative;
+  min-width: 10px;
+}
+
+/* 圆点滑块骑在进度条末端 */
+.year-bar-knob {
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  margin-top: -5.5px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 2.5px solid #0E6E62;
+  box-sizing: border-box;
+}
+
+.year-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.year-scale-text {
+  font-size: 11px;
   color: #9AA1A8;
-  line-height: 1.5;
+  line-height: 1.4;
+}
+
+/* 分隔线 + 假期倒计时行 */
+.year-holiday {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid #F2F4F5;
+}
+
+.holiday-flag {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #F0F6F4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.holiday-flag-icon {
+  font-size: 15px;
+  color: #0E6E62;
+  line-height: 1;
+}
+
+.holiday-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.holiday-label {
+  font-size: 10.5px;
+  color: #9AA1A8;
+  line-height: 1.3;
+}
+
+.holiday-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #15181C;
+  line-height: 1.3;
+  /* 假期名来自假日数据，超长时省略 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.holiday-gap {
+  font-size: 13px;
+  font-weight: 600;
+  color: #B26B18;
+  flex-shrink: 0;
+}
+
+.holiday-gap.on {
+  color: #0E6E62;
 }
 
 .bottom-spacer {

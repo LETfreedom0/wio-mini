@@ -1,4 +1,5 @@
 import { holidays2026 } from './holidays.js';
+import { holidays2027 } from './holidays2027.js';
 import { markDirty } from './syncService.js';
 import { isProUser } from './pro.js';
 
@@ -1069,13 +1070,46 @@ export default {
   },
 
   /**
+   * 全量假日日（跨年合并）：首页的「下个假期」要能从 12 月看到 1 月的元旦。
+   * 新年份的数据文件建好后往数组里加一项即可。
+   */
+  _allHolidayDays() {
+    const list = [];
+    [holidays2026, holidays2027].forEach(y => {
+      if (y && Array.isArray(y.days)) list.push(...y.days);
+    });
+    return list;
+  },
+
+  /**
    * 获取指定日期的公共假期信息
    * @param {string} dateStr - YYYY-MM-DD
    * @returns {object|null} - { name, isOffDay, ... }
    */
   getPublicHoliday(dateStr) {
-    if (!holidays2026 || !holidays2026.days) return null;
-    return holidays2026.days.find(d => d.date === dateStr) || null;
+    const days = this._allHolidayDays();
+    if (!days.length) return null;
+    return days.find(d => d.date === dateStr) || null;
+  },
+
+  /**
+   * 下一个法定假期：fromStr（含当天）起第一个休息日。
+   * 今天就在假里时返回 days: 0，调用方据此显示「正在放假」。
+   * @param {string} [fromStr] - YYYY-MM-DD，缺省取今天
+   * @returns {null|{name: string, date: string, days: number}}
+   */
+  getNextHoliday(fromStr) {
+    const days = this._allHolidayDays();
+    if (!days.length) return null;
+    const from = String(fromStr || this.getTodayDateStr() || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) return null;
+    const offs = days
+      .filter(d => d && d.isOffDay && d.date >= from)
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (!offs.length) return null;
+    const first = offs[0];
+    const ms = new Date(first.date + 'T00:00:00') - new Date(from + 'T00:00:00');
+    return { name: first.name, date: first.date, days: Math.max(0, Math.round(ms / 86400000)) };
   },
 
   /**
@@ -1083,11 +1117,12 @@ export default {
    * @returns {Array<{name: string, hasCompOff: boolean}>}
    */
   getHolidayInfoList() {
-      if (!holidays2026 || !holidays2026.days) return [];
-      
+      const days = this._allHolidayDays();
+      if (!days.length) return [];
+
       const holidayMap = new Map();
-      
-      holidays2026.days.forEach(d => {
+
+      days.forEach(d => {
           if (!holidayMap.has(d.name)) {
               holidayMap.set(d.name, { name: d.name, hasCompOff: false });
           }
