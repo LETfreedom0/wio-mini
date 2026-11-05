@@ -52,7 +52,7 @@
           <view class="cl-connector">
             <view class="cl-conn-line"></view>
             <view class="cl-duration-pill">
-              <text class="cl-duration-text">{{ i18n.profile.customDaysText.replace('{n}', days) }}</text>
+              <text class="cl-duration-text">{{ durationText }}</text>
             </view>
             <view class="cl-conn-line"></view>
           </view>
@@ -76,6 +76,19 @@
               :style="d.weekend ? '' : { background: form.color }"
             >
               <text class="cl-week-num" :class="{ weekend: d.weekend }">{{ d.day }}</text>
+            </view>
+          </view>
+        </view>
+        <!-- 跳过周末与公共假期：婚假、产假这类「公休假」是按工作日给的，
+             区间横跨两个周末时按自然日算会虚报 4 天，日历上也会把周末涂成假期色 -->
+        <view class="cl-skip-row">
+          <view class="cl-skip-texts">
+            <text class="cl-skip-title">{{ i18n.profile.customSkipOffDays }}</text>
+            <text class="cl-skip-sub">{{ skipHint }}</text>
+          </view>
+          <view class="cl-switch" @click="toggleSkipOffDays">
+            <view class="cl-switch-track" :class="{ on: form.skipOffDays }">
+              <view class="cl-switch-thumb"></view>
             </view>
           </view>
         </view>
@@ -192,7 +205,7 @@ export default {
   data() {
     return {
       settings: { language: 'zh-CN' },
-      form: { mode: 'range', name: '', color: '#0E6E62', start: '', end: '', quota: 0, quotaRule: 'yearly' },
+      form: { mode: 'range', name: '', color: '#0E6E62', start: '', end: '', quota: 0, quotaRule: 'yearly', skipOffDays: false },
       editingId: null,
       // 当前展示的配色组下标；paletteTurns 只用来驱动 ↻ 每次转一整圈
       paletteIndex: 0,
@@ -227,6 +240,34 @@ export default {
       const { start, end } = this.form
       if (!start || !end || end < start) return 1
       return Math.round((new Date(end + 'T00:00:00') - new Date(start + 'T00:00:00')) / 86400000) + 1
+    },
+    // 区间里真正算休假的天数（周末 / 法定假日已经剔掉）。
+    // 婚假 10 天、产假这类公休假，日历横跨两个周末时用自然日会报出 14 天
+    workdays() {
+      const { start, end } = this.form
+      if (!start || !end || end < start) return 0
+      return wioService.countDeductibleDays(start, end)
+    },
+    // 开启「跳过」后主数字换成工作日，并在下面补一句自然日作为对照
+    durationText() {
+      const p = this.i18n.profile
+      if (!this.form.skipOffDays) return p.customDaysText.replace('{n}', this.days)
+      return p.customWorkDaysText.replace('{n}', this.workdays)
+    },
+    durationSub() {
+      if (!this.form.skipOffDays) return ''
+      return this.i18n.profile.customNaturalDaysText.replace('{n}', this.days)
+    },
+    // 区间里的周末/假日，用来做「跳过」开关的说明（0 时不用提）
+    offDays() {
+      return Math.max(0, this.days - this.workdays)
+    },
+    skipHint() {
+      const p = this.i18n.profile
+      // 区间里一个周末都没有时，「跳过」开关没有实际作用，别报「已剔除 0 天」
+      if (!this.offDays) return p.customSkipOffNone
+      const tpl = this.form.skipOffDays ? p.customSkipOffOn : p.customSkipOffHint
+      return tpl.replace('{n}', this.offDays)
     },
     // 日期条：≤7 天逐日显示；超过 7 天折叠成「前 5 天 + … + 末日」
     weekStrip() {
@@ -317,7 +358,8 @@ export default {
           start: l.start || this.todayStr(),
           end: l.end || this.todayStr(),
           quota: l.quota || 0,
-          quotaRule: l.quotaRule || 'yearly'
+          quotaRule: l.quotaRule || 'yearly',
+          skipOffDays: !!l.skipOffDays
         }
         this.storedUsage = this.form.mode === 'day'
           ? wioService.getCustomLeaveUsage(l.id)
@@ -333,7 +375,9 @@ export default {
           start: today,
           end: today,
           quota: 0,
-          quotaRule: 'yearly'
+          quotaRule: 'yearly',
+          // 新建区间假默认跳过周末：公休假按工作日给，这个默认值更贴近真实用法
+          skipOffDays: true
         }
         this.storedUsage = { used: 0 }
       }
@@ -441,6 +485,11 @@ export default {
       haptic('light')
       this.form.quotaRule = rule
     },
+    // 跳过周末与公共假期：只影响区间型，按天型本来就在日历上逐日点
+    toggleSkipOffDays() {
+      haptic('light')
+      this.form.skipOffDays = !this.form.skipOffDays
+    },
     fmtMD(s) {
       if (!s) return '--'
       const [, m, d] = s.split('-')
@@ -476,6 +525,8 @@ export default {
       this.form.color = p.color
       // 预设法定期限自带额度规则：婚产陪丧一次性，关爱假/生日假按年发
       if (p.quotaRule) this.form.quotaRule = p.quotaRule
+      // 区间型预设都是公休假，默认跳过周末与法定假日
+      if (p.skipOffDays != null) this.form.skipOffDays = !!p.skipOffDays
       this.syncPaletteToColor()
       haptic('light')
     },
@@ -499,9 +550,12 @@ export default {
       }
       payload.start = this.form.start
       payload.end = this.form.end
+      payload.skipOffDays = this.form.skipOffDays
       // 连续休假是整天占用：区间内已有的出勤标记会按休假算。
       // 先讲清楚再保存，别让用户以为那几天的记录被悄悄改了（数据不删，取消假即恢复）
-      const marked = wioService.countMarkedDays(this.form.start, this.form.end)
+      const marked = wioService.countMarkedDays(this.form.start, this.form.end, {
+        skipOffDays: this.form.skipOffDays
+      })
       if (marked > 0) {
         uni.showModal({
           title: this.i18n.profile.customRangeOverlapTitle,
@@ -891,6 +945,67 @@ export default {
   font-size: 13px;
   color: #9A8663;
   line-height: 1;
+}
+
+/* --- 跳过周末与公共假期 --- */
+.cl-skip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px dashed #EDE7DA;
+}
+
+.cl-skip-texts {
+  display: flex;
+  flex-direction: column;
+  padding-right: 12px;
+}
+
+.cl-skip-title {
+  font-size: 12px;
+  color: #3A4148;
+}
+
+.cl-skip-sub {
+  font-size: 10px;
+  color: #A0A6AD;
+  margin-top: 2px;
+}
+
+.cl-switch {
+  flex-shrink: 0;
+  padding: 2px;
+}
+
+.cl-switch-track {
+  width: 40px;
+  height: 23px;
+  border-radius: 12px;
+  background-color: #D8D2C4;
+  position: relative;
+  transition: background-color 0.25s;
+}
+
+.cl-switch-track.on {
+  background-color: #0E6E62;
+}
+
+.cl-switch-thumb {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background-color: #FFFFFF;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: left 0.25s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.cl-switch-track.on .cl-switch-thumb {
+  left: 20px;
 }
 
 /* --- 额度 --- */

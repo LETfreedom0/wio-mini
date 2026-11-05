@@ -16,8 +16,10 @@ const DEFAULT_SETTINGS = {
   birthdayMonth: '',
   autoSync: true,
   // 半天出勤计法：'half' = 按半天（0.5 天，默认）；'full' = 视同一整天
-  // 这是 PRO 权益，非会员读取时降级回 'half'（见 getSettings）
+  // 逐日选择存在 settings.halfFullDays（日期 → true），这里只留全局默认值兼容
   halfDayAttendance: 'half',
+  // 哪些日子的半天出勤按一整天算（逐日选择，标记时当场确认）
+  halfFullDays: {},
   // 每天往返通勤分钟数（用于年度统计「节约通勤」换算）
   commuteMinutes: 90,
   // 调休配置规则 (Key: 节日名称, Value: boolean 是否调休)
@@ -38,7 +40,7 @@ const DEFAULT_SETTINGS = {
 //   ① 体积最小；② 老版本客户端（1.4.0）读到字符串照常显示，不会白屏。
 //
 // 折算口径（用户拍板）：
-//   半天出勤 → 开关 halfDayAttendance 决定 0.5 天还是 1 天
+//   半天出勤 → 该日的 halfFullDays 标记决定 0.5 天还是 1 天（标记时当场确认）
 //   半天居家 / 半天假期 → 恒定 0.5 天（不受开关影响，保证开关只影响达标率）
 // ============================================================
 
@@ -261,11 +263,8 @@ export default {
         if (s.language && s.language !== 'zh-CN' && !isProUser()) {
           s.language = 'zh-CN';
         }
-        // 半天出勤计法是 PRO 权益：同语言降级套路，只降级读取值、不改存储，
-        // 重新开通后原来的选择自动回来。
-        if (s.halfDayAttendance === 'full' && !isProUser()) {
-          s.halfDayAttendance = 'half';
-        }
+        // 半天出勤计法已改为「标记当时逐日确认」（settings.halfFullDays），
+        // 不再作为 PRO 权益：这里只保留老字段的归一，避免脏值读出来
         if (s.halfDayAttendance !== 'full') s.halfDayAttendance = 'half';
         return s;
       }
@@ -443,11 +442,12 @@ export default {
   // 婚产陪丧一辈子或每次事件一次，谈年度重置没意义；关爱假/生日假按年发放。
   // 各地法定天数差异很大（产假 158 天起、各省不同），所以不预填额度，让用户自己填。
   CUSTOM_LEAVE_PRESETS: {
+    // 区间型都是「公休假」，定额按工作日给：默认跳过周末与法定假日
     range: [
-      { key: 'marriage', color: '#C25B6E' },
-      { key: 'maternity', color: '#41598A' },
-      { key: 'paternity', color: '#8C4F86' },
-      { key: 'bereavement', color: '#6B7379' }
+      { key: 'marriage', color: '#C25B6E', skipOffDays: true },
+      { key: 'maternity', color: '#41598A', skipOffDays: true },
+      { key: 'paternity', color: '#8C4F86', skipOffDays: true },
+      { key: 'bereavement', color: '#6B7379', skipOffDays: true }
     ],
     day: [
       { key: 'care', color: '#A93B78', quotaRule: 'yearly' },
@@ -483,7 +483,17 @@ export default {
       };
     }
     if (!this._isValidDateStr(l.start) || !this._isValidDateStr(l.end) || l.start > l.end) return null;
-    return { ...base, start: l.start, end: l.end };
+    // skipOffDays：区间里只算工作日（婚假 10 天、产假这类「不含周末的公休假」）。
+    // 老数据没有这个字段，默认 false = 按自然日整段占用，零迁移
+    return { ...base, start: l.start, end: l.end, skipOffDays: !!l.skipOffDays };
+  },
+
+  /** 某天是否被这段区间假「有效占用」（已考虑 skipOffDays） */
+  _rangeHits(l, dateStr) {
+    if (!l || l.mode === 'day') return false;
+    if (dateStr < l.start || dateStr > l.end) return false;
+    if (l.skipOffDays && !this.isOfficialWorkingDay(new Date(dateStr + 'T00:00:00'))) return false;
+    return true;
   },
 
   // 自定义假期是 PRO 权益：权益失效时消费端拿不到任何条目
@@ -525,6 +535,8 @@ export default {
       } else {
         item.start = leave.start;
         item.end = leave.end;
+        // 只对区间型有意义：开了就跳过周末与法定假日（公休假按工作日算）
+        item.skipOffDays = !!leave.skipOffDays;
         if (!this._isValidDateStr(item.start) || !this._isValidDateStr(item.end) || item.start > item.end) {
           return null;
         }
@@ -586,8 +598,9 @@ export default {
   // 区间内已有标记的天数（含出勤/假期/老按天标记）
   // 建连续休假前用它提示「这几天原本的记录会按休假算」，
   // 不去删用户已有数据——取消这段假，原标记原样回来
-  countMarkedDays(start, end) {
+  countMarkedDays(start, end, opts) {
     if (!this._isValidDateStr(start) || !this._isValidDateStr(end) || start > end) return 0;
+    const skipOff = !!(opts && opts.skipOffDays);
     const entries = this.getEntries();
     const marks = this.getCustomMarks();
     let n = 0;
@@ -595,6 +608,9 @@ export default {
     for (let t = new Date(start + 'T00:00:00').getTime(); t <= last; t += 86400000) {
       const d = new Date(t);
       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      // 跳过模式只关心工作日：周末上的出勤标记不会被这段假覆盖，
+      // 拿去弹「有 N 天已被标记」会让用户以为周末记录被改了
+      if (skipOff && !this.isOfficialWorkingDay(d)) continue;
       if (entries[dateStr] || marks[dateStr]) n++;
     }
     return n;
@@ -619,8 +635,7 @@ export default {
     if (!this._isValidDateStr(dateStr)) return null;
     const list = this.getCustomLeaves();
     for (const l of list) {
-      if (l.mode === 'day') continue;
-      if (dateStr >= l.start && dateStr <= l.end) return l;
+      if (this._rangeHits(l, dateStr)) return l;
     }
     return null;
   },
@@ -705,6 +720,8 @@ export default {
       if (!segs.length) return;
       taken[d] = true;
       if (!inPeriod(d)) return;
+      // 非工作日不计额度：和 getYearStats 同一口径，周末标假只作展示
+      if (!this.isOfficialWorkingDay(new Date(d + 'T00:00:00'))) return;
       segs.forEach(s => {
         if (customIdOf(s) === leaveId) used += HALF;
       });
@@ -716,6 +733,7 @@ export default {
       const m = marks[d];
       if (!m || m.id !== leaveId) return;
       if (!inPeriod(d)) return;
+      if (!this.isOfficialWorkingDay(new Date(d + 'T00:00:00'))) return;
       used += (m.part === 'am' || m.part === 'pm') ? HALF : 1;
     });
 
@@ -794,14 +812,40 @@ export default {
   },
 
   // --- 半天标记（PRO） ---
-  /** 当前生效的半天出勤计法（非会员恒为 'half'） */
+  /** 当前生效的半天出勤计法（老全局字段，仅作默认值读兼容） */
   getHalfDayAttendanceMode() {
     return this.getSettings().halfDayAttendance === 'full' ? 'full' : 'half';
   },
 
-  /** 半天出勤是否按一整天算 */
-  isHalfDayAsFullAttendance() {
+  /** 逐日「半天按一整天算」的表：{ 'YYYY-MM-DD': true|false } */
+  getHalfFullDays() {
+    const s = this.getSettings();
+    const raw = s.halfFullDays && typeof s.halfFullDays === 'object' ? s.halfFullDays : {};
+    const out = {};
+    Object.keys(raw).forEach(d => {
+      // false 也要保留：它表示用户当天显式选了「按半天」，要盖掉旧的全局默认值
+      if (typeof raw[d] === 'boolean' && this._isValidDateStr(d)) out[d] = raw[d];
+    });
+    return out;
+  },
+
+  /** 某天的半天出勤是否按一整天算（逐日优先，没有逐日记录时用老的全局默认） */
+  isHalfDayAsFullAttendance(dateStr) {
+    if (this._isValidDateStr(dateStr)) {
+      const map = this.getHalfFullDays();
+      if (typeof map[dateStr] === 'boolean') return map[dateStr];
+    }
     return this.getHalfDayAttendanceMode() === 'full';
+  },
+
+  /** 写某天「半天按一天算」 */
+  setHalfFullDay(dateStr, full) {
+    if (!this._isValidDateStr(dateStr)) return false;
+    const s = this.getSettings();
+    const map = { ...(s.halfFullDays && typeof s.halfFullDays === 'object' ? s.halfFullDays : {}) };
+    map[dateStr] = !!full;
+    this.saveSettings({ ...s, halfFullDays: map });
+    return true;
   },
 
   /** 读某天的上下午（老字符串自动补成两段相同） */
@@ -1043,7 +1087,10 @@ export default {
   getMonthStats(year, month) {
     const entries = this.getEntries();
     const overtimeEntries = this.getOvertimeEntries();
-    const halfDayAsFull = this.isHalfDayAsFullAttendance();
+    // 半天出勤计法逐日读：用户在标记那天当场选的「按一天 / 按半天」，
+    // 没有逐日记录时退回老的全局默认值（历史行为不变）
+    const halfFullMap = this.getHalfFullDays();
+    const halfDefaultFull = this.getHalfDayAttendanceMode() === 'full';
     const prefix = `${year}-${String(month).padStart(2, '0')}`;
     
     let stats = {
@@ -1085,15 +1132,16 @@ export default {
       //    这几天人不在，当天残留的出勤标记一律不参与统计（不删数据，删假即恢复）。
       //    跨月时只对本月内被覆盖的日期生效——未被覆盖的工作日照常进分母，
       //    该回公司的天数一天都不会少。
-      const rangeLeave = customLeavesAll.find(
-        l => l.mode !== 'day' && dateStr >= l.start && dateStr <= l.end
-      );
+      const rangeLeave = customLeavesAll.find(l => this._rangeHits(l, dateStr));
 
       // 周末 / 法定节假日：不论标了什么（公司、居家、假期）都不进 WIO 口径，
       // 只有加班（OT）单独统计。这里绝不把标记过的周末「拉回分母」——
       // 那样周末随手补个居家就会把分母 +1、比率被拉低，和「周末不算 WIO」矛盾。
       // 调休上班日由 isOfficialWorkingDay 判为工作日，照常计入。
-      const ev = rangeLeave ? null : evaluateDayParts(rawEntry, { halfDayAsFull, isWorkingDay });
+      const ev = rangeLeave ? null : evaluateDayParts(rawEntry, {
+        halfDayAsFull: typeof halfFullMap[dateStr] === 'boolean' ? halfFullMap[dateStr] : halfDefaultFull,
+        isWorkingDay
+      });
 
       if (isWorkingDay) {
         stats.workingDays++;
@@ -1200,6 +1248,9 @@ export default {
     // 假期折算与「半天出勤开关」无关，所以这里固定传 halfDayAsFull: false
     Object.keys(entries).forEach(date => {
       if (!date.startsWith(prefix)) return;
+      // 周末 / 法定假日标的假不消耗额度：那天本来就不上班，
+      // 记成「已用年假」只会让配额虚高，与统计口径（非工作日只落 weekendLeaves）也矛盾
+      if (!this.isOfficialWorkingDay(new Date(date + 'T00:00:00'))) return;
       const ev = evaluateDayParts(entries[date], { halfDayAsFull: false, isWorkingDay: true });
       if (ev.leave.vacation) stats.vacation += ev.leave.vacation;
       if (ev.leave.birthday) stats.birthday += ev.leave.birthday;
@@ -1249,13 +1300,31 @@ export default {
         companyDays: s.companyDays,
         workingDays: s.workingDays,
         // 目标线高度按「该月工作日 × 该月当期比例」，年内改过比例即呈阶梯状
-        targetDays: parseFloat((s.workingDays * ratio / 100).toFixed(1))
+        targetDays: parseFloat((s.workingDays * ratio / 100).toFixed(1)),
+        // 折线图数据：每月加班小时（统计页的加班趋势卡）
+        overtimeHours: s.totalOvertime
       });
     }
 
     overtimeHours = parseFloat(overtimeHours.toFixed(1));
     const commuteMinutes = settings.commuteMinutes || 90;
     const commuteSavedHours = parseFloat((homeDays * commuteMinutes / 60).toFixed(1));
+
+    // 自定义假期统计：按天型看「已用 / 额度」，区间型看这段假占用了几个工作日
+    // （区间型的起止是自然日，直接报自然日数会把周末也算进去）
+    const customLeaves = this.getCustomLeaves().map(l => {
+      if (l.mode === 'day') {
+        const u = this.getCustomLeaveUsage(l.id);
+        return {
+          id: l.id, name: l.name, color: l.color, mode: 'day',
+          quota: l.quota || 0, used: u.used
+        };
+      }
+      return {
+        id: l.id, name: l.name, color: l.color, mode: 'range',
+        days: this.countDeductibleDays(l.start, l.end)
+      };
+    });
 
     return {
       year,
@@ -1274,6 +1343,7 @@ export default {
       vacationDaysTotal: settings.vacationDays || 20,
       sickDaysTotal: settings.sickDays || 12,
       birthdayEnabled: !!settings.birthdayEnabled,
+      customLeaves,
       monthly
     };
   },

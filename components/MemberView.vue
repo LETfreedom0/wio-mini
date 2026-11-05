@@ -77,34 +77,6 @@
           </view>
         </view>
 
-        <!-- ===== 半天出勤计法（计算口径，PRO） ===== -->
-        <view class="settings-card">
-          <view class="feat-head">
-            <view class="feat-text">
-              <text class="feat-title">{{ i18n.profile.halfDayCard }}</text>
-              <text class="feat-sub">{{ i18n.profile.halfDayDesc }}</text>
-            </view>
-            <text v-if="!isPro" class="feat-locked">{{ i18n.profile.proLockedShort }}</text>
-          </view>
-          <view class="lang-segmented">
-            <view
-              class="lang-option"
-              :class="{ active: halfDayMode === 'half', locked: !isPro }"
-              @click="setHalfDayMode('half')"
-            >
-              <text class="lang-option-text">{{ i18n.profile.halfDayHalf }}</text>
-            </view>
-            <view
-              class="lang-option"
-              :class="{ active: halfDayMode === 'full', locked: !isPro }"
-              @click="setHalfDayMode('full')"
-            >
-              <text class="lang-option-text">{{ i18n.profile.halfDayFull }}</text>
-            </view>
-          </view>
-          <text class="feat-foot">{{ halfDayFoot }}</text>
-        </view>
-
         <!-- ===== 多语言 ===== -->
         <view class="settings-card">
           <view class="feat-head">
@@ -259,17 +231,6 @@ export default {
       const d = new Date(this.lastSyncAt)
       const pad = n => String(n).padStart(2, '0')
       return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-    },
-    // ===== 半天出勤计法 =====
-    // getSettings 已对非会员做「只降级读取」，这里读到的就是实际生效口径
-    halfDayMode() {
-      return this.settings.halfDayAttendance === 'full' ? 'full' : 'half'
-    },
-    halfDayFoot() {
-      const p = this.i18n.profile
-      if (!this.isPro) return p.halfDayLocked
-      const hint = this.halfDayMode === 'full' ? p.halfDayFullHint : p.halfDayHalfHint
-      return `${hint} · ${p.halfDayProHint}`
     }
   },
   mounted() {
@@ -422,20 +383,6 @@ export default {
       } else {
         this.openPaywall()
       }
-    },
-    // ===== 半天出勤计法 =====
-    setHalfDayMode(mode) {
-      // 会员闸门：非会员点哪一档都拉起付费墙，不做「能点但没反应」
-      if (!this.isPro) {
-        this.openPaywall();
-        return;
-      }
-      if (this.halfDayMode === mode) return;
-      this.settings = Object.assign({}, this.settings, { halfDayAttendance: mode });
-      wioService.saveSettings(this.settings);
-      haptic('medium');
-      uni.showToast({ title: t('profile.saved', this.settings.language), icon: 'none' });
-      // 统计是实时从 entries 算的，切回首页 / 日历页的 onShow 会重算历史
     },
     setLanguage(lang) {
       // 多语言为 PRO 专属权益：非 PRO 点击英文选项直接拉起付费墙

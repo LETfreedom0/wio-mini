@@ -81,7 +81,7 @@
         </view>
 
         <!-- 病假 -->
-        <view class="quota-block quota-block-last">
+        <view class="quota-block" :class="{ 'quota-block-last': !customDayLeaves.length }">
           <view class="quota-row">
             <text class="quota-label">{{ i18n.profile.sickDays }}</text>
             <view class="quota-values">
@@ -96,6 +96,29 @@
               @changing="onSliderChanging($event, 'sickDays')"
               min="0" max="30" step="1" activeColor="#8C4F86" backgroundColor="#F3EAF1" block-size="14" block-color="#ffffff"
               :aria-label="i18n.profile.sickDays" />
+          </view>
+        </view>
+
+        <!-- 自定义假期（按天点选型）：额度只读展示，改额度在会员页的假期面板里；
+             没有额度（quota=0）的假不画进度条，只报已用几天 -->
+        <view
+          v-for="(l, idx) in customDayLeaves"
+          :key="l.id"
+          class="quota-block"
+          :class="{ 'quota-block-last': idx === customDayLeaves.length - 1 }"
+        >
+          <view class="quota-row">
+            <view class="quota-name-row">
+              <view class="quota-dot" :style="{ background: l.color }"></view>
+              <text class="quota-label">{{ l.name }}</text>
+            </view>
+            <view class="quota-values">
+              <text class="quota-value" :style="{ color: l.color }">{{ l.label }}</text>
+              <text class="quota-sub" :class="{ 'quota-empty': l.full }">{{ l.sub }}</text>
+            </view>
+          </view>
+          <view v-if="l.quota > 0" class="quota-track">
+            <view class="quota-fill" :style="{ width: l.pct + '%', background: l.color }"></view>
           </view>
         </view>
       </view>
@@ -388,6 +411,32 @@ export default {
     },
     targetTicks() {
       return [0, 20, 40, 60, 80, 100];
+    },
+    // 按天点选型自定义假期的额度行（年假/病假之外的那部分）。
+    // 只做展示：额度本身在会员页的假期面板里改，这里给的是「还剩多少」的答案
+    customDayLeaves() {
+      const p = this.i18n.profile;
+      return (this.customLeaves || [])
+        .filter(l => l.mode === 'day')
+        .map(l => {
+          const u = wioService.getCustomLeaveUsage(l.id);
+          const quota = l.quota || 0;
+          return {
+            id: l.id,
+            name: l.name,
+            color: l.color,
+            quota,
+            used: u.used,
+            pct: quota > 0 ? Math.min(100, Math.round((u.used / quota) * 100)) : 0,
+            full: quota > 0 && u.used >= quota,
+            label: quota > 0
+              ? `${quota} ${p.quotaUnit}`
+              : p.customQuotaUnlimited,
+            sub: quota > 0
+              ? this.remainUsedText(u.used, quota)
+              : p.customUsed.replace('{n}', u.used)
+          };
+        });
     },
     // ===== 账号 / 同步 =====
     isLogin() {
@@ -1245,6 +1294,33 @@ export default {
 
 .quota-slider {
   height: 16px;
+}
+
+/* 自定义假期的只读进度条（不像年假/病假那样带 slider） */
+.quota-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quota-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.quota-track {
+  height: 5px;
+  background-color: #EFF1F3;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.quota-fill {
+  height: 5px;
+  border-radius: 3px;
 }
 
 /* ===== 调休补班 chips ===== */

@@ -185,6 +185,24 @@
           </view>
         </view>
 
+        <!-- 半天计法当场确认：只有「一段出勤 + 一段非出勤」时才出现。
+             以前是会员页里的全局开关，改一次会把历史上所有半天一起翻口径；
+             现在每天单独选，谁也不会连带影响别的日子 -->
+        <view v-if="halfNeedFullAsk" class="half-rule">
+          <view class="half-rule-head">
+            <text class="half-rule-title">{{ i18n.calendar.halfRuleAsk }}</text>
+            <text class="half-rule-sub">{{ i18n.calendar.halfRuleSub }}</text>
+          </view>
+          <view class="half-rule-seg">
+            <view class="half-rule-pill" :class="{ active: !halfFullDay }" @click="setHalfFull(false)">
+              <text class="half-rule-text">{{ i18n.calendar.halfRuleHalf }}</text>
+            </view>
+            <view class="half-rule-pill" :class="{ active: halfFullDay }" @click="setHalfFull(true)">
+              <text class="half-rule-text">{{ i18n.calendar.halfRuleFull }}</text>
+            </view>
+          </view>
+        </view>
+
         <view class="half-actions">
           <view class="half-btn half-btn-ghost" @click="clearHalfDay">
             <text class="half-btn-text">{{ i18n.common.clear }}</text>
@@ -205,7 +223,7 @@
 <script>
 import CustomTabBar from '@/components/CustomTabBar.vue'
 import PaywallSheet from '@/components/PaywallSheet.vue'
-import wioService, { isSplitDay, parseDayParts, customIdOf } from '@/utils/wioService.js'
+import wioService, { isSplitDay, parseDayParts, customIdOf, computeMonthlyReport } from '@/utils/wioService.js'
 import { isProUser } from '@/utils/pro.js'
 import { locales, t, getMonthYearName } from '@/utils/locales.js'
 import { getTopSafeArea } from '@/utils/safeArea.js'
@@ -263,10 +281,15 @@ export default {
         compOffDays: 0,
         publicDays: 0,
         excludeWioDays: 0,
+        deductibleLeave: 0,
+        weekendLeaves: 0,
         totalRecorded: 0,
         workingDays: 0,
         totalOvertime: 0
       },
+      // 展示口径（率 / 差额 / 分母）统一由 computeMonthlyReport 产出，
+      // 与首页、分享卡同源——本页不再自己拼一套分母公式
+      report: { rate: 0, gapDays: 0, denominator: 0, workingDays: 0, company: 0, home: 0, leave: 0, rest: 0 },
       selectedStatus: null,
       lastClickTime: 0,
       lastClickDay: null,
@@ -289,6 +312,8 @@ export default {
       // 上下午各存一份，天然支持任意组合（上午公司 + 下午年假 等）
       halfAm: 'company',
       halfPm: 'company',
+      // 这半天出勤按一整天算吗（逐日；面板里当场选，保存才落库）
+      halfFullDay: false,
       // 打开面板时抓一份各按天假的已用天数作基线，选 chip 时在它上面做增量，
       // 这样余额能实时扣减显示，真正落库仍然只在点「保存」时发生
       halfUsageBase: {},
@@ -426,6 +451,11 @@ export default {
       if (!this.halfDateStr) return { am: null, pm: null };
       return parseDayParts(this.entries[this.halfDateStr]);
     },
+    // 恰好一段是公司办公 = 这天只出了半天勤，需要问「按一天还是按半天算」。
+    // 两段都公司（整天出勤）或都不是公司（没出勤）都不需要问
+    halfNeedFullAsk() {
+      return (this.halfAm === 'company') !== (this.halfPm === 'company');
+    },
     // 面板标题：对齐设计稿的「M月D日 · 周X」
     halfDateLabel() {
       if (!this.halfDateStr) return '';
@@ -465,23 +495,10 @@ export default {
       return wioService.getTargetForMonth(this.currentYear, this.currentMonth);
     },
     wioPercentage() {
-      const numerator = this.stats.companyDays;
-      
-      const totalDeductible = this.stats.vacationDays 
-                            + this.stats.birthdayDays
-                            + this.stats.sickDays 
-                            + this.stats.unpaidDays 
-                            + this.stats.compOffDays
-                            + this.stats.excludeWioDays
-                            + (this.stats.customLeaveDays || 0);
-                            
-      const effectiveDeductible = totalDeductible - (this.stats.weekendLeaves || 0);
-
-      const denominator = this.stats.workingDays - effectiveDeductible;
-
-      if (denominator <= 0) return 0;
-      
-      return Math.round((numerator / denominator) * 100);
+      // 唯一口径：computeMonthlyReport（分母 = 工作日 − deductibleLeave）
+      // 旧实现自己拼分母并额外减去 weekendLeaves，而统计层早已把周末排除在外，
+      // 于是「周末标了假期」会把分母抬高、比率被压低——就是那条假 bug 的来源
+      return this.report.rate;
     },
     filteredLegends() {
       // 顺序：出勤与固定假期在前，「半天」后紧跟按天假（同一族），
@@ -544,19 +561,7 @@ export default {
     },
     // 距离目标还差多少个「公司办公日」
     gapDays() {
-      if (this.wioPercentage >= this.targetPercentage) return 0;
-      const totalDeductible = this.stats.vacationDays 
-                            + this.stats.birthdayDays
-                            + this.stats.sickDays 
-                            + this.stats.unpaidDays 
-                            + this.stats.compOffDays
-                            + this.stats.excludeWioDays
-                            + (this.stats.customLeaveDays || 0);
-      const effectiveDeductible = totalDeductible - (this.stats.weekendLeaves || 0);
-      const denominator = this.stats.workingDays - effectiveDeductible;
-      if (denominator <= 0) return 0;
-      const needCompany = Math.ceil((this.targetPercentage / 100) * denominator);
-      return Math.max(0, needCompany - this.stats.companyDays);
+      return this.report.gapDays;
     },
     gapText() {
       if (this.wioPercentage >= this.targetPercentage) {
@@ -645,6 +650,10 @@ export default {
     },
     updateStats() {
       this.stats = wioService.getMonthStats(this.currentYear, this.currentMonth);
+      this.report = computeMonthlyReport(
+        this.stats,
+        wioService.getTargetForMonth(this.currentYear, this.currentMonth)
+      );
     },
     changeMonth(delta) {
       haptic('light');
@@ -963,9 +972,13 @@ export default {
     },
     // 该日是否被区间型自定义假（连续休假）整天占用
     rangeLeaveForDate(dateStr) {
-      return (this.customLeaves || []).find(
-        l => l.mode !== 'day' && dateStr >= l.start && dateStr <= l.end
-      ) || null;
+      return (this.customLeaves || []).find(l => {
+        if (l.mode === 'day') return false;
+        if (dateStr < l.start || dateStr > l.end) return false;
+        // 勾了「跳过周末与公共假期」的区间：周末不着色，也不锁出勤入口
+        if (l.skipOffDays && !wioService.isOfficialWorkingDay(new Date(dateStr + 'T00:00:00'))) return false;
+        return true;
+      }) || null;
     },
     // 格子底部那根按天假色条：两段不同假时左右各一半，老标记兜底
     customBarStyle(day) {
@@ -1044,6 +1057,8 @@ export default {
         base[l.id] = wioService.getCustomLeaveUsage(l.id).used;
       });
       this.halfUsageBase = base;
+      // 该日已有的口径：明细里有就按明细，没有就按全局默认（老会员在会员页设过）
+      this.halfFullDay = wioService.isHalfDayAsFullAttendance(dateStr);
       this.showHalfPanel = true;
     },
     closeHalfPanel() {
@@ -1055,6 +1070,12 @@ export default {
     // 面板里两行各自的当前值
     partValue(key) {
       return key === 'am' ? this.halfAm : this.halfPm;
+    },
+    // 当场选半天计法：只改面板里的草稿，点「保存」才落库
+    setHalfFull(full) {
+      if (this.halfFullDay === full) return;
+      haptic('light');
+      this.halfFullDay = full;
     },
     setHalfPart(key, opt) {
       if (!opt) return;
@@ -1168,6 +1189,11 @@ export default {
         return;
       }
       haptic('medium');
+      // 半天计法逐日落库：只在真的要问的那天写，整天出勤的日子不动，
+      // 免得给一个月 20 多天都留下一条没意义的记录
+      if (this.halfNeedFullAsk) {
+        wioService.setHalfFullDay(this.halfDateStr, this.halfFullDay);
+      }
       this.showHalfPanel = false;
       // 落库后基线过期：清掉预览上下文，避免关面板后还算出脏余额
       this.halfUsageBase = {};
@@ -2225,6 +2251,63 @@ export default {
   font-size: 11px;
   color: #8A8F96;
   white-space: nowrap;
+}
+
+/* --- 半天计法当场确认 --- */
+.half-rule {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #F6F4EE;
+}
+
+.half-rule-head {
+  display: flex;
+  flex-direction: column;
+}
+
+.half-rule-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #3A4148;
+}
+
+.half-rule-sub {
+  font-size: 10px;
+  color: #9AA0A6;
+  margin-top: 2px;
+}
+
+.half-rule-seg {
+  display: flex;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.half-rule-pill {
+  flex: 1;
+  height: 32px;
+  border-radius: 9px;
+  background: #FFFFFF;
+  border: 1px solid #E4DFD3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.half-rule-pill.active {
+  background: rgba(14, 110, 98, 0.08);
+  border-color: #0E6E62;
+}
+
+.half-rule-text {
+  font-size: 11.5px;
+  color: #6B737B;
+}
+
+.half-rule-pill.active .half-rule-text {
+  color: #0E6E62;
+  font-weight: 600;
 }
 
 .half-actions {

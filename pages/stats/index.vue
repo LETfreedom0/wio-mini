@@ -114,6 +114,25 @@
         </view>
       </view>
 
+      <!-- 加班趋势卡（折线）：柱状图看回司天数，折线看加班强度 -->
+      <view class="card ot-card">
+        <view class="ot-head">
+          <text class="section-title">{{ i18n.profile.statsOtTrendTitle }}</text>
+          <text class="ot-total">{{ annual.overtimeHours }} {{ i18n.profile.statsUnitHour }}</text>
+        </view>
+        <text class="section-sub">{{ i18n.profile.statsOtTrendSub }}</text>
+        <view class="ot-chart-wrap">
+          <view class="ot-chart" :style="{ backgroundImage: otChartBg }"></view>
+          <view v-if="otPeak" class="ot-peak" :style="{ left: otPeak.left, top: otPeak.top }">
+            <text class="ot-peak-text">{{ otPeak.hours }}</text>
+          </view>
+        </view>
+        <view class="month-labels">
+          <text v-for="m in annual.monthly" :key="m.month" class="month-label">{{ m.month }}</text>
+        </view>
+        <text class="ot-foot">{{ otFootText }}</text>
+      </view>
+
       <!-- 假期卡 -->
       <view class="card leave-card">
         <text class="section-title">{{ i18n.profile.statsLeaveTitle }}</text>
@@ -138,6 +157,22 @@
           </view>
           <text class="leave-num">{{ annual.birthdayDaysUsed }}</text>
         </view>
+
+        <!-- 自定义假期（会员）：按天型看额度，区间型看占用的工作日数 -->
+        <template v-if="annual.customLeaves && annual.customLeaves.length">
+          <view class="stat-divider"></view>
+          <text class="section-sub custom-cap">{{ i18n.profile.statsCustomTitle }}</text>
+          <view v-for="l in annual.customLeaves" :key="l.id" class="leave-row">
+            <view class="leave-name-group">
+              <view class="leave-dot" :style="{ background: l.color }"></view>
+              <text class="leave-name custom-name">{{ l.name }}</text>
+            </view>
+            <view class="leave-track">
+              <view class="leave-fill" :style="{ width: customPct(l) + '%', background: l.color }"></view>
+            </view>
+            <text class="leave-num">{{ customNum(l) }}</text>
+          </view>
+        </template>
       </view>
 
     </template>
@@ -182,6 +217,10 @@ import { tap as haptic } from '@/utils/haptic.js'
 
 const CHART_MAX_BAR = 90 // 柱状图柱子最大高度(px)
 const DAY_HOURS = 8      // OT / 通勤折算天数的基准
+// 加班折线的画布坐标系（SVG viewBox，按容器拉伸）
+const OL_W = 300
+const OL_H = 84
+const OL_PAD = 8
 
 export default {
   data() {
@@ -194,6 +233,7 @@ export default {
         commuteMinutes: 90, commuteSavedHours: 0, commuteSavedDays: 0,
         vacationDaysUsed: 0, birthdayDaysUsed: 0, sickDaysUsed: 0,
         vacationDaysTotal: 20, sickDaysTotal: 12, birthdayEnabled: false,
+        customLeaves: [],
         monthly: []
       },
       showCommuteEditor: false,
@@ -237,6 +277,57 @@ export default {
     commuteEstText() {
       return this.i18n.profile.statsCommuteEst
         .replace('{h}', parseFloat((this.annual.commuteMinutes / 60).toFixed(2)))
+    },
+    // ===== 加班折线 =====
+    otSeries() {
+      return (this.annual.monthly || []).map(m => Number(m.overtimeHours) || 0)
+    },
+    otMax() {
+      return Math.max(1, ...this.otSeries)
+    },
+    hasOt() {
+      return this.otSeries.some(v => v > 0)
+    },
+    // 峰值：折线上标一个点，回答「哪个月最忙」——趋势线光看形状不够
+    otPeak() {
+      if (!this.hasOt) return null
+      const arr = this.otSeries
+      let idx = 0
+      arr.forEach((v, i) => { if (v > arr[idx]) idx = i })
+      const { x, y } = this.otPoint(idx, arr[idx])
+      return {
+        month: idx + 1,
+        hours: arr[idx],
+        left: (x / OL_W * 100).toFixed(2) + '%',
+        top: (y / OL_H * 100).toFixed(2) + '%'
+      }
+    },
+    // 12 个月加班时长的折线 + 面积，用 SVG data URI 画。
+    // 不用 canvas：小程序里 canvas 是原生层级，会盖住弹层与 tabBar，
+    // 背景图则完全跟随布局，还能随卡片宽度自适应
+    otChartBg() {
+      const arr = this.otSeries
+      const pts = arr.map((v, i) => this.otPoint(i, v))
+      const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')
+      const last = pts[pts.length - 1]
+      const first = pts[0]
+      const area = `${line} L${last.x.toFixed(1)} ${OL_H - OL_PAD} L${first.x.toFixed(1)} ${OL_H - OL_PAD} Z`
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${OL_W} ${OL_H}" preserveAspectRatio="none">` +
+        `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">` +
+        `<stop offset="0" stop-color="#C08A2D" stop-opacity="0.32"/>` +
+        `<stop offset="1" stop-color="#C08A2D" stop-opacity="0"/>` +
+        `</linearGradient></defs>` +
+        `<path d="${area}" fill="url(#g)"/>` +
+        `<path d="${line}" fill="none" stroke="#C08A2D" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>` +
+        `</svg>`
+      return `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`
+    },
+    otFootText() {
+      const p = this.i18n.profile
+      if (!this.hasOt) return p.statsOtEmpty
+      return p.statsOtPeak
+        .replace('{m}', this.otPeak.month)
+        .replace('{n}', this.otPeak.hours)
     }
   },
   onLoad() {
@@ -280,6 +371,26 @@ export default {
     leavePct(used, total) {
       if (!total) return 0
       return Math.min(100, Math.round(used / total * 100))
+    },
+    // 折线上第 i 个月的数据点坐标（渲染与峰值标注共用一个换算，
+    // 否则峰值小圆点会偏到线外）
+    otPoint(i, v) {
+      const stepX = (OL_W - OL_PAD * 2) / 11
+      return {
+        x: OL_PAD + i * stepX,
+        y: OL_H - OL_PAD - (v / this.otMax) * (OL_H - OL_PAD * 2)
+      }
+    },
+    // ===== 自定义假期行 =====
+    // 按天型看「已用 / 额度」，区间型看这段假占用了几个工作日
+    customPct(l) {
+      if (l.mode !== 'day' || !l.quota) return 100
+      return Math.min(100, Math.round((l.used / l.quota) * 100))
+    },
+    customNum(l) {
+      return l.mode === 'day'
+        ? (l.quota ? `${l.used} / ${l.quota}` : String(l.used))
+        : this.i18n.profile.statsCustomRange.replace('{n}', l.days)
     },
     onCommuteChanging(e) {
       this.draftCommute = e.detail.value
@@ -520,6 +631,48 @@ export default {
 .legend-dot-gold { background-color: #C08A2D; }
 .legend-text { font-size: 10.5px; color: #6B737B; }
 
+/* ---- 加班趋势卡 ---- */
+.ot-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.ot-total {
+  font-size: 14px;
+  font-weight: 600;
+  color: #C08A2D;
+}
+.ot-chart-wrap {
+  position: relative;
+  height: 84px;
+  margin-top: 14px;
+}
+.ot-chart {
+  width: 100%;
+  height: 84px;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+/* 峰值点：贴在线上的小标签，回答「哪个月最忙」 */
+.ot-peak {
+  position: absolute;
+  transform: translate(-50%, -140%);
+  background-color: #C08A2D;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.ot-peak-text {
+  font-size: 9.5px;
+  color: #FFFFFF;
+  line-height: 1.4;
+}
+.ot-foot {
+  display: block;
+  font-size: 10px;
+  color: #8A94A0;
+  margin-top: 8px;
+}
+
 /* ---- 假期卡 ---- */
 .leave-row {
   display: flex;
@@ -552,6 +705,32 @@ export default {
   flex-shrink: 0;
   min-width: 44px;
   text-align: right;
+}
+
+/* 自定义假期行：名称前面带一个假期自己的颜色点 */
+.custom-cap {
+  display: block;
+  margin-top: 12px;
+}
+.leave-name-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  min-width: 44px;
+}
+.leave-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.custom-name {
+  width: auto;
+  max-width: 78px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* ---- 通勤编辑弹层 ---- */
