@@ -279,8 +279,13 @@ export default {
         .replace('{h}', parseFloat((this.annual.commuteMinutes / 60).toFixed(2)))
     },
     // ===== 加班折线 =====
+    // 固定输出 12 个月：折线的 x 坐标按 11 等分算，长度不足时末点会塌到左边，
+    // 与下方 12 个月份刻度错位；首屏 annual 还没加载时也要能安全求值
     otSeries() {
-      return (this.annual.monthly || []).map(m => Number(m.overtimeHours) || 0)
+      const rows = this.annual.monthly || []
+      const arr = rows.map(m => Number(m && m.overtimeHours) || 0)
+      while (arr.length < 12) arr.push(0)
+      return arr.slice(0, 12)
     },
     otMax() {
       return Math.max(1, ...this.otSeries)
@@ -307,6 +312,8 @@ export default {
     // 背景图则完全跟随布局，还能随卡片宽度自适应
     otChartBg() {
       const arr = this.otSeries
+      // 没有数据就不画：pts 为空时取 last.x 会直接抛异常（页面白屏）
+      if (!arr.length) return ''
       const pts = arr.map((v, i) => this.otPoint(i, v))
       const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')
       const last = pts[pts.length - 1]

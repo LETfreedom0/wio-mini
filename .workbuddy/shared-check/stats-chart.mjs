@@ -77,6 +77,27 @@ const mk = arr => arr.map((h, idx) => ({ month: idx + 1, overtimeHours: h, compa
   ok(!/NaN/.test(decodeURIComponent(i.otChartBg)), 'SVG 里不能出现 NaN')
 }
 
+// 4) 首屏空态：annual 还没回来（monthly 为 undefined / 空数组 / 含 null 项）都不能崩。
+//    真机上就是这里抛 Cannot read property 'x' of undefined，整页白掉
+{
+  const cases = [
+    ['monthly 为 undefined', undefined],
+    ['monthly 为空数组', []],
+    ['monthly 只有 3 个月', mk([1, 2, 3])],
+    ['monthly 含 null 项', [null, { month: 2, overtimeHours: 4 }]]
+  ]
+  for (const [label, monthly] of cases) {
+    const i = inst(monthly)
+    let bg = null
+    let err = null
+    try { bg = i.otChartBg } catch (e) { err = e }
+    ok(!err, `${label} 时 otChartBg 不应抛异常${err ? '：' + err.message : ''}`)
+    ok(typeof bg === 'string', `${label} 时应返回字符串`)
+    ok(i.otSeries.length === 12, `${label} 时折线应补齐 12 个月，实际 ${i.otSeries.length}`)
+    ok(!/NaN|undefined/.test(decodeURIComponent(bg)), `${label} 时 SVG 不能出现 NaN/undefined`)
+  }
+}
+
 // 4) 12 个月等长输入不会越界（折线首尾都在画布内）
 {
   const i = inst(mk(new Array(12).fill(1)))
