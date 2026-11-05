@@ -1291,6 +1291,9 @@ export default {
 
 .quota-slider {
   height: 16px;
+  /* 原生 slider 的轨道两端各留了约 20px 内缩，跟下面自定义进度条（满宽）比会短一截。
+     这里用负外边距把 slider 的盒子撑到轨道正好贴合内容宽度，三条额度条长度才一致。 */
+  margin: 0 -20px;
 }
 
 /* 自定义假期的只读进度条（不像年假/病假那样带 slider） */

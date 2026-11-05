@@ -72,10 +72,10 @@
             <view
               v-else
               class="cl-week-dot"
-              :class="{ weekend: d.weekend }"
-              :style="d.weekend ? '' : { background: form.color }"
+              :class="{ off: d.off }"
+              :style="d.off ? '' : { background: form.color }"
             >
-              <text class="cl-week-num" :class="{ weekend: d.weekend }">{{ d.day }}</text>
+              <text class="cl-week-num" :class="{ off: d.off }">{{ d.day }}</text>
             </view>
           </view>
         </view>
@@ -270,8 +270,17 @@ export default {
       return tpl.replace('{n}', this.offDays)
     },
     // 日期条：≤7 天逐日显示；超过 7 天折叠成「前 5 天 + … + 末日」
+    // 勾了「跳过周末与公共假日」后，非工作日（周末 + 法定假日，调休上班日除外）
+    // 一律不着色——跟日历那边的口径保持一致，否则条上有色、日历上没色。
     weekStrip() {
-      return buildWeekStrip(this.form.start, this.form.end)
+      const skip = this.form.skipOffDays
+      return buildWeekStrip(this.form.start, this.form.end).map(d => {
+        if (d.gap) return { ...d, off: false }
+        const off = skip
+          ? !wioService.isOfficialWorkingDay(new Date(d.key + 'T00:00:00'))
+          : d.weekend
+        return { ...d, off }
+      })
     },
     // 大号数字：不限额度时显示「不限额度」，否则显示额度本身（可带 0.5）
     quotaNumText() {
@@ -323,11 +332,11 @@ export default {
     },
     // 当前组 4 色。选中色不在组里（刚套了预设，或是旧版色相条存的色）时
     // 顶掉最后一格——宁可少一个备选，也不能让选中态消失
+    // 当前展示的就是整组四色：点 ↻ 四个一起换，不会留一个旧色在原地，
+    // 否则看起来像「只换了一半」。当前选中的颜色因此可能不在新组里，
+    // 此时四个色块都是「未选中」状态，form.color 不受影响（保存的仍是原色）。
     paletteColors() {
-      const g = PALETTES[this.paletteIndex % PALETTES.length]
-      const cur = String(this.form.color || '').toUpperCase()
-      if (!cur || g.indexOf(cur) !== -1) return g
-      return [g[0], g[1], g[2], cur]
+      return PALETTES[this.paletteIndex % PALETTES.length]
     }
   },
   watch: {
@@ -383,8 +392,8 @@ export default {
       }
       this.syncPaletteToColor()
     },
-    // 打开/套预设/换组后，把 paletteIndex 定位到「含当前色的那一组」，
-    // 找不到就留在第 0 组（此时 paletteColors 会顶掉最后一格保住选中态）
+    // 打开/套预设后，把 paletteIndex 定位到「含当前色的那一组」，这样一进来
+    // 就有一个色块是选中态。换组本身不再回定位——用户要的是四个一起换。
     syncPaletteToColor() {
       const cur = String(this.form.color || '').toUpperCase()
       let hit = -1
@@ -919,7 +928,7 @@ export default {
   justify-content: center;
 }
 
-.cl-week-dot.weekend {
+.cl-week-dot.off {
   background: #FFFFFF;
   border: 1px solid #E0D5B7;
 }
@@ -930,7 +939,7 @@ export default {
   color: #FFFFFF;
 }
 
-.cl-week-num.weekend {
+.cl-week-num.off {
   font-weight: 400;
   color: #BCAE8C;
 }

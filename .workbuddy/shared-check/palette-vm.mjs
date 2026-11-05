@@ -138,24 +138,59 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
   await sleep(620)
 }
 
-// ---- P4 选中色永远可见：任何历史色 × 任何组 都还在行内且有选中态 ----
+// ---- P4 换组是整组换：四格必须等于该组的四色，不塞旧色凑数 ----
 {
   const i = newInst()
-  const samples = ['#123456', '#ABCDEF', '#c25b6e', '#0e6e62']
-  samples.forEach(c => {
+  for (const c of ['#123456', '#ABCDEF', '#c25b6e', '#0e6e62']) {
     for (let g = 0; g < PALETTES.length; g++) {
       i.form.color = c
       i.paletteIndex = g
       const colors = cmp(i, 'paletteColors')
       ok(colors.length === 4, `色 ${c} 在第 ${g + 1} 组：格数变成 ${colors.length}`)
-      ok(colors.map(up).indexOf(up(c)) !== -1, `色 ${c} 在第 ${g + 1} 组里从行内消失`)
-      const sel = colors.filter(x => ringOf(i.swatchStyle(x)).length > 0)
-      ok(sel.length === 1, `色 ${c} 在第 ${g + 1} 组：选中态 ${sel.length} 个`)
+      ok(JSON.stringify(colors.map(up)) === JSON.stringify(PALETTES[g].map(up)),
+        `第 ${g + 1} 组被旧色 ${c} 顶掉了格子`)
     }
-  })
+  }
+  // 换组后：四格全部来自新组，当前色可能不在其中（此时没有任何选中态，但颜色不变）
+  const i2 = newInst()
+  i2.form.color = '#123456' // 不在任何一组里
+  i2.paletteIndex = 1
+  const after = cmp(i2, 'paletteColors')
+  ok(JSON.stringify(after.map(up)) === JSON.stringify(PALETTES[1].map(up)), '换组后四格应全是新组的色')
+  ok(after.filter(x => ringOf(i2.swatchStyle(x)).length > 0).length === 0,
+    '当前色不在新组时不应有选中态，也不应凭空塞一格')
+  ok(i2.form.color === '#123456', '换组不能改掉当前颜色')
 }
 
-// ---- P5 预设色都能定位到含它的组（套预设后不能出现「无选中」） ----
+// ---- P5b 逐日条：勾选「跳过周末与公共假日」后，非工作日一律不着色 ----
+{
+  const S = wioService && (wioService.default || wioService)
+  ok(!!S, '没拿到 wioService，逐日条断言失效')
+  const i = newInst()
+  i.form.start = '2026-09-28'
+  i.form.end = '2026-10-04' // 周一 → 周日，中间跨国庆
+  i.form.skipOffDays = true
+  const strip = cmp(i, 'weekStrip')
+  ok(strip.length === 7, `7 天区间应展开 7 格，实际 ${strip.length}`)
+  strip.forEach(d => {
+    const work = S.isOfficialWorkingDay(new Date(d.key + 'T00:00:00'))
+    ok(d.off === !work, `${d.key} 的着色判定不对（工作日=${work}，off=${d.off}）`)
+  })
+  // 10/1 是周四且是法定假日：必须被当成「不着色」，否则只是周末逻辑没覆盖假日
+  const nat = strip.find(d => d.key === '2026-10-01')
+  ok(nat && nat.off === true, '法定假日（周四）也应不着色')
+  ok(strip.filter(d => !d.off).length === 3, `9/28-9/30 三个工作日应着色，实际 ${strip.filter(d => !d.off).length}`)
+
+  // 关掉开关：只有周末不着色，工作日的法定假日照常着色
+  i.form.skipOffDays = false
+  const strip2 = cmp(i, 'weekStrip')
+  const nat2 = strip2.find(d => d.key === '2026-10-01')
+  ok(nat2 && nat2.off === false, '关闭跳过后，工作日法定假日应照常着色')
+  const sat = strip2.find(d => d.key === '2026-10-03')
+  ok(sat && sat.off === true, '关闭跳过后周末仍不着色')
+}
+
+// ---- P5 预设色都能定位到含它的组（套预设后不能出现「无选中」） ----/ ---- P5 预设色都能定位到含它的组（套预设后不能出现「无选中」） ----
 {
   const presets = []
   for (const f of fs.readdirSync(path.join(root, 'utils'))) {
