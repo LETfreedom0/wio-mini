@@ -589,7 +589,10 @@ export default {
         })
       })
 
-      // 同一天只留一条（前面的优先级更高），再按日期倒序取最近三条
+      // 同一天只留一条（前面的优先级更高），再按「操作时间」倒序取最近三条：
+      // 排序依据是「什么时候标的」，不是「标的是哪天」——今天补记上个月的一天，
+      // 它就该出现在最上面，否则用户标完看不到任何变化。
+      const touched = wioService.getTouchedAt()
       const seen = {}
       this.recentRecords = rows
         .filter(r => {
@@ -597,9 +600,25 @@ export default {
           seen[r.dateStr] = true
           return true
         })
-        .sort((a, b) => (a.dateStr < b.dateStr ? 1 : -1))
+        .sort((a, b) => {
+          const ta = this.touchedAtOf(a.dateStr, touched)
+          const tb = this.touchedAtOf(b.dateStr, touched)
+          if (tb !== ta) return tb - ta
+          return a.dateStr < b.dateStr ? 1 : -1
+        })
         .slice(0, 3)
         .map(r => ({ ...r, dateLabel: this.dateLabelOf(r.dateStr) }))
+    },
+    // 某天的排序时间戳：优先用写入时记下的操作时间；
+    // 老数据没有这个字段，退回「当天 0 点且不晚于此刻」，
+    // 这样任何一次新操作都排在历史条目之前，历史条目之间仍按日期倒序。
+    touchedAtOf(dateStr, touched) {
+      const t = Number((touched || {})[dateStr])
+      if (Number.isFinite(t) && t > 0) return t
+      const [y, m, d] = String(dateStr || '').split('-')
+      const midnight = new Date(Number(y), Number(m) - 1, Number(d)).getTime()
+      if (!Number.isFinite(midnight)) return 0
+      return Math.min(midnight, Date.now())
     },
     dateLabelOf(dateStr) {
       const [y, m, d] = String(dateStr).split('-')

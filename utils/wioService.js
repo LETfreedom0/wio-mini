@@ -304,6 +304,35 @@ export default {
     return Number.isFinite(n) && n >= 1 && n <= 100 ? n : fallback;
   },
 
+  // ---- 操作时间（最近记录的排序依据） ----
+  // 记录「某一天最后一次被操作」的时间戳，与那一天本身是几号无关：
+  // 今天补标去年 3 月的一天，它也该排在最前面。
+  getTouchedAt() {
+    const s = this.getSettings();
+    const raw = s.touchedAt && typeof s.touchedAt === 'object' ? s.touchedAt : {};
+    const out = {};
+    Object.keys(raw).forEach(d => {
+      const t = Number(raw[d]);
+      if (this._isValidDateStr(d) && Number.isFinite(t) && t > 0) out[d] = t;
+    });
+    return out;
+  },
+
+  // 打一个操作时间戳，只保留最近的 300 天：settings 会跟着云同步走，不能无限长
+  _withTouch(base, dateStr, ts) {
+    if (!this._isValidDateStr(dateStr)) return base;
+    const src = base && typeof base === 'object' ? base : {};
+    const next = { ...src, [dateStr]: Number(ts) || Date.now() };
+    const keys = Object.keys(next);
+    if (keys.length > 300) {
+      keys
+        .sort((a, b) => (Number(next[a]) || 0) - (Number(next[b]) || 0))
+        .slice(0, keys.length - 300)
+        .forEach(k => { delete next[k]; });
+    }
+    return next;
+  },
+
   saveSettings(settings) {
     try {
       // WIO 目标比例按月快照（口径：上线时以当月为准建立快照；以后按月保存；
@@ -547,7 +576,11 @@ export default {
       } else {
         list.push(item);
       }
-      this.saveSettings({ ...settings, customLeaves: list });
+      // 区间假在最近记录里只占开始日一条，所以操作时间也记在开始日
+      const touchedAt = mode === 'range'
+        ? this._withTouch(settings.touchedAt, item.start)
+        : settings.touchedAt;
+      this.saveSettings({ ...settings, customLeaves: list, touchedAt });
       return item;
     } catch (e) {
       console.error('saveCustomLeave error', e);
@@ -691,7 +724,10 @@ export default {
       if (!leave) return false;
       marks[dateStr] = { id: leaveId, part: part === 'am' || part === 'pm' ? part : 'full' };
     }
-    this.saveSettings({ ...settings, customMarks: marks });
+    const touchedAt = leaveId && part
+      ? this._withTouch(settings.touchedAt, dateStr)
+      : settings.touchedAt;
+    this.saveSettings({ ...settings, customMarks: marks, touchedAt });
     return true;
   },
 
@@ -804,6 +840,16 @@ export default {
       }
       uni.setStorageSync(KEY_ENTRIES, JSON.stringify(entries));
       markDirty();
+      // 标了东西才记操作时间；清空是撤销，把那天的时间戳一起删掉，
+      // 免得 settings 里留一堆已经撤销的日期
+      const settings = this.getSettings();
+      if (status) {
+        this.saveSettings({ ...settings, touchedAt: this._withTouch(settings.touchedAt, dateStr) });
+      } else if (settings.touchedAt && settings.touchedAt[dateStr]) {
+        const nextTouched = { ...settings.touchedAt };
+        delete nextTouched[dateStr];
+        this.saveSettings({ ...settings, touchedAt: nextTouched });
+      }
       return true;
     } catch (e) {
       console.error('Error saving entry', e);
@@ -920,6 +966,16 @@ export default {
       }
       uni.setStorageSync(KEY_ENTRIES, JSON.stringify(entries));
       markDirty();
+      // 半天面板是另一条写入路径（不走 saveEntry），操作时间同样要记：
+      // 否则从面板标的半天不会顶到最近记录最前面
+      const halfSettings = this.getSettings();
+      if (packed) {
+        this.saveSettings({ ...halfSettings, touchedAt: this._withTouch(halfSettings.touchedAt, dateStr) });
+      } else if (halfSettings.touchedAt && halfSettings.touchedAt[dateStr]) {
+        const nextTouched = { ...halfSettings.touchedAt };
+        delete nextTouched[dateStr];
+        this.saveSettings({ ...halfSettings, touchedAt: nextTouched });
+      }
       return true;
     } catch (e) {
       console.error('Error saving day parts', e);
@@ -993,6 +1049,11 @@ export default {
       }
       uni.setStorageSync(KEY_OVERTIME, JSON.stringify(entries));
       markDirty();
+      // 加班单独存在 wio_overtime 里，不经过 saveEntry，操作时间得在这里补
+      if (hours && hours > 0) {
+        const settings = this.getSettings();
+        this.saveSettings({ ...settings, touchedAt: this._withTouch(settings.touchedAt, dateStr) });
+      }
     } catch (e) {
       console.error('Error saving overtime entry', e);
     }

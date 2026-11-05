@@ -135,6 +135,59 @@ const dup = i4.recentRecords.filter(r => r.dateLabel.indexOf('11月5日') !== -1
 ok(dup.length === 1, `同一天不该出现两条，实际 ${dup.length} 条`)
 ok(dup[0] && dup[0].label === i4.i18n.home.workFromCompany, `应保留打卡那条，实际 ${dup[0] && dup[0].label}`)
 
+// --- H8 排序按「操作时间」，不是「目标日期」 ---
+// 今天补标一个上个月的日子，它必须排最前：否则用户标完看不到任何变化
+const now = Date.now()
+store.wio_settings = JSON.stringify({
+  language: 'zh-CN',
+  customLeaves: [],
+  touchedAt: {
+    '2026-10-02': now,              // 刚补标的上个月
+    '2026-11-04': now - 3 * day,
+    '2026-11-03': now - 2 * day
+  }
+})
+store.wio_entries = JSON.stringify({
+  '2026-10-02': 'home',
+  '2026-11-04': 'company',
+  '2026-11-03': 'home'
+})
+const i5 = newInst()
+i5.buildRecentRecords()
+const order = i5.recentRecords.map(r => r.dateLabel)
+ok(order[0] && order[0].indexOf('10月2日') !== -1, `最后操作的应排第一，实际 ${order[0]}`)
+ok(order[1] && order[1].indexOf('11月3日') !== -1, `第二应是 11月3日，实际 ${order[1]}`)
+ok(order[2] && order[2].indexOf('11月4日') !== -1, `第三应是 11月4日，实际 ${order[2]}`)
+
+// 没有操作时间的老数据：仍按日期倒序，且不会插到新操作前面
+store.wio_settings = JSON.stringify({
+  language: 'zh-CN',
+  customLeaves: [],
+  touchedAt: { '2026-02-01': now, '2026-11-04': 'oops' }
+})
+store.wio_entries = JSON.stringify({
+  '2026-02-01': 'home',
+  '2026-11-04': 'company',
+  '2026-11-03': 'home'
+})
+const i6 = newInst()
+i6.buildRecentRecords()
+const order6 = i6.recentRecords.map(r => r.dateLabel)
+ok(order6[0] && order6[0].indexOf('2月1日') !== -1, `有操作时间的应排最前，实际 ${order6[0]}`)
+ok(order6[1] && order6[1].indexOf('11月4日') !== -1, `无操作时间的按日期倒序，实际 ${order6[1]}`)
+
+// --- H9 写入端确实会记操作时间（否则排序永远退化成按日期） ---
+const svc = (await import(pathToFileURL(path.join(here, 'utils/wioService.js')).href)).default
+store.wio_settings = JSON.stringify({ language: 'zh-CN', customLeaves: [], customMarks: {} })
+store.wio_entries = JSON.stringify({})
+svc.saveEntry('2026-09-15', 'home')
+const afterEntry = JSON.parse(store.wio_settings)
+ok((afterEntry.touchedAt || {})['2026-09-15'] > 0, 'saveEntry 应记录操作时间')
+svc.saveEntry('2026-09-16', 'home')
+svc.saveEntry('2026-09-16', null) // 清空 = 撤销，不该把那天顶上去
+const afterClear = JSON.parse(store.wio_settings)
+ok(!(afterClear.touchedAt || {})['2026-09-16'], '清空记录不应打操作时间')
+
 fs.rmSync(entry, { force: true })
 fs.rmSync(bundle, { force: true })
 console.log(fails.length ? `\n失败 ${fails.length} 条：\n- ` + fails.join('\n- ') : '')
