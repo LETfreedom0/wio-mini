@@ -112,12 +112,12 @@
 
         <!-- 数字只出现这一处：两个圆钮直接夹着它，从 0 往上点，改的时候不用满屏找数字 -->
         <view class="cl-stepper">
-          <view class="cl-step-btn" @click="stepQuota(-1)"><text class="cl-step-sign">−</text></view>
+          <view class="cl-step-btn" @click="stepQuota(-0.5)"><text class="cl-step-sign">−</text></view>
           <view class="cl-step-num-row">
             <text class="cl-step-num">{{ quotaNumText }}</text>
             <text class="cl-step-unit">{{ quotaUnitText }}</text>
           </view>
-          <view class="cl-step-btn" @click="stepQuota(1)"><text class="cl-step-sign">＋</text></view>
+          <view class="cl-step-btn" @click="stepQuota(0.5)"><text class="cl-step-sign">＋</text></view>
         </view>
 
         <view class="cl-quota-bar">
@@ -415,8 +415,8 @@ export default {
         boxShadow: sel ? `0 0 0 2px #FFFFFF, 0 0 0 3.5px ${c}` : '0 0 0 0 rgba(0,0,0,0)'
       }
     },
-    // 额度步进：±1 天，下限 0。没有「不限额度」这种假——现实中所有假期都有个数，
-    // 0 只是新建时的起点，保存前必须加到 1 以上。
+    // 额度步进：±0.5 天（半天假按 0.5 天给），下限 0。
+    // 没有「不限额度」这种假——0 只是新建时的起点，保存前必须加到 0.5 以上。
     stepQuota(delta) {
       haptic('light')
       const cur = Math.round((Number(this.form.quota) || 0) * 10) / 10
