@@ -754,7 +754,16 @@ export default {
   -webkit-overflow-scrolling: touch;
 }
 
-.cl-modal-card > * {
+/* WXSS 不支持通配选择器（`*` 会在编译期报 error at token），
+   所以把卡片里的直接子项显式列出来锁住高度 */
+.cl-modal-head,
+.cl-mode-seg,
+.custom-preset-row,
+.custom-input,
+.cl-range-card,
+.cl-day-card,
+.custom-save-btn,
+.custom-delete-btn {
   flex-shrink: 0;
 }
 
