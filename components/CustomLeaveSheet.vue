@@ -110,66 +110,42 @@
           </view>
         </view>
 
-        <!-- 数字只出现这一处：两个圆钮直接夹着它，改的时候不用满屏找数字 -->
+        <!-- 数字只出现这一处：两个圆钮直接夹着它，从 0 往上点，改的时候不用满屏找数字 -->
         <view class="cl-stepper">
-          <view class="cl-step-btn" :class="{ off: usage.unlimited }" @click="stepQuota(-1)"><text class="cl-step-sign">−</text></view>
+          <view class="cl-step-btn" @click="stepQuota(-1)"><text class="cl-step-sign">−</text></view>
           <view class="cl-step-num-row">
-            <text class="cl-step-num" :class="{ word: usage.unlimited }">{{ quotaNumText }}</text>
-            <text v-if="quotaUnitText" class="cl-step-unit">{{ quotaUnitText }}</text>
+            <text class="cl-step-num">{{ quotaNumText }}</text>
+            <text class="cl-step-unit">{{ quotaUnitText }}</text>
           </view>
           <view class="cl-step-btn" @click="stepQuota(1)"><text class="cl-step-sign">＋</text></view>
         </view>
 
-        <view v-if="!usage.unlimited" class="cl-quota-bar">
+        <view class="cl-quota-bar">
           <view class="cl-quota-fill" :style="{ width: quotaPercent + '%', background: form.color }"></view>
         </view>
         <!-- 进度条两端各标一个数：只画条不标数，用户还得自己反推剩多少 -->
-        <view v-if="!usage.unlimited" class="cl-quota-scale">
+        <view class="cl-quota-scale">
           <text class="cl-quota-scale-text">{{ usedLabel }}</text>
           <text class="cl-quota-scale-text">{{ leftLabel }}</text>
-        </view>
-
-        <!-- 两枚 chip：加半天 / 不限额度。
-             半天是给「上午请事假、下午照常上班」这类场景留的入口，
-             不限额度则必须显式点，不能靠一路减到 0 误触。 -->
-        <view class="cl-quota-chips">
-          <view class="cl-quota-chip" :class="{ off: usage.unlimited }" @click="addHalfDay">
-            <text class="cl-quota-chip-text">{{ i18n.profile.customQuotaAddHalf }}</text>
-          </view>
-          <view class="cl-quota-chip plain" :class="{ on: usage.unlimited }" @click="toggleUnlimited">
-            <text class="cl-quota-chip-text">{{ i18n.profile.customQuotaUnlimited }}</text>
-          </view>
         </view>
       </view>
 
       <!-- 颜色：一组协调配色，点色块选中，点 ↻ 换下一组。
-           单独成卡是因为它是这一屏唯一「感性」的部分——额度是数字，颜色是审美，
-           混在一起会互相抢注意力。 -->
+           标题和色名都不要了——色块自己会说话，↻ 也一看就懂。 -->
       <view class="cl-day-card">
-        <view class="cl-card-head">
-          <text class="cl-card-title">{{ i18n.profile.customColorLabel }}</text>
-          <view class="cl-color-tag">
-            <view class="cl-color-tag-dot" :style="{ background: form.color }"></view>
-            <text class="cl-color-tag-text">{{ colorName }}</text>
-          </view>
-        </view>
         <view class="cl-palette-row">
-          <view class="cl-palette">
-            <view
-              v-for="(c, i) in paletteColors"
-              :key="i"
-              class="cl-swatch"
-              :class="{ morph: morphing }"
-              hover-class="cl-swatch-hover"
-              :style="swatchStyle(c)"
-              @click="pickColor(c)"
-            ></view>
-          </view>
-          <!-- ↻ 也装在自己的米色槽里，否则一个裸按钮挨着四个带槽的色块，看着就小一号 -->
-          <view class="cl-palette-refresh">
-            <view class="cl-palette-refresh-btn" hover-class="cl-palette-refresh-hover" @click="refreshPalette">
-              <text class="cl-palette-refresh-icon" :style="{ transform: 'rotate(' + paletteTurns * 360 + 'deg)' }">↻</text>
-            </view>
+          <view
+            v-for="(c, i) in paletteColors"
+            :key="i"
+            class="cl-swatch"
+            :class="{ morph: morphing }"
+            hover-class="cl-swatch-hover"
+            :style="swatchStyle(c)"
+            @click="pickColor(c)"
+          ></view>
+          <!-- ↻ 和色块同格等大：五个格子一起均分整行 -->
+          <view class="cl-palette-refresh-btn" hover-class="cl-palette-refresh-hover" @click="refreshPalette">
+            <text class="cl-palette-refresh-icon" :style="{ transform: 'rotate(' + paletteTurns * 360 + 'deg)' }">↻</text>
           </view>
         </view>
       </view>
@@ -205,28 +181,6 @@ const PALETTES = [
 const MORPH_SWAP_MS = 250
 const MORPH_END_MS = 540
 
-// 色块只给眼睛看，名字是给「想跟别人描述」用的：选色时旁边标一个「紫罗兰」，
-// 比标 #A93B78 有用。覆盖色板 12 色 + 预设色 + 几组常用色，查不到的按色相兜底。
-const COLOR_NAMES = {
-  '#0E6E62': ['墨绿', 'Pine'],
-  '#3C6FB0': ['湖蓝', 'Lake'],
-  '#7A5AA8': ['紫罗兰', 'Violet'],
-  '#D4A33F': ['琥珀', 'Amber'],
-  '#C25B6E': ['玫瑰', 'Rose'],
-  '#C97A3D': ['陶土', 'Clay'],
-  '#8A8F4A': ['橄榄', 'Olive'],
-  '#2F8F6E': ['青竹', 'Bamboo'],
-  '#41598A': ['藏青', 'Navy'],
-  '#8C4F86': ['紫藤', 'Wisteria'],
-  '#A93B78': ['品红', 'Magenta'],
-  '#C24A7E': ['桃粉', 'Blush'],
-  '#6B7379': ['石墨', 'Graphite'],
-  '#1E7A8C': ['孔雀', 'Peacock'],
-  '#B23A32': ['砖红', 'Brick'],
-  '#8B95A1': ['银灰', 'Silver']
-}
-
-
 export default {
   name: 'CustomLeaveSheet',
   props: {
@@ -245,9 +199,7 @@ export default {
       paletteTurns: 0,
       // 换组动画进行中：色块正在收缩/回弹，此间不响应点选
       morphing: false,
-      storedUsage: { used: 0 },
-      // 上一次设过的有限额度：点「不限额度」退出时回到这个值，而不是归零
-      lastQuota: 5
+      storedUsage: { used: 0 }
     }
   },
   computed: {
@@ -302,13 +254,6 @@ export default {
       const tpl = this.form.skipOffDays ? p.customSkipOffOn : p.customSkipOffHint
       return tpl.replace('{n}', this.offDays)
     },
-    // ---- 颜色名 ----
-    colorName() {
-      const hex = String(this.form.color || '').toUpperCase()
-      const hit = COLOR_NAMES[hex]
-      if (hit) return this.settings.language === 'en-US' ? hit[1] : hit[0]
-      return this.hueNameOf(hex)
-    },
     // 日期条：≤7 天逐日显示；超过 7 天折叠成「前 5 天 + … + 末日」
     // 勾了「跳过周末与公共假日」后，非工作日（周末 + 法定假日，调休上班日除外）
     // 一律不着色——跟日历那边的口径保持一致，否则条上有色、日历上没色。
@@ -322,14 +267,13 @@ export default {
         return { ...d, off }
       })
     },
-    // 大号数字：不限额度时显示「不限额度」，否则显示额度本身（可带 0.5）
+    // 大号数字：直接显示额度本身（可带 0.5），新建时从 0 起步
     quotaNumText() {
-      if (this.usage.unlimited) return this.i18n.profile.customQuotaUnlimited
       const q = Number(this.form.quota) || 0
       return String(Math.round(q * 10) / 10)
     },
     quotaUnitText() {
-      return this.usage.unlimited ? '' : this.i18n.profile.customQuotaUnit
+      return this.i18n.profile.customQuotaUnit
     },
     usage() {
       if (this.form.mode !== 'day') {
@@ -358,7 +302,6 @@ export default {
     },
     leftLabel() {
       const u = this.usage
-      if (u.unlimited) return this.i18n.profile.customQuotaUnlimited
       const tpl = this.form.quotaRule === 'total'
         ? this.i18n.profile.customLeftTotal
         : this.i18n.profile.customLeft
@@ -407,7 +350,6 @@ export default {
         this.storedUsage = this.form.mode === 'day'
           ? wioService.getCustomLeaveUsage(l.id)
           : { used: 0 }
-        if (this.form.quota > 0) this.lastQuota = this.form.quota
       } else {
         const today = this.todayStr()
         this.editingId = null
@@ -473,45 +415,15 @@ export default {
         boxShadow: sel ? `0 0 0 2px #FFFFFF, 0 0 0 3.5px ${c}` : '0 0 0 0 rgba(0,0,0,0)'
       }
     },
-    // 额度步进：±1 天。下限卡在 0.5 —— 再往下就是「不限额度」了，
-    // 那必须由用户显式点 chip，不该一路减 1 减 0 误触。
-    // 不限状态下 ＋ 给 1 天（否则新建的按天假额度是 0，按钮全废没法调），
-    // − 无意义（0 已经是下限）。
+    // 额度步进：±1 天，下限 0。没有「不限额度」这种假——现实中所有假期都有个数，
+    // 0 只是新建时的起点，保存前必须加到 1 以上。
     stepQuota(delta) {
       haptic('light')
       const cur = Math.round((Number(this.form.quota) || 0) * 10) / 10
-      if (cur <= 0) {
-        if (delta < 0) return
-        this.form.quota = 1
-        this.lastQuota = 1
-        return
-      }
       let next = Math.round((cur + delta) * 10) / 10
-      if (next < 0.5) next = 0.5
+      if (next < 0) next = 0
       if (next > 365) next = 365
       this.form.quota = next
-      this.lastQuota = next
-    },
-    // 加半天：额度本身可以是 0.5 的倍数（半天假按 0.5 天扣）
-    addHalfDay() {
-      if (this.usage.unlimited) return
-      haptic('light')
-      const cur = Math.round((Number(this.form.quota) || 0) * 10) / 10
-      let next = Math.round((cur + 0.5) * 10) / 10
-      if (next > 365) next = 365
-      this.form.quota = next
-      this.lastQuota = next
-    },
-    // 不限额度：0 表示不限。退出时回到上一次设过的值
-    toggleUnlimited() {
-      haptic('light')
-      if (this.usage.unlimited) {
-        this.form.quota = this.lastQuota || 5
-      } else {
-        const q = Number(this.form.quota) || 0
-        if (q > 0) this.lastQuota = q
-        this.form.quota = 0
-      }
     },
     setMode(mode) {
       if (this.form.mode === mode) return
@@ -532,28 +444,6 @@ export default {
     toggleSkipOffDays() {
       haptic('light')
       this.form.skipOffDays = !this.form.skipOffDays
-    },
-    // 兜底色名：按色相归一个近似名。宁可粗（「蓝」）也不要给用户看 #A1B2C3。
-    hueNameOf(hex) {
-      const en = this.settings.language === 'en-US'
-      const h = String(hex || '').replace('#', '')
-      if (h.length !== 6) return en ? 'Custom' : '自定义'
-      const r = parseInt(h.slice(0, 2), 16) / 255
-      const g = parseInt(h.slice(2, 4), 16) / 255
-      const b = parseInt(h.slice(4, 6), 16) / 255
-      const max = Math.max(r, g, b)
-      const min = Math.min(r, g, b)
-      const d = max - min
-      if (d < 0.08) return en ? 'Grey' : '灰'
-      let deg
-      if (max === r) deg = ((g - b) / d) % 6
-      else if (max === g) deg = (b - r) / d + 2
-      else deg = (r - g) / d + 4
-      const hue = Math.round((deg * 60 + 360) % 360)
-      const zh = ['红', '橙', '金', '黄绿', '绿', '青绿', '青', '湖蓝', '蓝', '靛蓝', '紫', '品红', '玫红']
-      const enNames = ['Red', 'Orange', 'Gold', 'Lime', 'Green', 'Teal', 'Cyan', 'Lake', 'Blue', 'Indigo', 'Violet', 'Magenta', 'Rose']
-      const i = Math.round(hue / 30) % 12
-      return en ? enNames[i] : zh[i]
     },
     fmtMD(s) {
       if (!s) return '--'
@@ -599,6 +489,11 @@ export default {
       haptic('medium')
       if (!this.form.name.trim()) {
         uni.showToast({ title: this.i18n.profile.customNameRequired, icon: 'none', duration: 1500 })
+        return
+      }
+      // 没有不限额度的假：0 只是编辑起点，保存前必须加到 1 天以上
+      if (this.form.mode === 'day' && (Number(this.form.quota) || 0) <= 0) {
+        uni.showToast({ title: this.i18n.profile.customQuotaRequired, icon: 'none', duration: 1500 })
         return
       }
       const payload = {
@@ -1152,24 +1047,6 @@ export default {
   font-weight: 500;
 }
 
-/* 当前色名 + 色点，跟标题同一行右侧 */
-.cl-color-tag {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.cl-color-tag-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-}
-
-.cl-color-tag-text {
-  font-size: 11px;
-  color: #B09E78;
-}
-
 .cl-stepper {
   display: flex;
   align-items: center;
@@ -1186,10 +1063,6 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.cl-step-btn.off {
-  opacity: 0.4;
 }
 
 .cl-step-sign {
@@ -1250,62 +1123,10 @@ export default {
   line-height: 1;
 }
 
-.cl-quota-chips {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.cl-quota-chip {
-  flex: 1;
-  height: 32px;
-  border-radius: 999px;
-  background: #FFFFFF;
-  border: 1px solid #E3DAC4;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.cl-quota-chip.off {
-  opacity: 0.45;
-}
-
-.cl-quota-chip.plain {
-  background: #FFFFFF;
-}
-
-.cl-quota-chip.plain.on {
-  background: #FFF8EA;
-  border-color: #C97A3D;
-}
-
-.cl-quota-chip-text {
-  font-size: 11px;
-  font-weight: 400;
-  color: #6B5A38;
-}
-
-.cl-quota-chip.plain .cl-quota-chip-text {
-  color: #6B5A38;
-}
-
-.cl-quota-chip.plain.on .cl-quota-chip-text {
-  color: #C97A3D;
-}
-
-/* --- 颜色：一组协调配色 + 换一组 ---
-   设计稿里色块直接铺在卡片里：一行四格、间距 8、圆角 14、高 52；
-   ↻ 本身就是一块 40×52 的米色块，和色块同高——不需要再套一层槽。 */
+/* --- 颜色：四个色块 + ↻ 五格均分，等宽等高 --- */
 .cl-palette-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.cl-palette {
-  flex: 1;
-  display: flex;
   gap: 8px;
 }
 
@@ -1334,15 +1155,10 @@ export default {
   transform: scale(0.94);
 }
 
-.cl-palette-refresh {
-  flex-shrink: 0;
-  display: flex;
-}
-
 .cl-palette-refresh-btn {
-  width: 40px;
+  flex: 1;
   height: 52px;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #EFE9D8;
   display: flex;
   align-items: center;

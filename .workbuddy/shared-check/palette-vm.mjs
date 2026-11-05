@@ -212,21 +212,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
   })
 }
 
-// ---- P8 色名 / 日历预览（按天面板新增的展示层） ----
-{
-  const i = newInst()
-  i.settings = { language: 'zh-CN' }
-  i.form.color = '#A93B78'
-  ok(cmp(i, 'colorName') === '品红', `已知色应取中文名，实际 ${cmp(i, 'colorName')}`)
-  i.form.color = '#a93b78'
-  ok(cmp(i, 'colorName') === '品红', '大小写不同也应命中色名表')
-  i.settings = { language: 'en-US' }
-  ok(cmp(i, 'colorName') === 'Magenta', '英文环境应取英文名')
-  i.settings = { language: 'zh-CN' }
-  i.form.color = '#12A3E0'
-  const guess = cmp(i, 'colorName')
-  ok(/^[一-龥]+$/.test(guess), `未知色应回落到中文近似名，实际 ${guess}`)
-}
+// 色名展示层已随「颜色卡去标题 / 去色名」移除（P8 整段下线）。
 
 fs.rmSync(entry, { force: true })
 fs.rmSync(bundle, { force: true })
