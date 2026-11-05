@@ -529,36 +529,94 @@ export default {
       haptic('medium')
       this.reportIndex = 0
     },
+    // 最近记录＝「最近有内容的日子」，不能只认打卡。
+    // 假期的按天标记、区间假的开始日同样算一条——否则用户在日历上标完假，
+    // 回首页看不出任何变化，会以为没保存。取舍优先级与日历一致：
+    // 手动打卡 > 按天标记 > 区间假
     buildRecentRecords() {
       const entries = wioService.getEntries() || {}
-      const lang = this.settings.language
-      const dates = Object.keys(entries).sort().reverse().slice(0, 3)
+      const marks = wioService.getCustomMarks() || {}
+      const leaves = (wioService.getCustomLeaves() || []).filter(l => l.mode !== 'day' && l.start)
+      const u = this.i18n.home
+      const rows = []
 
-      this.recentRecords = dates.map(dateStr => {
-        const [y, m, d] = dateStr.split('-')
-        const dt = new Date(Number(y), Number(m) - 1, Number(d))
-        const weekday = getWeekdayName(dt.getDay(), lang)
-        const dateLabel = lang === 'en-US'
-          ? `${getMonthName(Number(m), lang)} ${Number(d)}`
-          : `${Number(m)}月${Number(d)}日 · 周${weekday}`
+      Object.keys(entries).forEach(dateStr => {
         const raw = entries[dateStr]
         // 半天记录是 { am, pm } 对象，直接拿去查 meta 会得到 [object Object] 渲染出来，
         // 这里单独拆开成「上午X · 下午Y」，颜色跟上午段走（与今天打卡卡片的取色一致）
         if (isSplitDay(raw)) {
           const p = parseDayParts(raw)
           const head = this.statusMeta(p.am || p.pm)
-          return {
-            dateLabel,
-            label: this.i18n.home.recentHalf
+          rows.push({
+            dateStr,
+            label: u.recentHalf
               .replace('{am}', this.shortStatusLabel(p.am))
               .replace('{pm}', this.shortStatusLabel(p.pm)),
             color: head.color,
             bgColor: head.bg
-          }
+          })
+          return
         }
         const m2 = this.statusMeta(raw)
-        return { dateLabel, label: m2.label, color: m2.color, bgColor: m2.bg }
+        rows.push({ dateStr, label: m2.label, color: m2.color, bgColor: m2.bg })
       })
+
+      Object.keys(marks).forEach(dateStr => {
+        if (entries[dateStr]) return // 同一天有打卡就以打卡为准
+        const info = wioService.getCustomMarkForDate(dateStr, marks)
+        if (!info) return
+        const leave = info.leave
+        // part: am/pm 时标出半天，否则只写假期名
+        let label = leave.name
+        if (info.part === 'am') label = u.recentMarkAM.replace('{n}', leave.name)
+        else if (info.part === 'pm') label = u.recentMarkPM.replace('{n}', leave.name)
+        rows.push({
+          dateStr,
+          label,
+          color: leave.color,
+          bgColor: this.hexToRgba(leave.color, 0.12)
+        })
+      })
+
+      // 区间假整段会覆盖很多天，只记「开始那天」一条，否则列表会被同一个假期刷屏
+      leaves.forEach(l => {
+        if (!l.name) return
+        rows.push({
+          dateStr: l.start,
+          label: u.recentTill.replace('{n}', l.name).replace('{d}', this.fmtMonthDay(l.end)),
+          color: l.color || '#0E6E62',
+          bgColor: this.hexToRgba(l.color || '#0E6E62', 0.12)
+        })
+      })
+
+      // 同一天只留一条（前面的优先级更高），再按日期倒序取最近三条
+      const seen = {}
+      this.recentRecords = rows
+        .filter(r => {
+          if (seen[r.dateStr]) return false
+          seen[r.dateStr] = true
+          return true
+        })
+        .sort((a, b) => (a.dateStr < b.dateStr ? 1 : -1))
+        .slice(0, 3)
+        .map(r => ({ ...r, dateLabel: this.dateLabelOf(r.dateStr) }))
+    },
+    dateLabelOf(dateStr) {
+      const [y, m, d] = String(dateStr).split('-')
+      const dt = new Date(Number(y), Number(m) - 1, Number(d))
+      const lang = this.settings.language
+      const weekday = getWeekdayName(dt.getDay(), lang)
+      return lang === 'en-US'
+        ? `${getMonthName(Number(m), lang)} ${Number(d)}`
+        : `${Number(m)}月${Number(d)}日 · 周${weekday}`
+    },
+    fmtMonthDay(dateStr) {
+      const [y, m, d] = String(dateStr || '').split('-')
+      if (!y || !m || !d) return ''
+      const lang = this.settings.language
+      return lang === 'en-US'
+        ? `${getMonthName(Number(m), lang)} ${Number(d)}`
+        : `${Number(m)}月${Number(d)}日`
     },
     // 状态 → 展示用的 { label, color, bg }。
     // 自定义假期（custom:<id>）必须现查假期对象：名字和颜色都存在那边，

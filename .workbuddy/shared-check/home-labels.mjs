@@ -103,6 +103,38 @@ i2.buildRecentRecords()
 const orphan = i2.recentRecords.find(r => r.dateLabel.indexOf('11月4日') !== -1)
 ok(orphan && orphan.label === '—', `孤儿标记应显示占位符，实际 ${orphan && orphan.label}`)
 
+// --- H6 只标了假期、没打卡：最近记录也要跟着变 ---
+// 之前数据源只有 entries，标完假回首页毫无变化，用户以为没保存
+store.wio_settings = JSON.stringify({
+  language: 'zh-CN',
+  customLeaves: [
+    { id: 'cl_day', name: '公益假', color: '#2F8F6E', mode: 'day', quota: 2, quotaRule: 'yearly' },
+    { id: 'cl_range', name: '婚假', color: '#C25B6E', mode: 'range', start: '2026-11-06', end: '2026-11-12' }
+  ],
+  customMarks: { '2026-11-05': { id: 'cl_day', part: 'am' } }
+})
+store.wio_entries = JSON.stringify({ '2026-11-01': 'home' })
+const i3 = newInst()
+i3.buildRecentRecords()
+const markRow = i3.recentRecords.find(r => r.dateLabel.indexOf('11月5日') !== -1)
+ok(!!markRow, '按天标记的日期应出现在最近记录里')
+ok(markRow && markRow.label.indexOf('公益假') !== -1, `标记应显示假期名，实际 ${markRow && markRow.label}`)
+ok(markRow && markRow.label.indexOf('上午') !== -1, `半天标记应标出上午，实际 ${markRow && markRow.label}`)
+ok(markRow && markRow.color === '#2F8F6E', `标记应用假期色，实际 ${markRow && markRow.color}`)
+
+const rangeRow = i3.recentRecords.find(r => r.label.indexOf('婚假') !== -1)
+ok(!!rangeRow, '区间假应出现在最近记录里')
+ok(rangeRow && rangeRow.label.indexOf('至 11月12日') !== -1, `区间假应带结束日，实际 ${rangeRow && rangeRow.label}`)
+ok(rangeRow && rangeRow.dateLabel.indexOf('11月6日') !== -1, `区间假按开始日记一条，实际 ${rangeRow && rangeRow.dateLabel}`)
+
+// --- H7 同一天既打卡又标假：只出一条，且是打卡（与日历取色优先级一致） ---
+store.wio_entries = JSON.stringify({ '2026-11-05': 'company', '2026-11-01': 'home' })
+const i4 = newInst()
+i4.buildRecentRecords()
+const dup = i4.recentRecords.filter(r => r.dateLabel.indexOf('11月5日') !== -1)
+ok(dup.length === 1, `同一天不该出现两条，实际 ${dup.length} 条`)
+ok(dup[0] && dup[0].label === i4.i18n.home.workFromCompany, `应保留打卡那条，实际 ${dup[0] && dup[0].label}`)
+
 fs.rmSync(entry, { force: true })
 fs.rmSync(bundle, { force: true })
 console.log(fails.length ? `\n失败 ${fails.length} 条：\n- ` + fails.join('\n- ') : '')
