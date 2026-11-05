@@ -24,7 +24,7 @@
       </view>
 
       <!-- 预设跟随模式换整行：婚产陪探亲是一次性连休（含周末），
-           公益/育儿/节育是零星按天请 -->
+           公益/育儿是零星按天请 -->
       <view v-if="!editingId" class="custom-preset-row">
         <view
           v-for="p in presets"
@@ -215,8 +215,7 @@ export default {
         paternity: this.i18n.profile.presetPaternity,
         family: this.i18n.profile.presetFamily,
         volunteer: this.i18n.profile.presetVolunteer,
-        childcare: this.i18n.profile.presetChildcare,
-        steril: this.i18n.profile.presetSteril
+        childcare: this.i18n.profile.presetChildcare
       }
       const group = (wioService.CUSTOM_LEAVE_PRESETS || {})[this.form.mode] || []
       return group.map(p => ({ ...p, name: dict[p.key] || p.key }))
@@ -478,7 +477,7 @@ export default {
     applyPreset(p) {
       this.form.name = p.name
       this.form.color = p.color
-      // 预设法定期限自带额度规则：公益假/育儿假按年发，节育假一次性
+      // 预设法定期限自带额度规则：公益假/育儿假按年发
       if (p.quotaRule) this.form.quotaRule = p.quotaRule
       // 区间型预设都是一次性连休：含周末与法定节假日，按自然日整段占用
       if (p.skipOffDays != null) this.form.skipOffDays = !!p.skipOffDays

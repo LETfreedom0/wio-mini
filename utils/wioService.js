@@ -453,8 +453,7 @@ export default {
     // 按天型＝零星请的福利假，逐天点选、按额度扣
     day: [
       { key: 'volunteer', color: '#2F8F6E', quotaRule: 'yearly' },
-      { key: 'childcare', color: '#D4A33F', quotaRule: 'yearly' },
-      { key: 'steril', color: '#3C6FB0', quotaRule: 'total' }
+      { key: 'childcare', color: '#D4A33F', quotaRule: 'yearly' }
     ]
   },
 
