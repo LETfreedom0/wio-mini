@@ -95,10 +95,19 @@
       </view>
 
       <!-- ===== 按天点选：只建额度，哪天休了点哪天 ===== -->
-      <view v-else class="cl-range-card">
-        <view class="cl-quota-head">
-          <text class="cl-quota-cap">{{ i18n.profile.customQuotaCap }}</text>
-          <text class="cl-quota-head-text">{{ quotaHeadText }}</text>
+      <view v-else class="cl-day-card">
+        <view class="cl-card-head">
+          <text class="cl-card-title">{{ i18n.profile.customQuotaCap }}</text>
+          <!-- 规则是「额度怎么算」的修饰，收进标题右侧，不再单独占一整行；
+               两枚小药丸比一整行「每年重置 / 一次性」省 20px 高度 -->
+          <view class="cl-rule-mini">
+            <view class="cl-rule-mini-pill" :class="{ active: form.quotaRule === 'yearly' }" @click="setRule('yearly')">
+              <text class="cl-rule-mini-text">{{ i18n.profile.customRuleYearly }}</text>
+            </view>
+            <view class="cl-rule-mini-pill" :class="{ active: form.quotaRule === 'total' }" @click="setRule('total')">
+              <text class="cl-rule-mini-text">{{ i18n.profile.customRuleTotal }}</text>
+            </view>
+          </view>
         </view>
 
         <!-- 数字只出现这一处：两个圆钮直接夹着它，改的时候不用满屏找数字 -->
@@ -114,6 +123,11 @@
         <view v-if="!usage.unlimited" class="cl-quota-bar">
           <view class="cl-quota-fill" :style="{ width: quotaPercent + '%', background: form.color }"></view>
         </view>
+        <!-- 进度条两端各标一个数：只画条不标数，用户还得自己反推剩多少 -->
+        <view v-if="!usage.unlimited" class="cl-quota-scale">
+          <text class="cl-quota-scale-text">{{ usedLabel }}</text>
+          <text class="cl-quota-scale-text">{{ leftLabel }}</text>
+        </view>
 
         <!-- 两枚 chip：加半天 / 不限额度。
              半天是给「上午请事假、下午照常上班」这类场景留的入口，
@@ -128,37 +142,58 @@
         </view>
       </view>
 
-      <!-- 额度规则：只对按天型有意义，区间型没有额度概念 -->
-      <view v-if="form.mode === 'day'" class="cl-rule-seg">
-        <view class="cl-rule-pill" :class="{ active: form.quotaRule === 'yearly' }" @click="setRule('yearly')">
-          <text class="cl-rule-text">{{ i18n.profile.customRuleYearly }}</text>
+      <!-- 颜色：一组协调配色，点色块选中，点 ↻ 换下一组。
+           单独成卡是因为它是这一屏唯一「感性」的部分——额度是数字，颜色是审美，
+           混在一起会互相抢注意力。 -->
+      <view class="cl-day-card">
+        <view class="cl-card-head">
+          <text class="cl-card-title">{{ i18n.profile.customColorLabel }}</text>
+          <view class="cl-color-tag">
+            <view class="cl-color-tag-dot" :style="{ background: form.color }"></view>
+            <text class="cl-color-tag-text">{{ colorName }}</text>
+          </view>
         </view>
-        <view class="cl-rule-pill" :class="{ active: form.quotaRule === 'total' }" @click="setRule('total')">
-          <text class="cl-rule-text">{{ i18n.profile.customRuleTotal }}</text>
+        <view class="cl-palette-row">
+          <view class="cl-palette">
+            <view
+              v-for="(c, i) in paletteColors"
+              :key="i"
+              class="cl-swatch"
+              :class="{ morph: morphing }"
+              hover-class="cl-swatch-hover"
+              :style="swatchStyle(c)"
+              @click="pickColor(c)"
+            ></view>
+          </view>
+          <!-- ↻ 也装在自己的米色槽里，否则一个裸按钮挨着四个带槽的色块，看着就小一号 -->
+          <view class="cl-palette-refresh">
+            <view class="cl-palette-refresh-btn" hover-class="cl-palette-refresh-hover" @click="refreshPalette">
+              <text class="cl-palette-refresh-icon" :style="{ transform: 'rotate(' + paletteTurns * 360 + 'deg)' }">↻</text>
+            </view>
+          </view>
         </view>
       </view>
 
-      <!-- 颜色：一组协调配色，点色块选中，点 ↻ 换下一组。
-           比原来的色相条好在「挑出来的色一定配得上」：色相条能取任意色，
-           也能轻易取出两个肉眼难分的相近色；这里每组都由人工配好关系。
-           当前选中色永远留在行内（不在这一组就顶掉最后一格），
-           否则换组之后选中态会凭空消失，看着像没选上。 -->
-      <view class="cl-palette-row">
-        <view class="cl-palette">
-          <view
-            v-for="(c, i) in paletteColors"
-            :key="i"
-            class="cl-swatch"
-            :class="{ morph: morphing }"
-            hover-class="cl-swatch-hover"
-            :style="swatchStyle(c)"
-            @click="pickColor(c)"
-          ></view>
+      <!-- 预览：直接画日历格子。用文字描述「浅底 + 同色文字」用户还得脑补，
+           这里按日历的真实渲染（整天浅底同色字 / 半天底部色条）1:1 摆出来。 -->
+      <view v-if="form.mode === 'day'" class="cl-day-card">
+        <view class="cl-card-head">
+          <text class="cl-card-title">{{ i18n.profile.customPreviewTitle }}</text>
         </view>
-        <!-- ↻ 也装在自己的米色槽里，否则一个裸按钮挨着四个带槽的色块，看着就小一号 -->
-        <view class="cl-palette-refresh">
-          <view class="cl-palette-refresh-btn" hover-class="cl-palette-refresh-hover" @click="refreshPalette">
-            <text class="cl-palette-refresh-icon" :style="{ transform: 'rotate(' + paletteTurns * 360 + 'deg)' }">↻</text>
+        <view class="cl-preview-row">
+          <view class="cl-pv-cell">
+            <text class="cl-pv-num">{{ previewDays[0].day }}</text>
+          </view>
+          <view class="cl-pv-cell" :style="{ background: previewTint }">
+            <text class="cl-pv-num" :style="{ color: form.color }">{{ previewDays[1].day }}</text>
+          </view>
+          <view class="cl-pv-cell">
+            <text class="cl-pv-num">{{ previewDays[2].day }}</text>
+            <view class="cl-pv-bar" :style="{ background: form.color }"></view>
+          </view>
+          <view class="cl-pv-legend">
+            <text class="cl-pv-line">{{ previewWholeText }}</text>
+            <text class="cl-pv-line sub">{{ previewHalfText }}</text>
           </view>
         </view>
       </view>
@@ -193,6 +228,28 @@ const PALETTES = [
 // 收缩到位 → 换色 → 弹回：与 keyframes 里的 42% / 58% 同源（0.52s * 0.48 ≈ 250ms）
 const MORPH_SWAP_MS = 250
 const MORPH_END_MS = 540
+
+// 色块只给眼睛看，名字是给「想跟别人描述」用的：选色时旁边标一个「紫罗兰」，
+// 比标 #A93B78 有用。覆盖色板 12 色 + 预设色 + 几组常用色，查不到的按色相兜底。
+const COLOR_NAMES = {
+  '#0E6E62': ['墨绿', 'Pine'],
+  '#3C6FB0': ['湖蓝', 'Lake'],
+  '#7A5AA8': ['紫罗兰', 'Violet'],
+  '#D4A33F': ['琥珀', 'Amber'],
+  '#C25B6E': ['玫瑰', 'Rose'],
+  '#C97A3D': ['陶土', 'Clay'],
+  '#8A8F4A': ['橄榄', 'Olive'],
+  '#2F8F6E': ['青竹', 'Bamboo'],
+  '#41598A': ['藏青', 'Navy'],
+  '#8C4F86': ['紫藤', 'Wisteria'],
+  '#A93B78': ['品红', 'Magenta'],
+  '#C24A7E': ['桃粉', 'Blush'],
+  '#6B7379': ['石墨', 'Graphite'],
+  '#1E7A8C': ['孔雀', 'Peacock'],
+  '#B23A32': ['砖红', 'Brick'],
+  '#8B95A1': ['银灰', 'Silver']
+}
+
 
 export default {
   name: 'CustomLeaveSheet',
@@ -269,6 +326,37 @@ export default {
       const tpl = this.form.skipOffDays ? p.customSkipOffOn : p.customSkipOffHint
       return tpl.replace('{n}', this.offDays)
     },
+    // ---- 颜色名 / 日历预览 ----
+    colorName() {
+      const hex = String(this.form.color || '').toUpperCase()
+      const hit = COLOR_NAMES[hex]
+      if (hit) return this.settings.language === 'en-US' ? hit[1] : hit[0]
+      return this.hueNameOf(hex)
+    },
+    // 预览用「今天起连着三天」：中间那格当整天标记，右边那格当只休上午。
+    // 日期跟着真实日历走，月末跨月（30 / 31 / 1）也照实显示，不做假日期。
+    previewDays() {
+      const base = new Date()
+      return [0, 1, 2].map(offset => {
+        const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + offset)
+        return {
+          day: d.getDate(),
+          label: this.settings.language === 'en-US'
+            ? `${d.getMonth() + 1}/${d.getDate()}`
+            : `${d.getMonth() + 1}月${d.getDate()}日`
+        }
+      })
+    },
+    // 整天标记在日历里的真实观感：16% 同色底 + 同色数字
+    previewTint() {
+      return this.hexToRgba(this.form.color, 0.16)
+    },
+    previewWholeText() {
+      return this.i18n.profile.customPreviewWhole.replace('{d}', this.previewDays[1].label)
+    },
+    previewHalfText() {
+      return this.i18n.profile.customPreviewHalf.replace('{d}', this.previewDays[2].label)
+    },
     // 日期条：≤7 天逐日显示；超过 7 天折叠成「前 5 天 + … + 末日」
     // 勾了「跳过周末与公共假日」后，非工作日（周末 + 法定假日，调休上班日除外）
     // 一律不着色——跟日历那边的口径保持一致，否则条上有色、日历上没色。
@@ -290,12 +378,6 @@ export default {
     },
     quotaUnitText() {
       return this.usage.unlimited ? '' : this.i18n.profile.customQuotaUnit
-    },
-    // 卡片右上角只留一处数字：有限额度看剩余，不限或超额了看已用
-    quotaHeadText() {
-      const u = this.usage
-      if (u.unlimited || u.over > 0) return this.usedLabel
-      return this.leftLabel
     },
     usage() {
       if (this.form.mode !== 'day') {
@@ -499,6 +581,36 @@ export default {
       haptic('light')
       this.form.skipOffDays = !this.form.skipOffDays
     },
+    hexToRgba(hex, alpha) {
+      const h = String(hex || '').replace('#', '')
+      if (h.length !== 6) return `rgba(107,115,121,${alpha})`
+      const r = parseInt(h.slice(0, 2), 16)
+      const g = parseInt(h.slice(2, 4), 16)
+      const b = parseInt(h.slice(4, 6), 16)
+      return `rgba(${r},${g},${b},${alpha})`
+    },
+    // 兜底色名：按色相归一个近似名。宁可粗（「蓝」）也不要给用户看 #A1B2C3。
+    hueNameOf(hex) {
+      const en = this.settings.language === 'en-US'
+      const h = String(hex || '').replace('#', '')
+      if (h.length !== 6) return en ? 'Custom' : '自定义'
+      const r = parseInt(h.slice(0, 2), 16) / 255
+      const g = parseInt(h.slice(2, 4), 16) / 255
+      const b = parseInt(h.slice(4, 6), 16) / 255
+      const max = Math.max(r, g, b)
+      const min = Math.min(r, g, b)
+      const d = max - min
+      if (d < 0.08) return en ? 'Grey' : '灰'
+      let deg
+      if (max === r) deg = ((g - b) / d) % 6
+      else if (max === g) deg = (b - r) / d + 2
+      else deg = (r - g) / d + 4
+      const hue = Math.round((deg * 60 + 360) % 360)
+      const zh = ['红', '橙', '金', '黄绿', '绿', '青绿', '青', '湖蓝', '蓝', '靛蓝', '紫', '品红', '玫红']
+      const enNames = ['Red', 'Orange', 'Gold', 'Lime', 'Green', 'Teal', 'Cyan', 'Lake', 'Blue', 'Indigo', 'Violet', 'Magenta', 'Rose']
+      const i = Math.round(hue / 30) % 12
+      return en ? enNames[i] : zh[i]
+    },
     fmtMD(s) {
       if (!s) return '--'
       const [, m, d] = s.split('-')
@@ -636,6 +748,14 @@ export default {
   gap: 15px;
   animation: modal-pop 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
   max-height: 86vh;
+  /* 按天模式现在有三张卡（额度 / 颜色 / 预览），小屏会顶到上限；
+     允许滚动，并锁住子项不被 flex 压扁，否则卡片会被挤成一条 */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cl-modal-card > * {
+  flex-shrink: 0;
 }
 
 @keyframes modal-pop {
@@ -1021,21 +1141,78 @@ export default {
   left: 20px;
 }
 
-/* --- 额度 --- */
-.cl-quota-head {
+/* --- 按天卡：额度 / 颜色 / 预览共用一套卡片骨架 --- */
+.cl-day-card {
+  background: #FAF7F0;
+  border: 1px solid rgba(21, 24, 28, 0.06);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cl-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.cl-quota-cap {
+.cl-card-title {
   font-size: 11.5px;
   color: #8A9299;
+  letter-spacing: 0.3px;
 }
 
-.cl-quota-head-text {
+/* 规则药丸：两枚并排，选中的那枚浮白底，比一整行开关省一半高度 */
+.cl-rule-mini {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 100px;
+  background: #EFEBE0;
+}
+
+.cl-rule-mini-pill {
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cl-rule-mini-pill.active {
+  background: #FFFFFF;
+}
+
+.cl-rule-mini-text {
   font-size: 10.5px;
   color: #8A9299;
+  line-height: 1;
+}
+
+.cl-rule-mini-pill.active .cl-rule-mini-text {
+  color: #8A5A00;
+  font-weight: 600;
+}
+
+/* 当前色名 + 色点，跟标题同一行右侧 */
+.cl-color-tag {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cl-color-tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.cl-color-tag-text {
+  font-size: 11px;
+  color: #6B7378;
 }
 
 .cl-stepper {
@@ -1103,6 +1280,74 @@ export default {
   opacity: 0.85;
 }
 
+.cl-quota-scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  /* 紧贴进度条，读成「条 + 两端刻度」一整块 */
+  margin-top: -6px;
+}
+
+.cl-quota-scale-text {
+  font-size: 10.5px;
+  color: #A0A6AD;
+  line-height: 1;
+}
+
+/* --- 日历预览：42px 与日历格子 1:1，看到的即所得 --- */
+.cl-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cl-pv-cell {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  border: 1px solid rgba(21, 24, 28, 0.07);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.cl-pv-num {
+  font-size: 16px;
+  color: #2B2F33;
+  line-height: 1;
+}
+
+/* 半天标记：底部 14×3 色条，与日历里的 custom-mark-bar 同规格 */
+.cl-pv-bar {
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  margin-left: -7px;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.cl-pv-legend {
+  flex: 1;
+  padding-left: 4px;
+  min-width: 0;
+}
+
+.cl-pv-line {
+  display: block;
+  font-size: 11px;
+  color: #3A4148;
+  line-height: 1.7;
+}
+
+.cl-pv-line.sub {
+  color: #8A9299;
+}
+
 .cl-quota-chips {
   display: flex;
   align-items: center;
@@ -1145,37 +1390,6 @@ export default {
   color: #B07A22;
 }
 
-/* --- 额度规则 --- */
-.cl-rule-seg {
-  display: flex;
-  gap: 6px;
-}
-
-.cl-rule-pill {
-  flex: 1;
-  height: 34px;
-  border-radius: 100px;
-  background: #F3F5F6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.cl-rule-pill.active {
-  background: #FFF6E5;
-}
-
-.cl-rule-text {
-  font-size: 11px;
-  font-weight: 500;
-  color: #6B7378;
-}
-
-.cl-rule-pill.active .cl-rule-text {
-  color: #8A5A00;
-  font-weight: 600;
-}
-
 /* --- 颜色：一组协调配色 + 换一组 --- */
 .cl-palette-row {
   display: flex;
@@ -1193,7 +1407,7 @@ export default {
 
 .cl-swatch {
   flex: 1;
-  height: 46px;
+  height: 52px;
   border-radius: 11px;
   /* 换色本身也留过渡：动画收拢时颜色是「化」过去的，不是硬切 */
   transition: background-color 0.34s ease, box-shadow 0.34s ease, transform 0.18s ease;
