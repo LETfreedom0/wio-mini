@@ -677,19 +677,20 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 28px;
+  padding: 0 18px;
   box-sizing: border-box;
 }
 
 .cl-modal-card {
   width: 100%;
   box-sizing: border-box;
-  background: #FFFFFF;
-  border-radius: 20px;
-  padding: 20px 20px 16px;
+  background: #FFFDF8;
+  border: 1px solid rgba(192, 138, 45, 0.28);
+  border-radius: 18px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 14px;
   animation: modal-pop 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
   max-height: 86vh;
   /* 按天模式现在有三张卡（额度 / 颜色 / 预览），小屏会顶到上限；
@@ -724,8 +725,8 @@ export default {
 }
 
 .cl-modal-title {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 500;
   color: #15181C;
 }
 
@@ -756,17 +757,17 @@ export default {
 
 .cl-mode-item {
   flex: 1;
-  height: 40px;
+  height: 38px;
   border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 6px;
 }
 
 .cl-mode-item.active {
   background: #FFFFFF;
-  box-shadow: 0 2px 9px rgba(14, 110, 98, 0.15);
+  border: 1px solid #DDE6E3;
 }
 
 /* 图标：区间 = 两端方块连一线，一天 = 一个点 */
@@ -821,15 +822,15 @@ export default {
 }
 
 .cl-mode-title {
-  font-size: 13.5px;
-  font-weight: 500;
-  color: #9AA1A8;
+  font-size: 12px;
+  font-weight: 400;
+  color: #6B7379;
 }
 
 .cl-mode-item.active .cl-mode-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0B5248;
+  font-size: 12px;
+  font-weight: 500;
+  color: #0E6E62;
 }
 
 /* --- 预设 chips --- */
@@ -846,13 +847,13 @@ export default {
   align-items: center;
   gap: 5px;
   border-radius: 100px;
-  background: #F3F5F6;
-  border: 1px solid #F3F5F6;
+  background: #F1EBDC;
+  border: 1px solid #F1EBDC;
 }
 
 .custom-preset-chip.active {
-  background: #EAF3F1;
-  border-color: #0E6E62;
+  background: #FFFFFF;
+  border-color: #CFE0DB;
 }
 
 .custom-preset-dot {
@@ -863,21 +864,22 @@ export default {
 
 .custom-preset-text {
   font-size: 11px;
-  color: #3C444B;
-  font-weight: 500;
+  color: #8A7A5C;
+  font-weight: 400;
 }
 
 .custom-preset-chip.active .custom-preset-text {
-  color: #0B5248;
-  font-weight: 600;
+  color: #0E6E62;
+  font-weight: 500;
 }
 
 .custom-input {
-  height: 46px;
-  border: 1px solid #E7E9EB;
-  border-radius: 10px;
+  height: 44px;
+  border: 1px solid #EDE6D4;
+  border-radius: 12px;
+  background: #F8F5EC;
   padding: 0 14px;
-  font-size: 14px;
+  font-size: 13px;
   color: #15181C;
   box-sizing: border-box;
 }
@@ -1094,10 +1096,10 @@ export default {
   left: 20px;
 }
 
-/* --- 按天卡：额度 / 颜色 / 预览共用一套卡片骨架 --- */
+/* --- 按天卡：额度 / 颜色共用一套卡片骨架（数值取自设计稿） --- */
 .cl-day-card {
-  background: #FAF7F0;
-  border: 1px solid rgba(21, 24, 28, 0.06);
+  background: #FAF7EF;
+  border: 1px solid rgba(192, 138, 45, 0.2);
   border-radius: 14px;
   padding: 14px;
   display: flex;
@@ -1112,24 +1114,23 @@ export default {
 }
 
 .cl-card-title {
-  font-size: 11.5px;
+  font-size: 11px;
   color: #8A9299;
   letter-spacing: 0.3px;
 }
 
-/* 规则药丸：两枚并排，选中的那枚浮白底，比一整行开关省一半高度 */
+/* 规则药丸：两枚各自带米底，选中的那枚浮白底 + 绿边（设计稿口径） */
 .cl-rule-mini {
   display: flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 100px;
-  background: #EFEBE0;
+  gap: 6px;
 }
 
 .cl-rule-mini-pill {
-  height: 22px;
-  padding: 0 9px;
-  border-radius: 100px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #F1EBDC;
+  border: 1px solid #F1EBDC;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1137,17 +1138,18 @@ export default {
 
 .cl-rule-mini-pill.active {
   background: #FFFFFF;
+  border-color: #CFE0DB;
 }
 
 .cl-rule-mini-text {
-  font-size: 10.5px;
-  color: #8A9299;
+  font-size: 11px;
+  color: #8A7A5C;
   line-height: 1;
 }
 
 .cl-rule-mini-pill.active .cl-rule-mini-text {
-  color: #8A5A00;
-  font-weight: 600;
+  color: #0E6E62;
+  font-weight: 500;
 }
 
 /* 当前色名 + 色点，跟标题同一行右侧 */
@@ -1165,22 +1167,22 @@ export default {
 
 .cl-color-tag-text {
   font-size: 11px;
-  color: #6B7378;
+  color: #B09E78;
 }
 
 .cl-stepper {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 14px;
+  justify-content: space-between;
+  margin: 10px 0 12px;
 }
 
 .cl-step-btn {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: #FFFFFF;
-  box-shadow: 0 1px 3px rgba(21, 24, 28, 0.1);
+  border: 1px solid #E3DAC4;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1191,46 +1193,47 @@ export default {
 }
 
 .cl-step-sign {
-  font-size: 15px;
-  font-weight: 500;
-  color: #B07A22;
+  font-size: 18px;
+  font-weight: 400;
+  color: #6B5A38;
   line-height: 1;
 }
 
 .cl-step-num-row {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 5px;
 }
 
 .cl-step-num {
-  font-size: 30px;
-  font-weight: 700;
+  font-size: 34px;
+  font-weight: 500;
   color: #15181C;
-  line-height: 1.1;
+  line-height: 1;
+  letter-spacing: -0.5px;
 }
 
 .cl-step-num.word {
   font-size: 21px;
   font-weight: 600;
+  letter-spacing: 0;
 }
 
 .cl-step-unit {
-  font-size: 12px;
-  color: #6B7378;
+  font-size: 13px;
+  color: #8A7A5C;
 }
 
 .cl-quota-bar {
-  height: 5px;
-  border-radius: 100px;
-  background: #F2E5C6;
+  height: 6px;
+  border-radius: 3px;
+  background: #EAE3D0;
   overflow: hidden;
 }
 
 .cl-quota-fill {
   height: 100%;
-  border-radius: 100px;
-  opacity: 0.85;
+  border-radius: 3px;
 }
 
 .cl-quota-scale {
@@ -1242,8 +1245,8 @@ export default {
 }
 
 .cl-quota-scale-text {
-  font-size: 10.5px;
-  color: #A0A6AD;
+  font-size: 11px;
+  color: #8A7A5C;
   line-height: 1;
 }
 
@@ -1254,10 +1257,11 @@ export default {
 }
 
 .cl-quota-chip {
-  height: 26px;
-  padding: 0 11px;
-  border-radius: 100px;
-  background: #FFF3DC;
+  flex: 1;
+  height: 32px;
+  border-radius: 999px;
+  background: #FFFFFF;
+  border: 1px solid #E3DAC4;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1268,46 +1272,47 @@ export default {
 }
 
 .cl-quota-chip.plain {
-  background: #F3F5F6;
+  background: #FFFFFF;
 }
 
 .cl-quota-chip.plain.on {
-  background: #FFF3DC;
+  background: #FFF8EA;
+  border-color: #C97A3D;
 }
 
 .cl-quota-chip-text {
   font-size: 11px;
-  font-weight: 500;
-  color: #B07A22;
+  font-weight: 400;
+  color: #6B5A38;
 }
 
 .cl-quota-chip.plain .cl-quota-chip-text {
-  color: #6B7378;
+  color: #6B5A38;
 }
 
 .cl-quota-chip.plain.on .cl-quota-chip-text {
-  color: #B07A22;
+  color: #C97A3D;
 }
 
-/* --- 颜色：一组协调配色 + 换一组 --- */
+/* --- 颜色：一组协调配色 + 换一组 ---
+   设计稿里色块直接铺在卡片里：一行四格、间距 8、圆角 14、高 52；
+   ↻ 本身就是一块 40×52 的米色块，和色块同高——不需要再套一层槽。 */
 .cl-palette-row {
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 
 .cl-palette {
   flex: 1;
   display: flex;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 15px;
-  background: #F3F1EA;
+  gap: 8px;
 }
 
 .cl-swatch {
   flex: 1;
   height: 52px;
-  border-radius: 11px;
+  border-radius: 14px;
   /* 换色本身也留过渡：动画收拢时颜色是「化」过去的，不是硬切 */
   transition: background-color 0.34s ease, box-shadow 0.34s ease, transform 0.18s ease;
 }
@@ -1319,30 +1324,26 @@ export default {
 /* 换组动效：方形 → 圆点（此时换色）→ 弹回方形。
    0.52s 里 42%~58% 是「缩到位」的静止窗口，JS 在 250ms 换色正好落在这段 */
 @keyframes swatch-morph {
-  0%   { border-radius: 11px; transform: scale(1); }
+  0%   { border-radius: 14px; transform: scale(1); }
   42%  { border-radius: 50%; transform: scale(0.24); }
   58%  { border-radius: 50%; transform: scale(0.24); }
-  100% { border-radius: 11px; transform: scale(1); }
+  100% { border-radius: 14px; transform: scale(1); }
 }
 
 .cl-swatch-hover {
   transform: scale(0.94);
 }
 
-/* ↻ 的米色槽：与色块槽同宽内外边距，两个「槽」并排才等高 */
 .cl-palette-refresh {
-  margin-left: 8px;
-  padding: 6px;
-  border-radius: 15px;
-  background: #F3F1EA;
+  flex-shrink: 0;
   display: flex;
 }
 
 .cl-palette-refresh-btn {
-  width: 44px;
-  height: 46px;
-  border-radius: 11px;
-  background: #E9E4D6;
+  width: 40px;
+  height: 52px;
+  border-radius: 12px;
+  background: #EFE9D8;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1362,10 +1363,10 @@ export default {
 
 /* --- 保存 / 删除 --- */
 .custom-save-btn {
-  margin-top: 4px;
+  margin-top: 2px;
   height: 46px;
-  border-radius: 23px;
-  background: #0B5248;
+  border-radius: 14px;
+  background: #0E6E62;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1376,19 +1377,19 @@ export default {
 }
 
 .custom-save-text {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   color: #FFFFFF;
 }
 
 .custom-delete-btn {
   display: flex;
   justify-content: center;
-  padding: 2px 0;
+  padding: 6px 0 2px;
 }
 
 .custom-delete-text {
-  font-size: 13px;
-  color: #C25B6E;
+  font-size: 11px;
+  color: #9AA1A8;
 }
 </style>
