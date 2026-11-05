@@ -226,31 +226,6 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
   i.form.color = '#12A3E0'
   const guess = cmp(i, 'colorName')
   ok(/^[一-龥]+$/.test(guess), `未知色应回落到中文近似名，实际 ${guess}`)
-
-  const days = cmp(i, 'previewDays')
-  ok(days.length === 3, '预览应给出 3 天')
-  const today = new Date()
-  ok(days[0].day === today.getDate(), '预览首格应是今天')
-  const d3 = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2)
-  ok(days[2].day === d3.getDate(), '预览末格应是后天')
-  ok(days.every(d => typeof d.label === 'string' && d.label.length > 0), '每格都要有日期文案')
-
-  i.form.color = '#0E6E62'
-  ok(cmp(i, 'previewTint') === 'rgba(14,110,98,0.16)', `浅底应是 16% 同色，实际 ${cmp(i, 'previewTint')}`)
-  i.form.color = 'oops'
-  ok(cmp(i, 'previewTint').indexOf('rgba(') === 0, '异常色值也不能产出非法 CSS')
-
-  // 预览文案内部走 this.i18n / this.previewDays，纯对象没有 Vue 的 getter，显式挂上
-  const iv = newInst()
-  iv.settings = { language: 'zh-CN' }
-  iv.form.color = '#0E6E62'
-  Object.defineProperty(iv, 'previewDays', { get: () => opts.computed.previewDays.call(iv), configurable: true })
-  Object.defineProperty(iv, 'i18n', {
-    get: () => ({ profile: { customPreviewWhole: '{d} 整天', customPreviewHalf: '{d} 只休上午' } }),
-    configurable: true
-  })
-  ok(cmp(iv, 'previewWholeText').indexOf('整天') !== -1, '整天文案缺失')
-  ok(cmp(iv, 'previewHalfText').indexOf('只休上午') !== -1, '半天文案缺失')
 }
 
 fs.rmSync(entry, { force: true })

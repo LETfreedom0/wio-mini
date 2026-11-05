@@ -174,30 +174,6 @@
         </view>
       </view>
 
-      <!-- 预览：直接画日历格子。用文字描述「浅底 + 同色文字」用户还得脑补，
-           这里按日历的真实渲染（整天浅底同色字 / 半天底部色条）1:1 摆出来。 -->
-      <view v-if="form.mode === 'day'" class="cl-day-card">
-        <view class="cl-card-head">
-          <text class="cl-card-title">{{ i18n.profile.customPreviewTitle }}</text>
-        </view>
-        <view class="cl-preview-row">
-          <view class="cl-pv-cell">
-            <text class="cl-pv-num">{{ previewDays[0].day }}</text>
-          </view>
-          <view class="cl-pv-cell" :style="{ background: previewTint }">
-            <text class="cl-pv-num" :style="{ color: form.color }">{{ previewDays[1].day }}</text>
-          </view>
-          <view class="cl-pv-cell">
-            <text class="cl-pv-num">{{ previewDays[2].day }}</text>
-            <view class="cl-pv-bar" :style="{ background: form.color }"></view>
-          </view>
-          <view class="cl-pv-legend">
-            <text class="cl-pv-line">{{ previewWholeText }}</text>
-            <text class="cl-pv-line sub">{{ previewHalfText }}</text>
-          </view>
-        </view>
-      </view>
-
       <view class="custom-save-btn" @click="save">
         <text class="custom-save-text">{{ i18n.profile.customSave }}</text>
       </view>
@@ -326,36 +302,12 @@ export default {
       const tpl = this.form.skipOffDays ? p.customSkipOffOn : p.customSkipOffHint
       return tpl.replace('{n}', this.offDays)
     },
-    // ---- 颜色名 / 日历预览 ----
+    // ---- 颜色名 ----
     colorName() {
       const hex = String(this.form.color || '').toUpperCase()
       const hit = COLOR_NAMES[hex]
       if (hit) return this.settings.language === 'en-US' ? hit[1] : hit[0]
       return this.hueNameOf(hex)
-    },
-    // 预览用「今天起连着三天」：中间那格当整天标记，右边那格当只休上午。
-    // 日期跟着真实日历走，月末跨月（30 / 31 / 1）也照实显示，不做假日期。
-    previewDays() {
-      const base = new Date()
-      return [0, 1, 2].map(offset => {
-        const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + offset)
-        return {
-          day: d.getDate(),
-          label: this.settings.language === 'en-US'
-            ? `${d.getMonth() + 1}/${d.getDate()}`
-            : `${d.getMonth() + 1}月${d.getDate()}日`
-        }
-      })
-    },
-    // 整天标记在日历里的真实观感：16% 同色底 + 同色数字
-    previewTint() {
-      return this.hexToRgba(this.form.color, 0.16)
-    },
-    previewWholeText() {
-      return this.i18n.profile.customPreviewWhole.replace('{d}', this.previewDays[1].label)
-    },
-    previewHalfText() {
-      return this.i18n.profile.customPreviewHalf.replace('{d}', this.previewDays[2].label)
     },
     // 日期条：≤7 天逐日显示；超过 7 天折叠成「前 5 天 + … + 末日」
     // 勾了「跳过周末与公共假日」后，非工作日（周末 + 法定假日，调休上班日除外）
@@ -580,14 +532,6 @@ export default {
     toggleSkipOffDays() {
       haptic('light')
       this.form.skipOffDays = !this.form.skipOffDays
-    },
-    hexToRgba(hex, alpha) {
-      const h = String(hex || '').replace('#', '')
-      if (h.length !== 6) return `rgba(107,115,121,${alpha})`
-      const r = parseInt(h.slice(0, 2), 16)
-      const g = parseInt(h.slice(2, 4), 16)
-      const b = parseInt(h.slice(4, 6), 16)
-      return `rgba(${r},${g},${b},${alpha})`
     },
     // 兜底色名：按色相归一个近似名。宁可粗（「蓝」）也不要给用户看 #A1B2C3。
     hueNameOf(hex) {
@@ -1301,60 +1245,6 @@ export default {
   font-size: 10.5px;
   color: #A0A6AD;
   line-height: 1;
-}
-
-/* --- 日历预览：42px 与日历格子 1:1，看到的即所得 --- */
-.cl-preview-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.cl-pv-cell {
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  background: #FFFFFF;
-  border: 1px solid rgba(21, 24, 28, 0.07);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  flex-shrink: 0;
-}
-
-.cl-pv-num {
-  font-size: 16px;
-  color: #2B2F33;
-  line-height: 1;
-}
-
-/* 半天标记：底部 14×3 色条，与日历里的 custom-mark-bar 同规格 */
-.cl-pv-bar {
-  position: absolute;
-  bottom: 5px;
-  left: 50%;
-  margin-left: -7px;
-  width: 14px;
-  height: 3px;
-  border-radius: 2px;
-}
-
-.cl-pv-legend {
-  flex: 1;
-  padding-left: 4px;
-  min-width: 0;
-}
-
-.cl-pv-line {
-  display: block;
-  font-size: 11px;
-  color: #3A4148;
-  line-height: 1.7;
-}
-
-.cl-pv-line.sub {
-  color: #8A9299;
 }
 
 .cl-quota-chips {
