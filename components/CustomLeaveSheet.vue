@@ -850,7 +850,7 @@ export default {
 }
 
 .cl-connector {
-  width: 72px;
+  width: 86px;
   height: 40px;
   display: flex;
   flex-direction: column;
@@ -867,19 +867,23 @@ export default {
 
 .cl-duration-pill {
   height: 21px;
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: 100px;
   background: linear-gradient(135deg, #D9A947, #A97A1F);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  /* 两位数工作日（如「17 个工作日」）刚好挤满 72px 会折行，压死单行 */
+  max-width: 100%;
 }
 
 .cl-duration-text {
   font-size: 10px;
   font-weight: 700;
   color: #FFFFFF;
+  white-space: nowrap;
+  line-height: 21px;
 }
 
 /* --- 逐日条 --- */

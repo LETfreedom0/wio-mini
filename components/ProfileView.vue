@@ -108,10 +108,7 @@
           :class="{ 'quota-block-last': idx === customDayLeaves.length - 1 }"
         >
           <view class="quota-row">
-            <view class="quota-name-row">
-              <view class="quota-dot" :style="{ background: l.color }"></view>
-              <text class="quota-label">{{ l.name }}</text>
-            </view>
+            <text class="quota-label">{{ l.name }}</text>
             <view class="quota-values">
               <text class="quota-value" :style="{ color: l.color }">{{ l.label }}</text>
               <text class="quota-sub" :class="{ 'quota-empty': l.full }">{{ l.sub }}</text>
@@ -1297,19 +1294,6 @@ export default {
 }
 
 /* 自定义假期的只读进度条（不像年假/病假那样带 slider） */
-.quota-name-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.quota-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
 .quota-track {
   height: 5px;
   background-color: #EFF1F3;
