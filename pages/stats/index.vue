@@ -123,12 +123,33 @@
         <text class="section-sub">{{ i18n.profile.statsOtTrendSub }}</text>
         <view class="ot-chart-wrap">
           <view class="ot-chart" :style="{ backgroundImage: otChartBg }"></view>
-          <view v-if="otPeak" class="ot-peak" :style="{ left: otPeak.left, top: otPeak.top }">
-            <text class="ot-peak-text">{{ otPeak.hours }}</text>
+          <!-- 选中的月份在线上的落点：气泡再轻，没有这个点会读不出「标的是哪个点」 -->
+          <view
+            v-if="otMarker && activeOtMonth > -1"
+            class="ot-dot"
+            :style="{ left: otMarker.left, top: otMarker.top }"
+          ></view>
+          <view
+            v-if="otMarker"
+            class="ot-peak"
+            :class="{ picked: activeMonth > -1 }"
+            :style="{ left: otMarker.left, top: otMarker.top }"
+          >
+            <text class="ot-peak-text">{{ otMarker.hours }}</text>
+          </view>
+          <!-- 折线是背景图画出来的，没有节点可点：铺 12 个等分热区接手点击 -->
+          <view v-if="hasOt" class="ot-hit-row">
+            <view v-for="(v, i) in otSeries" :key="i" class="ot-hit" @click="pickMonth(i)"></view>
           </view>
         </view>
         <view class="month-labels">
-          <text v-for="m in annual.monthly" :key="m.month" class="month-label">{{ m.month }}</text>
+          <text
+            v-for="(v, i) in otSeries"
+            :key="i"
+            class="month-label"
+            :class="{ active: activeMonth === i }"
+            @click="pickMonth(i)"
+          >{{ i + 1 }}</text>
         </view>
         <text class="ot-foot">{{ otFootText }}</text>
       </view>
@@ -239,7 +260,8 @@ export default {
       showCommuteEditor: false,
       draftCommute: 90,
       proStamp: 0, // 仅用于让 isPro 在页面重新显示时重算
-      selectedMonth: new Date().getMonth() + 1   // 柱状图默认选中当前月
+      selectedMonth: new Date().getMonth() + 1,  // 柱状图默认选中当前月
+      activeOtMonth: -1                          // 折线点选的月份（0 基，-1 表示未选）
     }
   },
   computed: {
@@ -307,6 +329,19 @@ export default {
         top: (y / OL_H * 100).toFixed(2) + '%'
       }
     },
+    // 折线上那个小标签：点了某个月就跟到那个月，没点就停在峰值上
+    otMarker() {
+      if (this.activeOtMonth < 0) return this.otPeak
+      const idx = Math.min(this.activeOtMonth, this.otSeries.length - 1)
+      const v = this.otSeries[idx] || 0
+      const { x, y } = this.otPoint(idx, v)
+      return {
+        month: idx + 1,
+        hours: v,
+        left: (x / OL_W * 100).toFixed(2) + '%',
+        top: (y / OL_H * 100).toFixed(2) + '%'
+      }
+    },
     // 12 个月加班时长的折线 + 面积，用 SVG data URI 画。
     // 不用 canvas：小程序里 canvas 是原生层级，会盖住弹层与 tabBar，
     // 背景图则完全跟随布局，还能随卡片宽度自适应
@@ -332,6 +367,14 @@ export default {
     otFootText() {
       const p = this.i18n.profile
       if (!this.hasOt) return p.statsOtEmpty
+      // 点选后脚下这行换成该月明细：加班时长 + 当月回司天数
+      if (this.activeOtMonth >= 0) {
+        const row = (this.annual.monthly || [])[this.activeOtMonth] || {}
+        return p.statsOtPicked
+          .replace('{m}', this.activeOtMonth + 1)
+          .replace('{n}', this.otSeries[this.activeOtMonth] || 0)
+          .replace('{d}', Number(row.companyDays) || 0)
+      }
       return p.statsOtPeak
         .replace('{m}', this.otPeak.month)
         .replace('{n}', this.otPeak.hours)
@@ -361,6 +404,8 @@ export default {
       if (delta > 0 && !this.canGoNext) return
       haptic('light')
       this.year += delta
+      // 换年等于换一整组数据，别让上一年的选中月残留在新图上
+      this.activeOtMonth = -1
       this.refresh()
     },
     isCurrentMonth(month) {
@@ -374,6 +419,12 @@ export default {
     onBarTap(m) {
       haptic('light')
       this.selectedMonth = this.selectedMonth === m.month ? null : m.month
+    },
+    // 点折线/月份刻度：标记跟到那个月，再点一次收回峰值
+    pickMonth(i) {
+      if (!this.hasOt) return
+      haptic('light')
+      this.activeOtMonth = this.activeOtMonth === i ? -1 : i
     },
     leavePct(used, total) {
       if (!total) return 0
@@ -672,6 +723,34 @@ export default {
   font-size: 9.5px;
   color: #FFFFFF;
   line-height: 1.4;
+}
+/* 点选后的气泡比峰值再抬一档，明确「这个是我点出来的」 */
+.ot-peak.picked {
+  box-shadow: 0 2px 6px rgba(192, 138, 45, 0.35);
+}
+/* 选中月的落点：白心金环，压在折线顶点上 */
+.ot-dot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background-color: #FFFFFF;
+  border: 2px solid #C08A2D;
+  box-sizing: border-box;
+}
+/* 点选热区：12 等分铺满图表，本身透明，只负责接点击 */
+.ot-hit-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+}
+.ot-hit {
+  flex: 1;
 }
 .ot-foot {
   display: block;

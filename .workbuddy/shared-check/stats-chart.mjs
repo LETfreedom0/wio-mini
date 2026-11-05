@@ -122,6 +122,38 @@ const mk = arr => arr.map((h, idx) => ({ month: idx + 1, overtimeHours: h, compa
   ok(i.customPct({ mode: 'range', days: 8 }) === 100, '区间假整条填充')
 }
 
+// 6) 折线点选：标记跟到被点的月份，再点一次收回峰值
+{
+  const i = inst(mk([0, 2, 0, 9.5, 0, 0, 3, 0, 0, 1, 0, 4]))
+  Object.defineProperty(i, 'i18n', {
+    get: () => ({ profile: {
+      statsOtPeak: '峰值在 {m} 月 · {n} 小时',
+      statsOtPicked: '{m} 月 · 加班 {n} 小时 · 回司 {d} 天',
+      statsOtEmpty: '今年还没有加班记录'
+    } }),
+    configurable: true
+  })
+  ok(i.activeOtMonth === -1, '默认不选中任何月份')
+  ok(i.otMarker.month === 4, '未点选时标记停在峰值 4 月')
+  ok(i.otFootText.indexOf('峰值') !== -1, '未点选时脚下是峰值文案')
+
+  i.pickMonth(6) // 7 月，3 小时
+  ok(i.activeOtMonth === 6, '点击后应记住选中月')
+  ok(i.otMarker.month === 7 && i.otMarker.hours === 3, '标记应跟到 7 月并取该月时长')
+  ok(i.otFootText.indexOf('7 月') !== -1, '脚下文案应换成 7 月明细')
+  ok(i.otFootText.indexOf('3 小时') !== -1, '明细里要带该月加班时长')
+  const left = parseFloat(i.otMarker.left)
+  ok(left > 50 && left < 65, `7 月应落在画布中部偏右，实际 ${left}%`)
+
+  i.pickMonth(6)
+  ok(i.activeOtMonth === -1, '再点同一个月应取消选中')
+  ok(i.otMarker.month === 4, '取消后标记回到峰值')
+
+  i.pickMonth(0)
+  ok(i.otMarker.hours === 0, '零加班的月份也要能点（不能返回 null）')
+  ok(i.otMarker.top === '100.00%' || parseFloat(i.otMarker.top) > 90, '零值点应贴在基线附近')
+}
+
 fs.rmSync(here + '/.stats-entry.js', { force: true })
 fs.rmSync(here + '/.stats-bundle.mjs', { force: true })
 
