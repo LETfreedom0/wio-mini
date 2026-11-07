@@ -46,6 +46,7 @@ function makeCloud() {
   return {
     calls,
     failPush: false,
+    ignoreKeys: [],
     seed(data, version) { row = { data, data_version: version, synced_time: '2026-11-01T00:00:00Z' } },
     peek() { return row },
     async callCloud(name, arg) {
@@ -63,7 +64,15 @@ function makeCloud() {
         if (!arg.force && (arg.base_version || 0) !== cur) {
           throw { ok: false, conflict: true, cloudData: row ? row.data : null, data_version: cur, synced_time: 'T' }
         }
-        row = { data: arg.data, data_version: cur + 1, synced_time: '2026-11-07T00:00:00Z' }
+        let next = arg.data
+        // 模拟「写了但没生效」：把指定的 key 从旧数据里原样塞回去
+        if (this.ignoreKeys && this.ignoreKeys.length) {
+          const oldE = (row && row.data && row.data.entries) || {}
+          const ne = Object.assign({}, next.entries || {})
+          this.ignoreKeys.forEach(k => { if (oldE[k] !== undefined) ne[k] = oldE[k] })
+          next = Object.assign({}, next, { entries: ne })
+        }
+        row = { data: next, data_version: cur + 1, synced_time: '2026-11-07T00:00:00Z' }
         return { ok: true, data_version: cur + 1, synced_time: row.synced_time }
       }
       throw { ok: false, code: 'bad_action' }
@@ -75,7 +84,9 @@ function makeCloud() {
 async function loadSync(cloud) {
   let src = fs.readFileSync(path.join(root, 'utils/syncService.js'), 'utf8')
   src = src.replace(/^import .*$/gm, '')
+  const localesUrl = pathToFileURL(path.join(root, 'utils/locales.js')).href
   const stub = `
+import { t } from '${localesUrl}';
 const callCloud = globalThis.__callCloud;
 const isCloudAvailable = () => true;
 const isLogin = () => globalThis.__isLogin();
@@ -298,6 +309,21 @@ await scenario('D8 复刻：云端独有 3 条全取消 + 本机删过 1 条', a
   ok(Object.keys(local).length === 1, '★ 被丢弃的记录没写进本机')
 })
 
+await scenario('D8b 删完再检查：不得又冒出来', async ({ env, cloud, s }) => {
+  env.write('wio_entries', { '2026-04-01': 'office' })
+  cloud.seed(snap({ '2026-04-01': 'office', '2026-04-20': 'home', '2026-04-21': 'home' }), 30)
+  const r = await s.prepareUpload()
+  r.plan.toDownload.forEach(it => { it.cloudWins = false })
+  const up = await s.uploadMerge(r.plan)
+  ok(up.ok && up.deleted === 2, '删除 2 条')
+
+  // 模拟「过一会再点上传」
+  const again = await s.prepareUpload()
+  ok(again.plan.toDownload.length === 0, '★ 已删除的云端记录不得再出现在清单里')
+  ok(again.plan.bothDiffer.length === 0, '也不得出现在分歧里')
+  ok(again.plan.cloudCount === 1, '云端条数应为 1')
+})
+
 await scenario('D9 云端版本被抢跑：不得假装成功', async ({ env, cloud, s }) => {
   env.write('wio_entries', { '2026-04-10': 'office' })
   cloud.seed(snap({ '2026-04-10': 'office', '2026-04-11': 'home' }), 20)
@@ -432,6 +458,142 @@ await scenario('E3 云端为空时不能恢复', async ({ env, cloud, s }) => {
   const r = await s.restoreFromCloud()
   ok(r.ok === false && r.reason === 'empty', '★ 空云端不允许覆盖本机（否则一键清空）')
   ok(env.read('wio_entries')['2026-07-01'] === 'company', '本机数据不能被清掉')
+})
+
+// ---------- I. 删除是否真的生效 ----------
+
+await scenario('I1 云端没删掉要如实回执，不能报成功就完事', async ({ env, cloud, s }) => {
+  env.write('wio_entries', { '2026-06-01': 'office' })
+  cloud.seed(snap({ '2026-06-01': 'office', '2026-06-10': 'home', '2026-06-11': 'home' }), 50)
+  const r = await s.prepareUpload()
+  r.plan.toDownload.forEach(it => { it.cloudWins = false })
+
+  // 云端「写了没生效」：这两条原地不动
+  cloud.ignoreKeys = ['2026-06-10', '2026-06-11']
+  const up = await s.uploadMerge(r.plan)
+  ok(up.ok, '推送本身是成功的')
+  ok(up.stuck === 2, '★ 要把「云端还有 2 条没删掉」如实报出来')
+})
+
+await scenario('I2 删除正常生效时 stuck 为 0', async ({ env, cloud, s }) => {
+  env.write('wio_entries', { '2026-06-01': 'office' })
+  cloud.seed(snap({ '2026-06-01': 'office', '2026-06-10': 'home' }), 51)
+  const r = await s.prepareUpload()
+  r.plan.toDownload.forEach(it => { it.cloudWins = false })
+  const up = await s.uploadMerge(r.plan)
+  ok(up.ok && up.deleted === 1 && up.stuck === 0, '★ 真删掉了就不能报 stuck')
+  ok(up.remoteCount === 1, '回读云端条数为 1')
+})
+
+// ---------- H. 设置项：明细与三向合并 ----------
+
+const leave = (id, name, quota, mode, quotaRule) => ({
+  id, name, quota, mode: mode || 'range', quotaRule: quotaRule || 'yearly',
+  color: '#C25B6E', skipOffDays: false
+})
+
+await scenario('H1 设置差异给到人话明细', async ({ env, cloud, s }) => {
+  env.write('wio_settings', {
+    language: 'zh-CN', vacationDays: 10, sickDays: 5,
+    customLeaves: [leave('a', '婚假', 10)]
+  })
+  cloud.seed(snap({}, { settings: { vacationDays: 5, sickDays: 5, customLeaves: [leave('a', '婚假', 3)] } }), 40)
+  const r = await s.prepareUpload()
+  const d = r.plan.settingsDetail
+  ok(Array.isArray(d) && d.length === 2, '★ 应有 2 条设置差异（年假额度 + 婚假额度）')
+  const vac = d.find(x => x.label.includes('年假'))
+  ok(vac && vac.local.includes('10') && vac.cloud.includes('5'), '★ 年假额度要写成「10 天 / 5 天」，不能只给字段名')
+  const marry = d.find(x => x.label.includes('婚假'))
+  ok(marry && marry.local.includes('10') && marry.cloud.includes('3'), '★ 自定义假期逐条列出额度')
+  ok(!d.some(x => x.label === 'customLeaves'), '★ 不能退化成字段名')
+  ok(!d.some(x => x.label === 'touchedAt'), '派生元数据不该出现在清单里')
+})
+
+await scenario('H2 自定义假期上传后必须真的进云端', async ({ env, cloud, s }) => {
+  env.write('wio_settings', {
+    language: 'zh-CN',
+    customLeaves: [leave('a', '婚假', 10, 'range'), leave('b', '公益假', 2, 'day')]
+  })
+  cloud.seed(snap({}, { settings: { language: 'zh-CN' } }), 41)
+  const r = await s.prepareUpload()
+  ok(r.plan.settingsDetail.length === 2, '两个假期都要出现在清单里')
+  const up = await s.uploadMerge(r.plan)
+  ok(up.ok, '上传成功')
+  const cl = cloud.peek().data.settings.customLeaves
+  ok(Array.isArray(cl) && cl.length === 2, '★ 云端要存下两个自定义假期（不能变成空数组）')
+  ok(cl.map(x => x.name).indexOf('婚假') >= 0 && cl.map(x => x.name).indexOf('公益假') >= 0, '★ 假期名称要对')
+  ok(cl.find(x => x.name === '公益假').quota === 2, '额度要带上去')
+})
+
+await scenario('H3 本机删掉的假期不得被云端复活', async ({ env, cloud, s }) => {
+  const all = [leave('a', '婚假', 10), leave('b', '探亲假', 3)]
+  env.write('wio_sync_base', { __v: 1, settings: { language: 'zh-CN', customLeaves: all }, entries: {}, overtime: {} })
+  env.write('wio_settings', { language: 'zh-CN', customLeaves: [leave('a', '婚假', 10)] })
+  cloud.seed(snap({}, { settings: { language: 'zh-CN', customLeaves: all } }), 42)
+
+  const r = await s.prepareUpload()
+  const gone = r.plan.settingsDetail.find(x => x.label.includes('探亲假'))
+  ok(gone && gone.local === '已删除', '★ 清单要说清这个假期本机删了')
+  const up = await s.uploadMerge(r.plan)
+  ok(up.ok, '上传成功')
+  const cl = cloud.peek().data.settings.customLeaves
+  ok(cl.length === 1 && cl[0].name === '婚假', '★ 云端也要删掉探亲假，不能复活')
+  const localCl = env.read('wio_settings').customLeaves
+  ok(localCl.length === 1, '★ 本机也不能被补回来')
+})
+
+await scenario('H4 云端独有的假期默认收下', async ({ env, cloud, s }) => {
+  env.write('wio_settings', { language: 'zh-CN', customLeaves: [leave('a', '婚假', 10)] })
+  cloud.seed(snap({}, {
+    settings: { language: 'zh-CN', customLeaves: [leave('a', '婚假', 10), leave('c', '育儿假', 5, 'day')] }
+  }), 43)
+
+  const r = await s.prepareUpload()
+  const got = r.plan.settingsDetail.find(x => x.label.includes('育儿假'))
+  ok(got && got.local === '无', '清单要标出「本机没有」')
+  const up = await s.uploadMerge(r.plan)
+  ok(up.ok, '上传成功')
+  const localCl = env.read('wio_settings').customLeaves
+  ok(localCl.length === 2, '★ 不能重复收录同一个假期')
+  ok(localCl.some(x => x.name === '育儿假'), '★ 云端独有的假期要收下，不能丢')
+})
+
+await scenario('H5 按日期键的容器同样尊重本机删除', async ({ env, cloud, s }) => {
+  env.write('wio_sync_base', {
+    __v: 1,
+    settings: { language: 'zh-CN', customMarks: { '2026-05-01': { leaveId: 'a', part: 'full' }, '2026-05-02': { leaveId: 'a', part: 'am' } } },
+    entries: {}, overtime: {}
+  })
+  env.write('wio_settings', { language: 'zh-CN', customMarks: { '2026-05-01': { leaveId: 'a', part: 'full' } } })
+  cloud.seed(snap({}, {
+    settings: {
+      language: 'zh-CN',
+      customMarks: { '2026-05-01': { leaveId: 'a', part: 'full' }, '2026-05-02': { leaveId: 'a', part: 'am' } }
+    }
+  }), 44)
+
+  const r = await s.prepareUpload()
+  const up = await s.uploadMerge(r.plan)
+  ok(up.ok, '上传成功')
+  const marks = cloud.peek().data.settings.customMarks
+  ok(!marks['2026-05-02'], '★ 本机删掉的按天标记不能从云端复活')
+  ok(!!marks['2026-05-01'], '没删的要保留')
+})
+
+await scenario('H6 英文界面下明细也是英文', async ({ env, cloud, s }) => {
+  env.write('wio_settings', {
+    language: 'en-US', vacationDays: 10,
+    customLeaves: [leave('a', '婚假', 10)]
+  })
+  cloud.seed(snap({}, { settings: { language: 'en-US', vacationDays: 5 } }), 45)
+  const r = await s.prepareUpload()
+  const d = r.plan.settingsDetail
+  ok(d.length === 2, '应有年假 + 婚假两条')
+  const vac = d.find(x => /Annual leave/.test(x.label))
+  ok(!!vac, '★ 英文界面不能出现中文标签')
+  ok(vac && /d\b/.test(vac.local), '★ 额度单位也要跟着切')
+  const marry = d.find(x => /Leave: /.test(x.label))
+  ok(!!marry && /d\/yr/.test(marry.local), '★ 自定义假期的额度写法要英文化')
 })
 
 // ---------- F. 摘要 ----------

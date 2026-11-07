@@ -25,6 +25,7 @@
 import { callCloud, isCloudAvailable } from './cloud.js'
 import { isLogin, updateCachedSubscription } from './auth.js'
 import { APP_VERSION } from './appVersion.js'
+import { t } from './locales.js'
 
 const KEY_SYNC_STATE = 'wio_sync_state' // { dataVersion, lastSyncAt, dirty, remote* }
 const KEY_BACKUP = 'wio_restore_backup' // 从云端恢复前的本机备份 { at, data }
@@ -167,6 +168,15 @@ function writeSnapshot(data) {
   uni.setStorageSync('wio_overtime', JSON.stringify(d.overtime || {}))
 }
 
+/** 当前界面语言：清单文案要跟着切，不能把中文写死在同步层 */
+function uiLang() {
+  try {
+    const st = JSON.parse(uni.getStorageSync('wio_settings') || '{}')
+    return st.language === 'en-US' ? 'en-US' : 'zh-CN'
+  } catch (e) { return 'zh-CN' }
+}
+const L = (key, lang) => t('profile.' + key, lang || uiLang())
+
 function readBase() {
   try {
     const v = JSON.parse(uni.getStorageSync(KEY_BASE) || 'null')
@@ -293,33 +303,106 @@ function diffPlan(base, local, cloud) {
     })
   })
 
-  // settings 只报到字段级，不逐条铺开
+  // ---------- settings ----------
+  // 只报字段级差不够用：用户看不出「上传了什么假期」。
+  // 这里给每条差异配一句人话 + 两边的值，清单可以直接逐行展示。
+  const lang = uiLang()
   const ls = local.settings || {}
   const cs = (cloud && cloud.settings) || {}
-  const CONTAINER = ['halfFullDays', 'compOffRules', 'customMarks', 'touchedAt']
-  const sk = new Set([...Object.keys(ls), ...Object.keys(cs)])
-  sk.forEach(k => {
-    if (CONTAINER.indexOf(k) >= 0 || k === 'customLeaves') {
-      // 容器型字段：只要有一边多出键就算有差异
-      const lv = ls[k]
-      const cv = cs[k]
-      if (JSON.stringify(lv) !== JSON.stringify(cv)) {
-        if (k === 'customLeaves') {
-          plan.settingsDiffer.push(k)
-          return
-        }
-        const keys = Object.keys({ ...(lv || {}), ...(cv || {}) })
-        for (let i = 0; i < keys.length; i++) {
-          const key = keys[i]
-          if (JSON.stringify((lv || {})[key]) !== JSON.stringify((cv || {})[key])) {
-            plan.settingsDiffer.push(`${k}.${key}`)
-            break
-          }
-        }
-      }
+  const bs = (base && base.settings) || {}
+  plan.settingsDetail = []
+
+  const pushDetail = (label, localText, cloudText) => {
+    plan.settingsDiffer.push(label)
+    plan.settingsDetail.push({ label, local: localText, cloud: cloudText })
+  }
+
+  const dayText = n => `${Number(n) || 0}${L('syncUnitDay', lang)}`
+  const SCALAR = [
+    ['vacationDays', 'syncSetVacation', dayText],
+    ['sickDays', 'syncSetSick', dayText],
+    ['targetPercentage', 'syncSetTarget', v => `${Number(v) || 0}%`],
+    ['commuteMinutes', 'syncSetCommute', v => `${Number(v) || 0}${L('syncUnitMin', lang)}`],
+    ['birthdayEnabled', 'syncSetBirthday', v => (v ? L('syncOn', lang) : L('syncOff', lang))],
+    ['birthdayMonth', 'syncSetBirthdayMonth', v => (
+      v === '' || v === undefined || v === null
+        ? L('syncNotSet', lang)
+        : `${v}${L('syncUnitMonth', lang)}`
+    )],
+    ['halfDayAttendance', 'syncSetHalfDay', v => (v === 'full' ? L('syncCalcFull', lang) : L('syncCalcHalf', lang))],
+    ['language', 'syncSetLanguage', v => (v === 'en-US' ? 'English' : '中文')]
+  ]
+  SCALAR.forEach(pair => {
+    const k = pair[0]
+    if (JSON.stringify(ls[k]) !== JSON.stringify(cs[k])) {
+      pushDetail(L(pair[1], lang), pair[2](ls[k]), pair[2](cs[k]))
+    }
+  })
+
+  // 自定义假期：逐条比对，谁多谁少、额度改成多少，一眼能看到
+  const mapById = arr => {
+    const m = {}
+    if (Array.isArray(arr)) arr.forEach(x => { if (x && x.id) m[x.id] = x })
+    return m
+  }
+  const leaveText = lv => {
+    if (!lv) return L('syncNone', lang)
+    const n = Number(lv.quota)
+    const q = n > 0
+      ? (lv.quotaRule === 'total'
+        ? L('syncQuotaTotal', lang).replace('{n}', n)
+        : L('syncQuotaYear', lang).replace('{n}', n))
+      : L('syncUnlimited', lang)
+    return `${lv.mode === 'day' ? L('syncModeDay', lang) : L('syncModeRange', lang)} · ${q}`
+  }
+  const leaveLabel = name => L('syncSetLeave', lang).replace('{name}', name)
+  const lmap = mapById(ls.customLeaves)
+  const cmap = mapById(cs.customLeaves)
+  const bmap = mapById(bs.customLeaves)
+  const leaveIds = new Set([...Object.keys(lmap), ...Object.keys(cmap)])
+  leaveIds.forEach(id => {
+    const LV = lmap[id]
+    const CV = cmap[id]
+    const name = (LV && LV.name) || (CV && CV.name) || L('syncSetLeaveFallback', lang)
+    if (LV && CV) {
+      if (JSON.stringify(LV) !== JSON.stringify(CV)) pushDetail(leaveLabel(name), leaveText(LV), leaveText(CV))
       return
     }
-    if (JSON.stringify(ls[k]) !== JSON.stringify(cs[k])) plan.settingsDiffer.push(k)
+    if (LV && !CV) {
+      // 云端没有这个假：本机新增，上传后云端才有
+      pushDetail(leaveLabel(name), leaveText(LV), L('syncNone', lang))
+      return
+    }
+    if (!LV && CV) {
+      if (bmap[id]) {
+        // 基线有、本机删了 → 上传后云端也删掉
+        pushDetail(leaveLabel(name), L('syncDeleted', lang), leaveText(CV))
+      } else {
+        // 云端独有 → 默认收下
+        pushDetail(leaveLabel(name), L('syncNone', lang), leaveText(CV))
+      }
+    }
+  })
+
+  // 其它容器型字段：按「有几个键不同」报，touchedAt 是派生元数据不报
+  const CONTAINER = [
+    ['halfFullDays', 'syncSetHalfFull'],
+    ['customMarks', 'syncSetMarks'],
+    ['compOffRules', 'syncSetCompOff']
+  ]
+  CONTAINER.forEach(pair => {
+    const k = pair[0]
+    const lv = ls[k] || {}
+    const cv = cs[k] || {}
+    if (JSON.stringify(lv) === JSON.stringify(cv)) return
+    const keys = Object.keys({ ...lv, ...cv })
+    const diff = keys.filter(key => JSON.stringify(lv[key]) !== JSON.stringify(cv[key]))
+    if (!diff.length) return
+    pushDetail(
+      L(pair[1], lang),
+      L('syncItemsDiffer', lang).replace('{n}', diff.length),
+      diff.slice(0, 3).join(lang === 'en-US' ? ', ' : '、')
+    )
   })
 
   return plan
@@ -436,13 +519,32 @@ export function mergeForUpload(base, local, cloud, cloudWins) {
     })
   })
 
-  // settings：本机优先，容器型字段逐 key 合并
+  // settings：本机优先，但「本机删掉的」要真的删掉，不能被云端那份补回来。
+  // 单 key 三向：本机有 → 本机赢；基线有本机没了 → 尊重删除；否则（云端独有）→ 收下。
   const ls = (local && local.settings) || {}
   const cs = (cloud && cloud.settings) || {}
+  const ss = (base && base.settings) || {}
   const settings = { ...cs, ...ls }
+
+  const mergeKeyed = (b, l, c) => {
+    const outMap = {}
+    const keys = new Set([...Object.keys(l || {}), ...Object.keys(c || {})])
+    keys.forEach(k => {
+      const hasL = Object.prototype.hasOwnProperty.call(l || {}, k)
+      const hasC = Object.prototype.hasOwnProperty.call(c || {}, k)
+      const hasB = Object.prototype.hasOwnProperty.call(b || {}, k)
+      if (hasL) { outMap[k] = l[k]; return }
+      if (hasB) return          // 本机删过 → 保持删除
+      if (hasC) outMap[k] = c[k]  // 云端独有 → 收下
+    })
+    return outMap
+  }
+
   ;['halfFullDays', 'compOffRules', 'customMarks', 'touchedAt'].forEach(k => {
-    settings[k] = { ...(cs[k] || {}), ...(ls[k] || {}) }
+    settings[k] = mergeKeyed(ss[k], ls[k], cs[k])
   })
+
+  // 自定义假期是按 id 的数组，同样走三向；顺序沿用「本机的顺序 + 云端补进来的」
   const byId = arr => {
     const m = {}
     if (Array.isArray(arr)) arr.forEach(x => { if (x && x.id) m[x.id] = x })
@@ -451,8 +553,22 @@ export function mergeForUpload(base, local, cloud, cloudWins) {
   if (ls.customLeaves !== undefined || cs.customLeaves !== undefined) {
     const lmap = byId(ls.customLeaves)
     const cmap = byId(cs.customLeaves)
-    const ids = new Set([...Object.keys(lmap), ...Object.keys(cmap)])
-    settings.customLeaves = Object.keys(ids).map(id => lmap[id] || cmap[id])
+    const bmap = byId(ss.customLeaves)
+    const list = []
+    const added = {}
+    ;(Array.isArray(ls.customLeaves) ? ls.customLeaves : []).forEach(x => {
+      if (!x || !x.id || added[x.id]) return
+      list.push(x)
+      added[x.id] = true
+    })
+    ;(Array.isArray(cs.customLeaves) ? cs.customLeaves : []).forEach(x => {
+      if (!x || !x.id) return
+      if (added[x.id]) return             // 本机也有 → 已按本机顺序收进 list
+      if (bmap[x.id]) return              // 基线有、本机删了 → 不上云（云端这条会被删掉）
+      list.push(x)                        // 云端独有 → 收下
+      added[x.id] = true
+    })
+    settings.customLeaves = list
   }
   out.settings = settings
   return out
@@ -475,9 +591,12 @@ export async function uploadMerge(plan) {
   })
   const base = readBase()
   const merged = mergeForUpload(base ? historyData(base) : null, snapshotData(), plan.cloud || {}, wins)
-  // 本次会从云端消失的条数：显式丢弃的云端独有 + 本机已删除的（云端跟着删）
-  const deleted = (plan.toDownload || []).filter(it => it.cloudWins === false).length
-    + (plan.localDeleted || []).length
+  // 本次会从云端消失的条目：显式丢弃的云端独有 + 本机已删除的（云端跟着删）
+  const droppedKeys = (plan.toDownload || [])
+    .filter(it => it.cloudWins === false)
+    .map(it => `${it.kind}:${it.key}`)
+    .concat((plan.localDeleted || []).map(it => `${it.kind}:${it.key}`))
+  const deleted = droppedKeys.length
   try {
     // 先推云端，成功了才落本地：推送失败（网络/版本变了）时
     // 本机必须保持原样，不能落一个「只合了一半」的中间态。
@@ -494,11 +613,24 @@ export async function uploadMerge(plan) {
     // 回读一次云端，用「云端现在真实的条数」回报给用户。
     // 不做假设：推送返回成功不等于数据就长这样。
     let remoteCount = countOf(historyData(merged))
+    // 推送返回成功 ≠ 云端真的长这样（历史上同一个 openid 可能有重复文档，
+    // 写了一条、读的却是另一条）。回读一次，把「该删的还在」如实报出来，
+    // 不让用户以为删掉了、过一阵又冒出来。
+    let stuck = 0
     try {
       const after = await checkRemote()
-      if (after && after.ok) remoteCount = after.remoteCount
+      if (after && after.ok) {
+        remoteCount = after.remoteCount
+        const cl = (remoteCache && remoteCache.data) || {}
+        const he = historyData(cl)
+        stuck = droppedKeys.filter(k => {
+          const [kind, ...rest] = k.split(':')
+          const key = rest.join(':')
+          return !!((he[kind] || {})[key] !== undefined)
+        }).length
+      }
     } catch (e) { /* 回读失败不影响上传结果 */ }
-    return { ok: true, deleted, remoteCount }
+    return { ok: true, deleted, remoteCount, stuck }
   } catch (e) {
     if (e && e.conflict) {
       // 检查期间云端又被别的设备改了：不要硬推，让用户重新看一次差异

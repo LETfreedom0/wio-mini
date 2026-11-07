@@ -234,9 +234,19 @@
             </text>
           </view>
 
-          <view v-if="uploadPlan.settingsDiffer.length" class="upload-sec">
-            <text class="upload-sec-title">{{ uploadPlan.settingsDiffer.length }}{{ i18n.profile.syncSettingsDiff }}</text>
-            <text class="upload-item">{{ uploadPlan.settingsDiffer.join(' · ') }}</text>
+          <view v-if="uploadPlan.settingsDetail && uploadPlan.settingsDetail.length" class="upload-sec">
+            <text class="upload-sec-title">{{ uploadPlan.settingsDetail.length }}{{ i18n.profile.syncSettingsDiff }}</text>
+            <view
+              v-for="(d, i) in uploadPlan.settingsDetail"
+              :key="'s' + i"
+              class="upload-setting">
+              <text class="upload-setting-label">{{ d.label }}</text>
+              <text class="upload-setting-val">
+                <text class="val-win">{{ i18n.profile.syncLocal }} {{ d.local }}</text>
+                <text class="val-sep"> / </text>
+                <text class="val-dim2">{{ i18n.profile.syncCloud }} {{ d.cloud }}</text>
+              </text>
+            </view>
           </view>
 
           <!-- 云端删了、本机还在：按「宁可多留」补回去，但必须让你看见 -->
@@ -585,9 +595,11 @@ export default {
           this.load()
           this.lastSyncAt = syncService.getLastSyncTime()
           // 回执要具体：删了几条、云端现在几条，用户才知道真的生效了
-          const title = r.deleted > 0
+          let title = r.deleted > 0
             ? L.syncDoneDeleted.replace('{n}', r.deleted)
             : (r.remoteCount !== undefined ? L.syncDoneCount.replace('{n}', r.remoteCount) : L.syncDone)
+          // 回读发现「该删的还在」：如实说，别让用户以为删干净了
+          if (r.stuck > 0) title = L.syncDeleteStuck.replace('{n}', r.stuck)
           uni.showToast({ title, icon: 'none' })
         } else if (r.reason === 'cloud_changed') {
           // 不能静默失败：云端刚被别处改过，马上按新数据重算清单，
@@ -1284,6 +1296,30 @@ export default {
 
 .val-sep {
   color: #C9D2D1;
+}
+
+/* 假期与设置差异：一条占两行，窄屏也不挤 */
+.upload-setting {
+  padding: 5px 0;
+}
+
+.upload-setting-label {
+  display: block;
+  font-size: 11.5px;
+  line-height: 18px;
+  color: #3D444B;
+  font-weight: 500;
+}
+
+.upload-setting-val {
+  display: block;
+  font-size: 10.5px;
+  line-height: 16px;
+  color: #6B7480;
+}
+
+.val-dim2 {
+  color: #8A94A0;
 }
 
 .upload-note {

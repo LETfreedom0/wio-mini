@@ -32,9 +32,29 @@ exports.main = async (event) => {
   try {
     const dataCol = db.collection('user_data')
 
+    // 一个 openid 理论上只有一条数据文档。历史上并发 add() 可能留下重复文档，
+    // 若 pull 与 push 命中的不是同一条，就会出现「删除成功、过一会又回来」
+    // 的假象。所以统一按 data_version 倒序取，并顺手清掉多余的。
+    const loadPrimary = async () => {
+      const rows = (await dataCol.where({ openid: OPENID })
+        .orderBy('data_version', 'desc')
+        .orderBy('updated_at', 'desc')
+        .limit(20)
+        .get()).data || []
+      if (!rows.length) return { row: null, extras: [] }
+      return { row: rows[0], extras: rows.slice(1) }
+    }
+
+    const dropExtras = async extras => {
+      for (const x of extras) {
+        try { await dataCol.doc(x._id).remove() } catch (e) { /* 清不掉不影响本次结果 */ }
+      }
+    }
+
     // ---------- 拉取 ----------
     if (event.action === 'pull') {
-      const row = (await dataCol.where({ openid: OPENID }).limit(1).get()).data[0]
+      const { row, extras } = await loadPrimary()
+      if (extras.length) await dropExtras(extras)
       const subscription = await getSubscription(OPENID)
       if (!row) return { ok: true, exists: false, subscription }
       return {
@@ -57,7 +77,7 @@ exports.main = async (event) => {
         return { ok: false, code: 'payload_too_large', message: '快照超过 5MB' }
       }
 
-      const row = (await dataCol.where({ openid: OPENID }).limit(1).get()).data[0]
+      const { row, extras } = await loadPrimary()
       const currentVersion = row ? row.data_version : 0
 
       // 乐观锁：客户端基于旧版本推送 → 两端都改过 → 冲突
@@ -75,6 +95,7 @@ exports.main = async (event) => {
         await dataCol.doc(row._id).update({
           data: { data, data_version: currentVersion + 1, client_updated_at: client_updated_at || now, updated_at: now }
         })
+        if (extras.length) await dropExtras(extras)
       } else {
         await dataCol.add({
           data: { openid: OPENID, data, data_version: 1, client_updated_at: client_updated_at || now, updated_at: now }
