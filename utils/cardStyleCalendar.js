@@ -23,7 +23,7 @@ export const LAYOUT_CALENDAR = {
   month: { x: 476, y: 76, w: 218, h: 30, size: 24, weight: 500, align: 'right' },
   title: { x: 54, y: 170, w: 460, h: 42, size: 30, weight: 400 },
   hero: { x: 54, top: 222, w: 336, size: 260, weight: 700 },
-  badge: { x: 498, y: 222, w: 196, h: 54, r: 27, size: 26 },
+  badge: { x: 534, y: 222, w: 160, h: 46, r: 23, size: 22 },
   ot1: { x: 400, y: 350, w: 294, h: 38, size: 32, weight: 500, align: 'right' },
   ot2: { x: 400, y: 400, w: 294, h: 30, size: 24, weight: 400, align: 'right' },
   gap: { x: 54, y: 458, w: 440, h: 40, size: 32, weight: 500 },

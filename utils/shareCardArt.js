@@ -25,6 +25,9 @@ export const STYLES = [
   { key: 'receipt', draw: drawReceiptCard, layout: LAYOUT_RECEIPT }
 ]
 
+/** 样式顺序表：滑动切换按这个顺序循环，新增卡面加进 STYLES 即自动生效 */
+export const STYLE_KEYS = STYLES.map(s => s.key)
+
 export function isKnownStyle(style) {
   return STYLES.some(s => s.key === style)
 }

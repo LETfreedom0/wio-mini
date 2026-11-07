@@ -8,28 +8,25 @@
       <view class="nav-holder"></view>
     </view>
 
-    <!-- 卡面样式：两套版式数据一致，只是表达方式不同，切换即重画 -->
+    <!-- 卡面切换：左右滑动预览图即可换卡面，圆点指示当前位置 -->
     <view class="style-bar">
-      <text class="style-label">{{ t.styleLabel }}</text>
-      <view class="seg">
+      <view class="dots">
         <view
-          class="seg-item"
-          :class="{ 'seg-on': style === 'calendar' }"
-          @click="setStyle('calendar')"
-        >
-          <text class="seg-text" :class="{ 'seg-text-on': style === 'calendar' }">{{ t.styleCalendar }}</text>
-        </view>
-        <view
-          class="seg-item"
-          :class="{ 'seg-on': style === 'receipt' }"
-          @click="setStyle('receipt')"
-        >
-          <text class="seg-text" :class="{ 'seg-text-on': style === 'receipt' }">{{ t.styleReceipt }}</text>
-        </view>
+          v-for="key in styleKeys"
+          :key="key"
+          class="dot"
+          :class="{ 'dot-on': key === style }"
+          @click="setStyle(key)"
+        ></view>
       </view>
+      <text class="style-name">{{ styleName }}</text>
     </view>
 
-    <view class="preview-area">
+    <view
+      class="preview-area"
+      @touchstart="onTouchStart"
+      @touchend="onTouchEnd"
+    >
       <image
         v-if="imagePath"
         class="preview-img"
@@ -60,7 +57,7 @@
 import wioService from '@/utils/wioService.js'
 import { locales } from '@/utils/locales.js'
 import { buildShareModel, paintShareCard, exportCanvas, loadCanvasImage, CARD_W, CARD_H } from '@/utils/shareCard.js'
-import { isKnownStyle, DEFAULT_STYLE } from '@/utils/shareCardArt.js'
+import { isKnownStyle, DEFAULT_STYLE, STYLE_KEYS } from '@/utils/shareCardArt.js'
 import { getShareQrPath } from '@/utils/shareQr.js'
 import { getTopSafeArea } from '@/utils/safeArea.js'
 import { tap as haptic } from '@/utils/haptic.js'
@@ -75,13 +72,20 @@ export default {
       model: null,
       year: 0,
       month: 0,
-      style: DEFAULT_STYLE
+      style: DEFAULT_STYLE,
+      touchX: 0,
+      touchY: 0
     }
   },
   computed: {
     t() {
       const pack = locales[this.language] || locales['zh-CN']
       return pack.shareCard
+    },
+    /** 当前卡面名（圆点下方的小字说明） */
+    styleName() {
+      const map = { calendar: this.t.styleCalendar, receipt: this.t.styleReceipt }
+      return map[this.style] || this.style
     }
   },
   onLoad(options) {
@@ -141,6 +145,31 @@ export default {
       const s = wioService.getSettings()
       wioService.saveSettings({ ...s, cardStyle: key })
       this.generate()
+    },
+    // ---- 左右滑动切换卡面 ----
+    onTouchStart(e) {
+      const t = e.touches && e.touches[0]
+      if (t) {
+        this.touchX = t.clientX
+        this.touchY = t.clientY
+      }
+    },
+    onTouchEnd(e) {
+      const t = e.changedTouches && e.changedTouches[0]
+      if (!t) return
+      const dx = t.clientX - this.touchX
+      const dy = t.clientY - this.touchY
+      // 水平位移够大、且明显比纵向位移大，才算一次滑动（避免和纵向滚动打架）
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        this.swipeStyle(dx < 0 ? 1 : -1)
+      }
+    },
+    /** 按样式表顺序循环：往左滑 = 下一张，往右滑 = 上一张 */
+    swipeStyle(dir) {
+      const keys = STYLE_KEYS
+      const i = keys.indexOf(this.style)
+      if (i === -1) return
+      this.setStyle(keys[(i + dir + keys.length) % keys.length])
     },
     async generate() {
       // 正在出图时又切了样式：等这一张画完，finally 会按最新选择补一张
@@ -262,45 +291,40 @@ export default {
   height: 36px;
 }
 
-/* ===== 卡面样式切换 ===== */
+/* ===== 卡面切换（滑动 + 圆点）===== */
 .style-bar {
   flex-shrink: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: 4px 16px 8px;
+  gap: 4px;
+  padding: 2px 16px 6px;
 }
 
-.style-label {
-  font-size: 12px;
-  color: #8A9099;
-}
-
-.seg {
+.dots {
   display: flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 10px;
-  background: #E9EBED;
+  align-items: center;
+  gap: 7px;
+  /* 扩大热区，圆点本身小不好点 */
+  padding: 4px 6px;
 }
 
-.seg-item {
-  padding: 5px 14px;
-  border-radius: 8px;
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+  background: #D4D8DC;
+  transition: width 0.2s, background 0.2s;
 }
 
-.seg-on {
-  background: #FFFFFF;
+.dot-on {
+  width: 18px;
+  background: #0E6E62;
 }
 
-.seg-text {
-  font-size: 12px;
-  color: #6B737B;
-}
-
-.seg-text-on {
-  color: #0E6E62;
-  font-weight: 600;
+.style-name {
+  font-size: 11px;
+  color: #8A9099;
 }
 
 /* ===== 预览 ===== */
