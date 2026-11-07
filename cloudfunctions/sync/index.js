@@ -91,9 +91,17 @@ exports.main = async (event) => {
       }
 
       const now = Date.now()
+      // ⚠️ CloudBase 的 update 对「对象类型字段」是合并而非替换（与 MongoDB 不同）：
+      // payload 里没有的旧键会被原样保留 → 删除操作永远不生效，
+      // 表现为「删除成功、过一会又回来」。必须用 _.set 强制整体替换。
       if (row) {
         await dataCol.doc(row._id).update({
-          data: { data, data_version: currentVersion + 1, client_updated_at: client_updated_at || now, updated_at: now }
+          data: {
+            data: _.set(data),
+            data_version: currentVersion + 1,
+            client_updated_at: client_updated_at || now,
+            updated_at: now
+          }
         })
         if (extras.length) await dropExtras(extras)
       } else {
