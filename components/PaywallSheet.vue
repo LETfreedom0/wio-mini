@@ -72,7 +72,6 @@
         <text class="paywall-cta-text">{{ payPlan === 'year' ? i18n.profile.payCta : i18n.profile.payCtaMonth }}</text>
       </view>
       <text class="paywall-fine">{{ i18n.profile.payFine }}</text>
-      <text class="paywall-redeem" @click="onRedeemTap">{{ i18n.profile.redeemEntry }}</text>
     </view>
   </view>
 </template>
@@ -80,7 +79,6 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
-import { getTrial, redeemCode } from '@/utils/auth.js'
 import { purchase } from '@/utils/pay.js'
 import { tap as haptic } from '@/utils/haptic.js'
 
@@ -176,28 +174,6 @@ export default {
       } finally {
         this.paying = false
       }
-    },
-    onRedeemTap() {
-      const lang = this.settings.language
-      uni.showModal({
-        title: t('profile.redeemTitle', lang),
-        editable: true,
-        placeholderText: t('profile.redeemPlaceholder', lang),
-        success: (res) => {
-          if (!res.confirm) return
-          const ok = redeemCode(res.content)
-          if (!ok) {
-            uni.showToast({ title: t('profile.redeemFail', lang), icon: 'none' })
-            return
-          }
-          const trial = getTrial()
-          const d = new Date(trial.expiresAt)
-          const until = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-          this.$emit('close')
-          this.$emit('upgraded')
-          uni.showToast({ title: `${t('profile.redeemOk', lang)} ${until}`, icon: 'none', duration: 2500 })
-        }
-      })
     },
     close() {
       this.$emit('close')
@@ -454,14 +430,5 @@ export default {
   color: #B5BBC1;
   text-align: center;
   line-height: 1.5;
-}
-
-.paywall-redeem {
-  margin-top: 14px;
-  font-size: 11px;
-  color: #8A94A0;
-  text-align: center;
-  text-decoration: underline;
-  padding: 4px 0 2px;
 }
 </style>

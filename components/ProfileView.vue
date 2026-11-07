@@ -183,7 +183,7 @@
         </view>
       </view>
 
-      <view class="version-row"><text class="version-text">{{ versionLabel }}</text></view>
+      <view class="version-row" @click="onVersionTap"><text class="version-text">{{ versionLabel }}</text></view>
 
     </view>
 
@@ -277,6 +277,8 @@
 
     <!-- ===== PRO 付费墙（底部弹层） ===== -->
     <PaywallSheet :visible="showPaywall" @close="showPaywall = false" @upgraded="onProUpgraded" />
+    <!-- 隐藏入口：版本号连点 5 次（见 onVersionTap），不对外暴露兑换码 -->
+    <RedeemSheet :visible="showRedeem" @close="showRedeem = false" @redeemed="onRedeemed" />
   </view>
 </template>
 
@@ -287,6 +289,8 @@ import { login, getAuth, logout, updateCachedUser, uploadAvatar, refreshSubscrip
 import { isProUser, getProState, proExpireDate, PRO_CHANGED_EVENT } from '@/utils/pro.js'
 import CustomLeaveSheet from '@/components/CustomLeaveSheet.vue'
 import PaywallSheet from '@/components/PaywallSheet.vue'
+import RedeemSheet from '@/components/RedeemSheet.vue'
+import { isSecretTriggered } from '@/utils/secretTap.js'
 import { tap as haptic } from '@/utils/haptic.js'
 import { APP_VERSION_LABEL } from '@/utils/appVersion.js'
 
@@ -302,7 +306,7 @@ const holidayNameMap = {
 
 export default {
   name: 'ProfileView',
-  components: { CustomLeaveSheet, PaywallSheet },
+  components: { CustomLeaveSheet, PaywallSheet, RedeemSheet },
   props: {
     // 顶部安全区（状态栏 + 胶囊行）像素高度，由页面容器测得
     topSafe: { type: Number, default: 64 }
@@ -334,6 +338,8 @@ export default {
       session: null,           // { openid, user, subscription }
       showAuthSheet: false,
       showPaywall: false,
+      showRedeem: false,       // 隐藏兑换入口（版本号连点 5 次）
+      secretTap: { count: 0, at: 0 },
       trialStamp: 0,       // 兑换码核销后 +1，触发 isPro 重算
       authMode: 'login', // 'login' 首次登录 | 'edit' 完善资料
       authForm: {
@@ -749,6 +755,24 @@ export default {
       // 兑换码核销成功：trialStamp 触发 isPro 重算
       this.trialStamp++;
       this.showPaywall = false;
+    },
+    // ===== 隐藏兑换入口 =====
+    // 兑换码不做公开按钮（付费墙只留购买），版本号连点 5 次才出现输入层。
+    // 未登录时直接引导去登录：兑换要落到 openid 名下的订阅，没有身份无法入账。
+    onVersionTap() {
+      if (!isSecretTriggered(this.secretTap, 5)) return;
+      haptic('light');
+      if (!this.session || !this.session.user || !this.session.user.openid) {
+        uni.showToast({ title: t('profile.redeemNeedLogin', this.settings.language), icon: 'none' });
+        return;
+      }
+      this.showRedeem = true;
+    },
+    onRedeemed() {
+      // 云函数已把权益写入 subscriptions，auth.redeemCode 里已刷新本地镜像；
+      // 这里只需让 isPro 重算一次，会员入口卡立刻变「已开通」
+      this.trialStamp++;
+      this.session = getAuth();
     }
   }
 }

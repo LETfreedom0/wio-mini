@@ -157,7 +157,7 @@
           </view>
         </view>
 
-        <view class="version-row"><text class="version-text">{{ versionLabel }}</text></view>
+        <view class="version-row" @click="onVersionTap"><text class="version-text">{{ versionLabel }}</text></view>
       </view>
     </scroll-view>
 
@@ -168,6 +168,8 @@
       @saved="onCustomSaved"
     />
     <PaywallSheet :visible="showPaywall" @close="showPaywall = false" @upgraded="onProUpgraded" />
+    <!-- 隐藏入口：版本号连点 5 次，与「我的」页同一套判定 -->
+    <RedeemSheet :visible="showRedeem" @close="showRedeem = false" @redeemed="onRedeemed" />
 
     <!-- 上传前先说清「这次会发生什么」，绝不盲推 -->
     <view v-if="uploadPlan" class="sheet-mask" @click.stop="closeUploadSheet">
@@ -332,12 +334,14 @@ import { isProUser, getProState, proExpireDate, PRO_CHANGED_EVENT } from '@/util
 import * as syncService from '@/utils/syncService.js'
 import CustomLeaveSheet from '@/components/CustomLeaveSheet.vue'
 import PaywallSheet from '@/components/PaywallSheet.vue'
+import RedeemSheet from '@/components/RedeemSheet.vue'
+import { isSecretTriggered } from '@/utils/secretTap.js'
 import { tap as haptic } from '@/utils/haptic.js'
 import { APP_VERSION_LABEL } from '@/utils/appVersion.js'
 
 export default {
   name: 'MemberView',
-  components: { CustomLeaveSheet, PaywallSheet },
+  components: { CustomLeaveSheet, PaywallSheet, RedeemSheet },
   props: {
     // 顶部安全区（状态栏 + 胶囊行）像素高度，由页面容器测得
     topSafe: { type: Number, default: 64 }
@@ -348,6 +352,8 @@ export default {
       session: null,
       trialStamp: 0,
       showPaywall: false,
+      showRedeem: false,       // 隐藏兑换入口（版本号连点 5 次）
+      secretTap: { count: 0, at: 0 },
       showCustomSheet: false,
       customEditLeave: null,
       customLeaves: [],
@@ -546,6 +552,22 @@ export default {
     onProUpgraded() {
       this.trialStamp++
       this.showPaywall = false
+    },
+    // ===== 隐藏兑换入口 =====
+    // 会员页未登录时不做弹层：与同步卡一致，先把人送回「我的」页登录，
+    // 兑换要落到 openid 名下的订阅，没有身份无法入账。
+    onVersionTap() {
+      if (!isSecretTriggered(this.secretTap, 5)) return
+      haptic('light')
+      if (!this.isLogin) {
+        uni.showToast({ title: this.i18n.profile.redeemNeedLogin, icon: 'none' })
+        return
+      }
+      this.showRedeem = true
+    },
+    onRedeemed() {
+      // 权益已在云端入账，本地镜像由 auth.redeemCode 刷新过，这里重算一次 isPro
+      this.trialStamp++
     },
     // ===== 返回 =====
     goBack() {

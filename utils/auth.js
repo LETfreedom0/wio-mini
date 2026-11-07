@@ -103,24 +103,22 @@ export function logout() {
 }
 
 // ============================================================
-// 兑换码 · 本地试用订阅（测试用）
+// 兑换码 · 服务端核销
 //
-// 虚拟支付尚未接入前的过渡方案：兑换码在客户端本地核销，
-// 写入一份本地试用订阅。接入虚拟支付后，可把 redeemCode()
-// 换成调用 pay 云函数的 action=redeem 做服务端核销，
-// isPro() 的消费端逻辑不用动。
+// 码表在云端数据库（redeem_codes），核销与发权益都在云函数 redeem 里，
+// 前端只负责把用户输入送上去。权益落在 subscriptions 表——与虚拟支付
+// 同一张表、同一套顺延规则，所以会员页不需要区分「买的」还是「兑的」。
+//
+// 旧的本地码表（REDEEM_CODES）与本地核销（写 wio_pro_trial）已删除：
+// 码写在前端等于公开，清缓存还能重复领。
 // ============================================================
 
 const KEY_TRIAL = 'wio_pro_trial'
 
-/** 兑换码表：code → 有效天数（本地测试用，勿用于线上） */
-const REDEEM_CODES = {
-  'WIO-PRO-7': 7,
-  'WIO-PRO-30': 30,
-  'WIO-PRO-365': 365,
-}
-
-/** 读取本地试用订阅 { plan, source, redeemedAt, expiresAt } 或 null */
+/**
+ * 本地试用订阅（历史遗留 / 断言脚本用）
+ * 线上不再写入：所有会员权益都走云端订阅，这里只读不写。
+ */
 export function getTrial() {
   try {
     const raw = uni.getStorageSync(KEY_TRIAL)
@@ -137,25 +135,20 @@ export function isTrialActive() {
 }
 
 /**
- * 核销兑换码（本地）
- * @param {string} code
- * @returns {boolean} 是否核销成功
+ * 核销兑换码（服务端）
+ * @param {string} code 用户输入
+ * @returns {Promise<{days:number, expiresAt:number, plan:string}>}
+ * @throws {{code:string, message?:string}} code: bad_code / code_used / code_expired /
+ *         code_exhausted / need_login / cloud_unavailable
  */
-export function redeemCode(code) {
-  const days = REDEEM_CODES[String(code || '').trim().toUpperCase()]
-  if (!days) return false
-  // 未过期的试用可叠加续期
-  const prev = getTrial()
-  const base = prev && prev.expiresAt > Date.now() ? prev.expiresAt : Date.now()
-  const trial = {
-    plan: 'trial',
-    source: 'redeem',
-    redeemedAt: Date.now(),
-    expiresAt: base + days * 24 * 60 * 60 * 1000,
-  }
-  uni.setStorageSync(KEY_TRIAL, JSON.stringify(trial))
-  notifyProChanged()
-  return true
+export async function redeemCode(code) {
+  if (!isCloudAvailable()) throw { code: 'cloud_unavailable', message: '云开发仅支持微信小程序端' }
+  if (!isLogin()) throw { code: 'need_login', message: '请先登录' }
+
+  const res = await callCloud('redeem', { action: 'redeem', code: String(code || '') })
+  // 权益已在服务端入账，这里把本地会话里的订阅镜像对齐一次
+  await refreshSubscription()
+  return res
 }
 
 /**

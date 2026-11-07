@@ -59,6 +59,17 @@
       "timeout": 20,
       "memorySize": 256,
       "installDependency": true
+    },
+    {
+      "name": "redeem",
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "timeout": 20,
+      "memorySize": 256,
+      "installDependency": true,
+      "envVariables": {
+        "REDEEM_ADMIN_TOKEN": "{{env.REDEEM_ADMIN_TOKEN}}"
+      }
     }
   ]
 }
