@@ -15,6 +15,8 @@ const DEFAULT_SETTINGS = {
   language: 'zh-CN',
   birthdayEnabled: false,
   birthdayMonth: '',
+  // 已废弃：早期版本用它做「打开 App 自动同步」。现在同步是纯手动动作，
+  // 字段只为兼容老数据保留，任何地方都不再读它。
   autoSync: true,
   // 半天出勤计法：'half' = 按半天（0.5 天，默认）；'full' = 视同一整天
   // 逐日选择存在 settings.halfFullDays（日期 → true），这里只留全局默认值兼容

@@ -277,37 +277,6 @@
 
     <!-- ===== PRO 付费墙（底部弹层） ===== -->
     <PaywallSheet :visible="showPaywall" @close="showPaywall = false" @upgraded="onProUpgraded" />
-
-    <!-- ===== 数据冲突弹窗（居中） ===== -->
-    <view v-if="conflictInfo" class="modal-mask" @click.stop>
-      <view class="modal-card conflict-card" @click.stop>
-        <view class="modal-icon conflict-icon">
-          <text class="conflict-icon-text">⚠️</text>
-        </view>
-        <text class="modal-title">{{ i18n.profile.conflictTitle }}</text>
-        <text class="modal-body">{{ i18n.profile.conflictBody }}</text>
-
-        <view class="conflict-options">
-          <view class="conflict-option" @click="onResolveLocal">
-            <text class="conflict-option-title">{{ i18n.profile.localData }}</text>
-            <text class="conflict-option-sub">{{ i18n.profile.updatedAt }} {{ conflictLocalTime }}</text>
-          </view>
-          <view class="conflict-option conflict-option-cloud" @click="onResolveCloud">
-            <text class="conflict-option-title">{{ i18n.profile.cloudData }}</text>
-            <text class="conflict-option-sub">{{ i18n.profile.updatedAt }} {{ conflictCloudTime }}</text>
-          </view>
-        </view>
-
-        <view class="conflict-btn-row">
-          <view class="conflict-btn conflict-btn-ghost" @click="onResolveLocal">
-            <text class="conflict-btn-ghost-text">{{ i18n.profile.keepLocal }}</text>
-          </view>
-          <view class="conflict-btn conflict-btn-primary" @click="onResolveCloud">
-            <text class="conflict-btn-primary-text">{{ i18n.profile.keepCloud }}</text>
-          </view>
-        </view>
-      </view>
-    </view>
   </view>
 </template>
 
@@ -316,7 +285,6 @@ import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
 import { login, getAuth, logout, updateCachedUser, uploadAvatar, refreshSubscription } from '@/utils/auth.js'
 import { isProUser, getProState, proExpireDate, PRO_CHANGED_EVENT } from '@/utils/pro.js'
-import * as syncService from '@/utils/syncService.js'
 import CustomLeaveSheet from '@/components/CustomLeaveSheet.vue'
 import PaywallSheet from '@/components/PaywallSheet.vue'
 import { tap as haptic } from '@/utils/haptic.js'
@@ -367,8 +335,6 @@ export default {
       showAuthSheet: false,
       showPaywall: false,
       trialStamp: 0,       // 兑换码核销后 +1，触发 isPro 重算
-      conflictInfo: null,      // { localTime, cloudTime, cloudData, data_version }
-      lastSyncAt: 0,
       authMode: 'login', // 'login' 首次登录 | 'edit' 完善资料
       authForm: {
         nickname: '',
@@ -468,35 +434,16 @@ export default {
       if (!this.isLogin) return this.i18n.profile.accountLoginHint;
       return '';
     },
-    // PRO 卡「云端同步」行的说明文案（按登录/订阅状态切换）
-    syncRowSub() {
-      if (!this.isLogin) return this.i18n.profile.syncNeedLogin;
-      if (!this.isPro) return this.i18n.profile.syncProBenefit;
-      return this.i18n.profile.autoSyncSub;
-    },
     avatarSrc() {
       if (!this.isLogin) return '';
       const u = this.session.user || {};
       return u.avatarFileID || '';
-    },
-    lastSyncText() {
-      if (!this.lastSyncAt) return '—';
-      const d = new Date(this.lastSyncAt);
-      const pad = n => String(n).padStart(2, '0');
-      return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    },
-    conflictLocalTime() {
-      return this.conflictInfo ? this.formatTime(Date.now()) : '';
-    },
-    conflictCloudTime() {
-      return this.conflictInfo ? this.formatTime(this.conflictInfo.syncedTime) : '';
     }
   },
   mounted() {
     this.loadSettings();
     this.holidayList = wioService.getHolidayInfoList();
     this.session = getAuth();
-    this.lastSyncAt = syncService.getLastSyncTime();
     this.bindSync();
     // 组件内的 onShow 不会被触发，语言切换靠全局广播兜住
     uni.$on('wio:language-changed', this.onLanguageChanged);
@@ -754,75 +701,19 @@ export default {
         uni.hideLoading();
         this.showAuthSheet = false;
         uni.showToast({ title: t('profile.loginSuccess', this.settings.language), icon: 'success' });
-        // 首次登录成功后自动拉一次云端数据；完善资料模式无需
-        if (isLoginMode) {
-          syncService.pull().catch(() => {});
-        }
+        // 同步是手动动作：登录后不再自动拉取云端，
+        // 否则「刚补录的本地数据」会被云端旧快照覆盖。
+        // 需要恢复时由用户在会员页点「从云端恢复」。
       } catch (err) {
         uni.hideLoading();
         console.error('login failed', err);
         uni.showToast({ title: t('profile.loginFailed', this.settings.language), icon: 'none' });
       }
     },
-    // ===== 同步卡 =====
-    toggleAutoSync() {
-      this.settings.autoSync = !this.settings.autoSync;
-      haptic('light');
-      this.save();
-      // 只有开启时才立即对齐一次；关闭时不能还去拉云端覆盖本地
-      if (this.settings.autoSync) syncService.init();
-    },
-    async onSyncNow() {
-      haptic('light');
-      uni.showLoading({ title: '' });
-      try {
-        // syncNow 内部已吞掉异常并返回结果，必须按返回值判断成败，
-        // 否则网络失败也会弹「同步成功」
-        const r = await syncService.syncNow();
-        this.lastSyncAt = syncService.getLastSyncTime();
-        uni.hideLoading();
-        if (r && r.ok) {
-          uni.showToast({ title: t('profile.syncDone', this.settings.language), icon: 'success' });
-        } else if (r && r.conflict) {
-          // 冲突由 wio:sync-conflict 事件拉起弹窗，这里不叠加提示
-        } else {
-          uni.showToast({ title: t('profile.syncFail', this.settings.language), icon: 'none' });
-        }
-      } catch (err) {
-        uni.hideLoading();
-        console.error('sync failed', err);
-        uni.showToast({ title: t('profile.syncFail', this.settings.language), icon: 'none' });
-      }
-    },
-    // ===== 冲突处理 =====
-    onSyncConflict(info) {
-      // syncService 负载：{ cloud, cloudVersion, syncedTime }
-      this.conflictInfo = info || null;
-    },
-    async onResolveLocal() {
-      haptic('medium');
-      const info = this.conflictInfo;
-      this.conflictInfo = null;
-      try {
-        await syncService.resolveConflict('local', info);
-      } catch (err) {
-        console.error('resolve conflict(local) failed', err);
-      }
-    },
-    async onResolveCloud() {
-      haptic('medium');
-      const info = this.conflictInfo;
-      this.conflictInfo = null;
-      try {
-        await syncService.resolveConflict('cloud', info);
-      } catch (err) {
-        console.error('resolve conflict(cloud) failed', err);
-      }
-    },
+    // ===== 数据恢复回调 =====
     onDataRestored() {
       // 云端数据覆盖本地后，刷新整页状态
       this.loadSettings();
-      this.lastSyncAt = syncService.getLastSyncTime();
       this.session = getAuth();
     },
     // ===== 语言同步 =====
@@ -845,19 +736,12 @@ export default {
       // 会员页已不是 tab 页，改为普通页面栈跳转
       uni.navigateTo({ url: '/pages/member/index' });
     },
-    // 同步事件绑定：仅当前可见页处理，避免会员页与我的页同时弹冲突窗
+    // 数据恢复事件：会员页恢复云端数据后刷新本页设置
     bindSync() {
-      uni.$off('wio:sync-conflict', this.onSyncConflict);
       uni.$off('wio:data-restored', this.onDataRestored);
-      uni.$on('wio:sync-conflict', this.onSyncConflict);
       uni.$on('wio:data-restored', this.onDataRestored);
-      // 冲突常发生在启动 / 切后台（那时没有任何页面在监听事件），
-      // 事件会丢；这里补捞一次暂存的冲突，保证弹窗一定会出现
-      const pending = syncService.takePendingConflict();
-      if (pending) this.onSyncConflict(pending);
     },
     unbindSync() {
-      uni.$off('wio:sync-conflict', this.onSyncConflict);
       uni.$off('wio:data-restored', this.onDataRestored);
     },
     // ===== 付费墙 =====
@@ -865,12 +749,6 @@ export default {
       // 兑换码核销成功：trialStamp 触发 isPro 重算
       this.trialStamp++;
       this.showPaywall = false;
-    },
-    formatTime(ts) {
-      if (!ts) return '—';
-      const d = new Date(ts);
-      const pad = n => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
   }
 }
@@ -1587,21 +1465,6 @@ export default {
   color: #C08A2D;
   font-weight: 500;
 }
-.pro-sync-status {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 0 10px;
-}
-.pro-sync-time {
-  font-size: 10.5px;
-  color: #8A94A0;
-}
-.pro-sync-now {
-  font-size: 10.5px;
-  color: #0E6E62;
-  font-weight: 500;
-}
 .pro-divider {
   height: 1px;
   background-color: #F1EDE5;
@@ -1860,152 +1723,6 @@ export default {
   line-height: 1;
 }
 
-/* ===== 同步卡 ===== */
-.sync-pill {
-  padding: 3px 10px;
-  border-radius: 10px;
-}
-
-.sync-pill-off {
-  background: #F4F5F6;
-}
-
-.sync-pill-off .sync-pill-text {
-  color: #A3A9B0;
-}
-
-.sync-pill-on {
-  background: #E7F1EF;
-}
-
-.sync-pill-on-text {
-  color: #0E6E62;
-}
-
-.sync-pill-text {
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-/* PRO 徽标：鎏金渐变 + 微投影，全页统一（同步卡 / 语言卡共用） */
-.pro-badge {
-  padding: 4px 11px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #D9A94F, #B07A22);
-  box-shadow: 0 2px 6px rgba(176, 122, 34, 0.28);
-}
-
-.pro-badge-text {
-  font-size: 10px;
-  font-weight: 800;
-  color: #FFF9EE;
-  letter-spacing: 1.5px;
-}
-
-.sync-lock-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.sync-lock-icon {
-  font-size: 14px;
-  line-height: 1;
-}
-
-.sync-lock-text {
-  font-size: 13px;
-  color: #3A4149;
-  line-height: 1.4;
-}
-
-.sync-benefit {
-  display: block;
-  margin-top: 12px;
-  font-size: 13px;
-  color: #3A4149;
-  line-height: 1.5;
-}
-
-.sync-upgrade-btn {
-  margin-top: 12px;
-  height: 40px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #C08A2D, #A9761F);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sync-upgrade-btn:active {
-  opacity: 0.9;
-}
-
-.sync-upgrade-btn-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: #FFFFFF;
-}
-
-.sync-status-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 12px;
-}
-
-.sync-time {
-  font-size: 12px;
-  color: #6B7379;
-}
-
-.sync-detail-link {
-  font-size: 12px;
-  font-weight: 500;
-  color: #0E6E62;
-}
-
-.sync-divider {
-  height: 1px;
-  background: #F0F2F4;
-  margin: 12px 0;
-}
-
-.sync-auto-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.sync-auto-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.sync-auto-title {
-  font-size: 13px;
-  color: #15181C;
-  line-height: 1.4;
-}
-
-.sync-auto-sub {
-  font-size: 10px;
-  color: #9AA1A8;
-  line-height: 1.4;
-}
-
-.sync-hint {
-  display: block;
-  margin-top: 10px;
-  font-size: 10px;
-  color: #9AA1A8;
-  line-height: 1.5;
-}
-
 /* ===== 底部弹层（授权 / 付费墙） ===== */
 .sheet-mask {
   position: fixed;
@@ -2212,92 +1929,6 @@ export default {
 .auth-cancel-text {
   font-size: 13px;
   color: #9AA1A8;
-}
-
-
-/* ===== 冲突弹窗 ===== */
-.conflict-card {
-  align-items: stretch;
-}
-
-.conflict-icon {
-  align-self: center;
-  background: #FEF3E2;
-}
-
-.conflict-icon-text {
-  font-size: 18px;
-  line-height: 1;
-}
-
-.conflict-options {
-  margin-top: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.conflict-option {
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid #EDEFF1;
-  background: #F8F9FA;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.conflict-option-cloud {
-  border-color: #CDE4DF;
-  background: #F2F8F7;
-}
-
-.conflict-option-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #15181C;
-  line-height: 1.3;
-}
-
-.conflict-option-sub {
-  font-size: 10px;
-  color: #9AA1A8;
-  line-height: 1.4;
-}
-
-.conflict-btn-row {
-  margin-top: 16px;
-  display: flex;
-  gap: 10px;
-}
-
-.conflict-btn {
-  flex: 1;
-  height: 42px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.conflict-btn-ghost {
-  background: #F4F5F6;
-}
-
-.conflict-btn-ghost-text {
-  font-size: 13px;
-  font-weight: 500;
-  color: #3A4149;
-}
-
-.conflict-btn-primary {
-  background: #0E6E62;
-}
-
-.conflict-btn-primary-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: #FFFFFF;
 }
 
 </style>
