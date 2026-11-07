@@ -62,18 +62,11 @@ export default {
   },
   mounted() {
     this.settings = wioService.getSettings();
-    // 定期检查语言设置变化
-    this.languageCheckInterval = setInterval(() => {
-      const currentSettings = wioService.getSettings();
-      if (currentSettings.language !== this.settings.language) {
-        this.settings = currentSettings;
-      }
-    }, 1000);
+    // 语言切换是全局广播：不用再开 1s 轮询定时器
+    uni.$on('wio:language-changed', this.onLangChanged);
   },
   beforeUnmount() {
-    if (this.languageCheckInterval) {
-      clearInterval(this.languageCheckInterval);
-    }
+    uni.$off('wio:language-changed', this.onLangChanged);
   },
   updated() {
     this.settings = wioService.getSettings();
@@ -84,6 +77,10 @@ export default {
     }
   },
   methods: {
+    onLangChanged(lang) {
+      if (!lang || (this.settings && lang === this.settings.language)) return;
+      this.settings = wioService.getSettings();
+    },
     switchTab(path) {
       // tab 切换是最基础的点击，必须有触感反馈；点当前 tab 也回一下
       haptic('light');

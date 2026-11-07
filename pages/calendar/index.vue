@@ -568,7 +568,8 @@ export default {
         return this.i18n.home.achieved;
       }
       const u = this.i18n.home;
-      return `${u.daysToGo} ${this.gapDays} ${u.daysToGoUnit}`;
+      // 各段可空（英文不带「还差」前缀）：过滤空段，避免出现双空格
+      return [u.daysToGo, this.gapDays, u.daysToGoUnit].filter(Boolean).join(' ');
     },
     showBirthdayReminder() {
       if (!this.settings.birthdayEnabled || !this.settings.birthdayMonth) {

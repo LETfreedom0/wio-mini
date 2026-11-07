@@ -408,6 +408,8 @@ export default {
     this.initData()
     // 云端数据覆盖本地（同步恢复 / 冲突选云端）后，首页要立刻跟着变
     uni.$on('wio:data-restored', this.onDataRestored)
+    // 语言是全局偏好：从我的/会员页切换后立即生效，不等 onShow 重读
+    uni.$on('wio:language-changed', this.onLangChanged)
     // 布局完成后再量卡宽，翻页拖动才有像素基准
     this.$nextTick(() => this.measureReportCard())
     // 年进度毫秒跳动：80ms 一拍，肉眼连续又不会把 setData 刷爆
@@ -415,9 +417,15 @@ export default {
   },
   beforeUnmount() {
     uni.$off('wio:data-restored', this.onDataRestored)
+    uni.$off('wio:language-changed', this.onLangChanged)
     if (this.msTimer) clearInterval(this.msTimer)
   },
   methods: {
+    onLangChanged(lang) {
+      if (!lang || lang === this.settings.language) return
+      this.settings = { ...this.settings, language: lang }
+      this.nowStamp = Date.now()
+    },
     initData() {
       this.settings = wioService.getSettings()
       this.todayStr = wioService.getTodayDateStr()

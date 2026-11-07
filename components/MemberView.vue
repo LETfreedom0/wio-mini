@@ -209,7 +209,7 @@
 
           <view v-if="uploadPlan.toDownload.length" class="upload-sec">
             <text class="upload-sec-title">
-              {{ uploadPlan.toDownload.length }}{{ i18n.profile.syncWillDownload }}<text v-if="dropCount" class="upload-sec-warn">，{{ dropCount }}{{ i18n.profile.syncDropCount }}</text>
+              {{ uploadPlan.toDownload.length }}{{ i18n.profile.syncWillDownload }}<text v-if="dropCount" class="upload-sec-warn"> · {{ dropCount }}{{ i18n.profile.syncDropCount }}</text>
             </text>
             <text class="upload-hint">{{ i18n.profile.syncHintDrop }}</text>
             <view
@@ -468,6 +468,8 @@ export default {
     this.load()
     this.bindSync()
     uni.$on(PRO_CHANGED_EVENT, this.onProChanged)
+    // 语言是全局偏好：从我的页切换后，已挂载的会员页要立即跟着变
+    uni.$on('wio:language-changed', this.onLangChanged)
     // 订阅的真身在云端数据库，本地只是镜像：进页面时对齐一次，
     // 避免「已经付过钱、但本地缓存还是旧的」导致页面显示未开通
     refreshSubscription()
@@ -477,6 +479,7 @@ export default {
   beforeUnmount() {
     this.unbindSync()
     uni.$off(PRO_CHANGED_EVENT, this.onProChanged)
+    uni.$off('wio:language-changed', this.onLangChanged)
   },
   // 显示/隐藏由页面容器（pages/member/index.vue）驱动：
   // 子组件内的 onShow/onHide 在 Vue3 下不会被触发
@@ -511,6 +514,11 @@ export default {
     onProChanged() {
       this.trialStamp++
       this.load()
+    },
+    // 语言切换（从我的页发起）：立即生效，不等页面重进
+    onLangChanged(lang) {
+      if (!lang || lang === this.settings.language) return
+      this.settings = { ...this.settings, language: lang }
     },
     onScroll(e) {
       // 滚动位置映射为垂直视线：顶部=向上看，下滑=向下看

@@ -260,12 +260,14 @@ export default {
       showCommuteEditor: false,
       draftCommute: 90,
       proStamp: 0, // 仅用于让 isPro 在页面重新显示时重算
+      langStamp: 0, // 仅用于让 settings 在语言切换后重算（storage 无响应性）
       selectedMonth: new Date().getMonth() + 1,  // 柱状图默认选中当前月
       activeOtMonth: -1                          // 折线点选的月份（0 基，-1 表示未选）
     }
   },
   computed: {
     settings() {
+      void this.langStamp
       return wioService.getSettings()
     },
     i18n() {
@@ -382,6 +384,11 @@ export default {
   },
   onLoad() {
     this.topSafeHeight = getTopSafeArea().totalHeight
+    // 语言从我的/会员页切换时，本页可能已经挂载：靠广播重算 settings
+    uni.$on('wio:language-changed', this.onLangChanged)
+  },
+  onUnload() {
+    uni.$off('wio:language-changed', this.onLangChanged)
   },
   onShow() {
     // 权益可能在别的页面变过（开通 / 退出登录），每次显示都重算
@@ -389,6 +396,10 @@ export default {
     this.refresh()
   },
   methods: {
+    onLangChanged(lang) {
+      if (!lang) return
+      this.langStamp++
+    },
     refresh() {
       this.annual = wioService.getAnnualStats(this.year)
       this.draftCommute = this.annual.commuteMinutes
