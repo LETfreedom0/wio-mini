@@ -678,7 +678,20 @@ export default {
             uni.hideLoading()
             if (out.ok) {
               this.load()
-              uni.showToast({ title: L.syncRestoreDone, icon: 'success' })
+              this.lastSyncAt = syncService.getLastSyncTime()
+              // 内容一致时不能再报「已恢复」：用户只会觉得点了没反应。
+              // 有变化就把变化量摆出来，一眼能对上日历。
+              const rc = out.receipt || {}
+              let title = L.syncRestoreDone
+              if (!rc.total && !rc.leavesDelta) {
+                title = L.syncRestoreNoChange
+              } else {
+                title = L.syncRestoreDoneDetail
+                  .replace('{e}', rc.entries || 0)
+                  .replace('{o}', rc.overtime || 0)
+                  .replace('{l}', rc.leaves || 0)
+              }
+              uni.showToast({ title, icon: 'none' })
             } else if (out.reason === 'empty') {
               uni.showToast({ title: L.syncCloudEmpty, icon: 'none' })
             } else {

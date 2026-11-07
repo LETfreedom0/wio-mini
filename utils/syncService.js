@@ -676,19 +676,100 @@ function backupLocal() {
   } catch (e) { /* 备份失败不阻断，但会提示用户 */ }
 }
 
+/** 一条打卡值里引用的自定义假期 id（半天是 {am,pm}，也要挖出来） */
+function collectLeaveIds(v, out) {
+  if (typeof v === 'string') {
+    if (v.indexOf('custom:') === 0) out.add(v.slice(7))
+  } else if (v && typeof v === 'object') {
+    if (v.am) collectLeaveIds(v.am, out)
+    if (v.pm) collectLeaveIds(v.pm, out)
+  }
+}
+
+/** 一份数据里被引用的自定义假期 id 集合 */
+function customRefIds(data) {
+  const ids = new Set()
+  const d = data || {}
+  Object.keys(d.entries || {}).forEach(k => collectLeaveIds(d.entries[k], ids))
+  const marks = (d.settings || {}).customMarks || {}
+  Object.keys(marks).forEach(k => {
+    const m = marks[k]
+    if (m && m.id) ids.add(m.id)
+  })
+  return ids
+}
+
+/**
+ * 补回「被引用但没定义」的假期。
+ * 云端历史上被旧客户端推过 customLeaves: [] 的快照，可 entries 里还留着
+ * custom:<id>。恢复这种快照会让日历印出原始 id、统计还按假期扣天数，
+ * 所以只要本机还留着定义，就跟着一起恢复。
+ * @returns {number} 补回的假期个数
+ */
+function repairLeaveRefs(merged, localSettings) {
+  const localLeaves = Array.isArray((localSettings || {}).customLeaves)
+    ? localSettings.customLeaves
+    : []
+  if (!localLeaves.length) return 0
+  const leaves = Array.isArray(merged.settings.customLeaves)
+    ? merged.settings.customLeaves.slice()
+    : []
+  const have = new Set(leaves.map(l => l && l.id).filter(Boolean))
+  let added = 0
+  customRefIds(merged).forEach(id => {
+    if (have.has(id)) return
+    const def = localLeaves.find(l => l && l.id === id)
+    if (def) { leaves.push(def); have.add(id); added++ }
+  })
+  if (added) merged.settings.customLeaves = leaves
+  return added
+}
+
+const sameVal = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b)
+
+/**
+ * 恢复前后的差异回执：让 UI 能说「恢复了 12 条打卡」，而不是只报一句
+ * 「已从云端恢复」——内容一样时那句成功提示会被当成「没反应」。
+ */
+function diffReceipt(before, after) {
+  const b = { entries: before.entries || {}, overtime: before.overtime || {} }
+  const a = { entries: after.entries || {}, overtime: after.overtime || {} }
+  let entries = 0
+  let overtime = 0
+  new Set([...Object.keys(b.entries), ...Object.keys(a.entries)]).forEach(k => {
+    if (!sameVal(b.entries[k], a.entries[k])) entries++
+  })
+  new Set([...Object.keys(b.overtime), ...Object.keys(a.overtime)]).forEach(k => {
+    if (!sameVal(b.overtime[k], a.overtime[k])) overtime++
+  })
+  const leavesOf = s => (Array.isArray((s || {}).customLeaves) ? s.customLeaves.length : 0)
+  const leaves = leavesOf(after.settings)
+  return {
+    entries,
+    overtime,
+    leaves,
+    leavesDelta: leaves - leavesOf(before.settings),
+    total: entries + overtime
+  }
+}
+
 /** 从云端整份恢复本机（覆盖前自动备份） */
 export async function restoreFromCloud() {
   const r = await checkRemote()
   if (!r.ok) return r
   const res = remoteCache || {}
   if (!res.exists) return { ok: false, reason: 'empty' }
-  backupLocal()
+  const before = snapshotData()
   // 只恢复「历史」：云端若还残留旧版本推上去的未来记录，不能搬回来当计划，
   // 那些多半已经过期或被本机重新规划过。本机的未来计划在覆盖中保留。
-  writeSnapshot(mergeRestore(historyData(res.data || {}), futureOnly(snapshotData())))
+  const merged = mergeRestore(historyData(res.data || {}), futureOnly(before))
+  const keptLeaves = repairLeaveRefs(merged, before.settings || {})
+  const receipt = diffReceipt(before, merged)
+  backupLocal()
+  writeSnapshot(merged)
   settleAfterSync(res)
   try { uni.$emit('wio:data-restored', {}) } catch (e) { /* ignore */ }
-  return { ok: true, count: countOf(res.data) }
+  return { ok: true, count: countOf(res.data), receipt, keptLeaves }
 }
 
 /** 撤销上一次「从云端恢复」：把备份写回本机并推上去 */

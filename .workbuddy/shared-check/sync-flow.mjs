@@ -460,6 +460,36 @@ await scenario('E3 云端为空时不能恢复', async ({ env, cloud, s }) => {
   ok(env.read('wio_entries')['2026-07-01'] === 'company', '本机数据不能被清掉')
 })
 
+await scenario('E4 云端缺假期定义时从本机补回，不留孤儿引用', async ({ env, cloud, s }) => {
+  const def = { id: 'cl_x1', name: '婚假', color: '#C25B6E', mode: 'range', start: '2026-05-01', end: '2026-05-03' }
+  env.write('wio_settings', { language: 'zh-CN', customLeaves: [def] })
+  // 云端被旧客户端推成 customLeaves: []，但 entries 还引用着这个假期的 id
+  cloud.seed(snap({ '2026-05-02': 'custom:cl_x1' }, { settings: { customLeaves: [] } }), 9)
+  const r = await s.restoreFromCloud()
+  ok(r.ok, '恢复应成功')
+  ok(r.keptLeaves === 1, '★ 应补回 1 个被引用却缺定义的假期')
+  const st = env.read('wio_settings')
+  ok(Array.isArray(st.customLeaves) && st.customLeaves.length === 1, '★ 本机假期定义不能被空数组洗掉')
+  ok(st.customLeaves[0].id === 'cl_x1', '补回来的必须是同 id 的那条定义')
+  ok(env.read('wio_entries')['2026-05-02'] === 'custom:cl_x1', '引用本身要保留')
+})
+
+await scenario('E5 云端与本机一致时回执为 0', async ({ env, cloud, s }) => {
+  env.write('wio_entries', { '2026-05-01': 'company' })
+  cloud.seed(snap({ '2026-05-01': 'company' }), 3)
+  const r = await s.restoreFromCloud()
+  ok(r.ok, '恢复应成功')
+  ok(r.receipt && r.receipt.total === 0, '★ 内容相同时不能谎报有变化（UI 要说「无需恢复」）')
+})
+
+await scenario('E6 回执要数清改了几条', async ({ env, cloud, s }) => {
+  env.write('wio_entries', { '2026-05-01': 'company', '2026-05-02': 'home' })
+  cloud.seed(snap({ '2026-05-01': 'home', '2026-05-03': 'vacation' }), 4)
+  const r = await s.restoreFromCloud()
+  ok(r.ok, '恢复应成功')
+  ok(r.receipt.entries === 3, '★ 1 条改值 + 1 条被覆盖删掉 + 1 条新增 = 3')
+})
+
 // ---------- I. 删除是否真的生效 ----------
 
 await scenario('I1 云端没删掉要如实回执，不能报成功就完事', async ({ env, cloud, s }) => {
