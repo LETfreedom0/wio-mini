@@ -167,7 +167,6 @@
           <view v-if="todayIsSplit" class="today-half-note">
             <text class="today-half-text">{{ todayHalfText }}</text>
           </view>
-          <text class="today-hint">{{ i18n.home.hint }}</text>
         </view>
 
         <!-- ===== 年进度 + 下个假期 ===== -->
@@ -1259,13 +1258,6 @@ export default {
 .choice-state.state-on {
   color: #0E6E62;
   font-weight: 500;
-}
-
-.today-hint {
-  font-size: 10px;
-  color: #9AA1A8;
-  line-height: 1.5;
-  margin-left: 4px;
 }
 
 /* 今天标了半天：一行只读说明，用主色底提示「今天不是整天」 */
