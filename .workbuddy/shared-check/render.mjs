@@ -10,7 +10,7 @@ class RecCtx {
   set font(v) { const m = /(\d+)\s+(\d+)px/.exec(v); if (m) { this._weight = +m[1]; this._size = +m[2] } }
   get font() { return `${this._weight} ${this._size}px x` }
   measureText(s) { return { width: measure(String(s), this._size, this._weight) } }
-  fillText(s, x, y) { this.ops.push({ type: 'text', text: String(s), x, y, size: this._size, weight: this._weight, align: this.textAlign, color: this.fillStyle }) }
+  fillText(s, x, y) { this.ops.push({ type: 'text', text: String(s), x, y, size: this._size, weight: this._weight, align: this.textAlign, baseline: this.textBaseline, color: this.fillStyle }) }
   fillRect(x, y, w, h) { this.ops.push({ type: 'rect', x, y, w, h, color: this.fillStyle }) }
   beginPath() {} moveTo() {} lineTo() {} arc() {} closePath() {} stroke() {} save() {} restore() {} clip() {} drawImage() {} setTransform() {}
   fill() {}
@@ -78,7 +78,9 @@ for (const [key, sc] of Object.entries(scenarios)) {
       return
     }
     const anchor = op.align === 'right' ? 'end' : op.align === 'center' ? 'middle' : 'start'
-    body += `<text x="${op.x}" y="${op.y}" font-size="${op.size}" font-weight="${op.weight}" fill="${op.color}" text-anchor="${anchor}" dominant-baseline="central" font-family="Arial, 'Microsoft YaHei', sans-serif">${esc(op.text)}</text>`
+    // alphabetic 基线的文字（大数字/百分号）不加 dominant-baseline，SVG 默认就是基线落点
+    const dv = op.baseline === 'alphabetic' ? '' : ' dominant-baseline="central"'
+    body += `<text x="${op.x}" y="${op.y}" font-size="${op.size}" font-weight="${op.weight}" fill="${op.color}" text-anchor="${anchor}"${dv} font-family="Arial, 'Microsoft YaHei', sans-serif">${esc(op.text)}</text>`
   })
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_W}" height="${CARD_H}" viewBox="0 0 ${CARD_W} ${CARD_H}">${body}</svg>`

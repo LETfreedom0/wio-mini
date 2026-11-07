@@ -11,7 +11,7 @@ class FakeCtx {
   get font() { return `${this._weight} ${this._size}px x` }
   measureText(s) { return { width: measure(String(s), this._size, this._weight) } }
   fillText(s, x, y) {
-    this.ops.push({ text: String(s), x, y, size: this._size, align: this.textAlign, w: measure(String(s), this._size, this._weight) })
+    this.ops.push({ text: String(s), x, y, size: this._size, align: this.textAlign, baseline: this.textBaseline, w: measure(String(s), this._size, this._weight) })
   }
   fillRect() {}
   clearRect() {}
@@ -36,6 +36,10 @@ function measure(s, size, weight) {
 
 function bbox(op) {
   const x0 = op.align === 'right' ? op.x - op.w : op.align === 'center' ? op.x - op.w / 2 : op.x
+  // alphabetic 基线：字形几乎全在基线上方（数字 cap≈0.78em，下延≈0.04em）
+  if (op.baseline === 'alphabetic') {
+    return { x0, x1: x0 + op.w, y0: op.y - op.size * 0.8, y1: op.y + op.size * 0.06 }
+  }
   return { x0, x1: x0 + op.w, y0: op.y - op.size * 0.55, y1: op.y + op.size * 0.55 }
 }
 

@@ -36,9 +36,10 @@ export const LAYOUT = {
   brand: { x: 56, y: 52, w: 300, h: 38, size: 26, weight: 500 },
   month: { x: 538, y: 52, w: 156, h: 38, size: 26, weight: 500, align: 'right' },
   title: { x: 54, y: 136, w: 440, h: 42, size: 30, weight: 400 },
-  // 大数字按「字形顶部」定位（top），与右侧徽章的顶边 222 严格平齐。
+  // 大数字按「字形顶边」定位（top），与右侧徽章的顶边 222 严格平齐。
   // 字号加大到 260 后视觉重量压得住留白，三位数（100%）仍按 w 自动缩字号。
-  hero: { x: 48, top: 222, w: 336, size: 260, weight: 700, cap: 0.72 },
+  // cap = 数字字形高占字号的实测比例，用于 alphabetic 基线定位
+  hero: { x: 48, top: 222, w: 336, size: 260, weight: 700, cap: 0.73 },
   // 百分号随数字字号等比缩放（ratio），顶边比数字低 topRatio 个字高，保留上标感
   percent: { ratio: 0.38, topRatio: 0.3 },
   // 右对齐元素共用一条右缘线 694（= 月份 / 构成条 / 分隔线的右端）：
@@ -187,10 +188,13 @@ export function drawShareCard(ctx, m, qrImage) {
   drawText(ctx, m.title, L.title, { color: P.label })
 
   // ---- 大数字 + 百分号（百分号跟随数字宽度，不写死 x）----
-  // 定位基准是「字形的视觉顶边」，不是文本框顶部：PingFang 的数字只占
-  // 约 0.72em 高，按文本框顶对齐会整体偏低，看着就不在一条线上。
+  // 大数字用 alphabetic 基线定位：baseline = 字形顶 + capHeight。
+  // 千万不要用 middle——微信 canvas 的 middle 相对字形中心有约 0.12em 的
+  // 平台偏移（iOS / 安卓 / 开发者工具各不相同），260px 的字就是 30px 错位，
+  // 真机截图实测字形顶跑到 184（目标 222）就是这个原因；
+  // 而数字字形高（capHeight）各平台字体都稳定在 0.72~0.75em，最多差 4px。
   const HERO = L.hero
-  const CAP = HERO.cap || 0.72
+  const CAP = HERO.cap || 0.74
   const heroStr = String(m.rate)
   let heroSize = HERO.size
   setFont(ctx, heroSize, 700)
@@ -200,17 +204,16 @@ export function drawShareCard(ctx, m, qrImage) {
     setFont(ctx, heroSize, 700)
     heroWidth = ctx.measureText(heroStr).width
   }
-  const heroCy = HERO.top + (heroSize * CAP) / 2
   ctx.fillStyle = P.hero
   ctx.textAlign = 'left'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(heroStr, HERO.x, heroCy)
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillText(heroStr, HERO.x, HERO.top + heroSize * CAP)
 
   const pctSize = Math.round(heroSize * L.percent.ratio)
   setFont(ctx, pctSize, 700)
   const pctWidth = ctx.measureText('%').width
   const px = Math.min(HERO.x + heroWidth + 8, L.badge.x - pctWidth - 20)
-  ctx.fillText('%', px, HERO.top + heroSize * L.percent.topRatio + (pctSize * CAP) / 2)
+  ctx.fillText('%', px, HERO.top + heroSize * L.percent.topRatio + pctSize * CAP)
 
   // ---- 状态徽章 ----
   const B = L.badge
