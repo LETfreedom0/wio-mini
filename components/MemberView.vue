@@ -100,7 +100,6 @@
           <view class="feat-head">
             <view class="feat-text">
               <text class="feat-title">{{ i18n.profile.proLangTitle }}</text>
-              <text class="feat-sub">{{ i18n.profile.benefitLangSub }}</text>
             </view>
             <text v-if="!isPro" class="feat-locked">{{ i18n.profile.proLockedShort }}</text>
           </view>
@@ -113,7 +112,6 @@
               <text v-if="!isPro" class="lang-lock-tag">PRO</text>
             </view>
           </view>
-          <text class="feat-foot">{{ i18n.profile.memberLangNote }}</text>
         </view>
 
         <!-- ===== 自定义假期 ===== -->
@@ -121,7 +119,6 @@
           <view class="feat-head">
             <view class="feat-text">
               <text class="feat-title">{{ i18n.profile.customLeaveTitle }}</text>
-              <text class="feat-sub">{{ i18n.profile.customLeaveHint }}</text>
             </view>
             <text v-if="!isPro" class="feat-locked">{{ i18n.profile.proLockedShort }}</text>
           </view>
@@ -151,7 +148,6 @@
           <view class="feat-head">
             <view class="feat-text">
               <text class="feat-title">{{ i18n.profile.benefitMore }}</text>
-              <text class="feat-sub">{{ i18n.profile.benefitMoreSub }}</text>
             </view>
             <text class="coming-soon">{{ i18n.profile.comingSoon }}</text>
           </view>
