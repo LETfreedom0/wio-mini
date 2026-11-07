@@ -671,7 +671,7 @@ export default {
       }, 60)
     },
 
-    /** 从云端恢复：整份覆盖本机，先备份，可撤销 */
+    /** 从云端恢复：先试算（只算不动），把「云端有什么、会改什么」摆出来再确认 */
     async onRestoreTap() {
       haptic('light')
       const L = this.i18n.profile
@@ -683,8 +683,7 @@ export default {
       this.readingRemote = true
       let r = null
       try {
-        // 先看一次云端最新状态：拿到确切条数，也顺手验证网络
-        r = await syncService.checkRemote()
+        r = await syncService.previewRestore()
       } catch (e) { r = null }
       this.readingRemote = false
       if (!r || !r.ok) {
@@ -696,11 +695,23 @@ export default {
         return
       }
       this.syncSummary = syncService.getSyncSummary()
-      const n = r.remoteCount || 0
-      const when = this.remoteSyncedText
+      const rc = r.receipt || {}
+      // 云端与本机完全一致：不弹确认（确认了也不会有任何变化），
+      // 直说真相——这才是「点了没效果」的完整答案
+      if (!rc.total && !rc.leavesDelta) {
+        this.notify(L.syncRestoreNoChange)
+        return
+      }
       this.popupModal({
         title: L.syncRestoreTitle,
-        content: L.syncRestoreConfirm.replace('{n}', n).replace('{time}', when),
+        content: L.syncRestoreConfirm
+          .replace('{time}', this.remoteSyncedText)
+          .replace('{e}', rc.entries || 0)
+          .replace('{o}', rc.overtime || 0)
+          .replace('{l}', rc.leaves || 0)
+          .replace('{a}', rc.added || 0)
+          .replace('{c}', rc.changed || 0)
+          .replace('{r}', rc.removed || 0),
         confirmText: L.syncRestore,
         cancelText: L.cancel,
         success: (res) => {

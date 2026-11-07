@@ -490,6 +490,28 @@ await scenario('E6 回执要数清改了几条', async ({ env, cloud, s }) => {
   ok(r.receipt.entries === 3, '★ 1 条改值 + 1 条被覆盖删掉 + 1 条新增 = 3')
 })
 
+await scenario('E7 预览恢复：只算不动，回执与实作一致', async ({ env, cloud, s }) => {
+  env.write('wio_entries', { '2026-05-01': 'company' })
+  cloud.seed(snap({ '2026-05-01': 'home', '2026-06-01': 'vacation' }), 6)
+  const p = await s.previewRestore()
+  ok(p.ok && p.exists, '预览要能看到云端')
+  ok(p.receipt && p.receipt.total === 2, '★ 预览回执要数出会变 2 条')
+  ok(env.read('wio_entries')['2026-05-01'] === 'company', '★ 预览绝不能写本机')
+  ok(env.has('wio_restore_backup') === false, '预览也不留备份')
+  const r = await s.restoreFromCloud()
+  ok(r.ok && r.receipt.total === p.receipt.total, '★ 预览必须等于实作（共用同一套算法）')
+  ok(r.receipt.added === 1 && r.receipt.changed === 1 && r.receipt.removed === 0,
+    '方向计数：06-01 新增 1，05-01 改值 1')
+})
+
+await scenario('E8 恢复是覆盖：本机独有记录会被删，预览必须预告', async ({ env, cloud, s }) => {
+  env.write('wio_entries', { '2026-05-01': 'company', '2026-05-02': 'home' })
+  cloud.seed(snap({ '2026-05-01': 'company' }), 6)
+  const p = await s.previewRestore()
+  ok(p.receipt.removed === 1, '★ 05-02 本机有、云端没有，恢复会删掉它——这是破坏性操作，必须提前说')
+  ok(p.receipt.total === 1 && p.receipt.changed === 0, '只有 1 条变化，且就是那条删除')
+})
+
 // ---------- I. 删除是否真的生效 ----------
 
 await scenario('I1 云端没删掉要如实回执，不能报成功就完事', async ({ env, cloud, s }) => {

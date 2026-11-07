@@ -736,21 +736,58 @@ function diffReceipt(before, after) {
   const a = { entries: after.entries || {}, overtime: after.overtime || {} }
   let entries = 0
   let overtime = 0
-  new Set([...Object.keys(b.entries), ...Object.keys(a.entries)]).forEach(k => {
-    if (!sameVal(b.entries[k], a.entries[k])) entries++
-  })
-  new Set([...Object.keys(b.overtime), ...Object.keys(a.overtime)]).forEach(k => {
-    if (!sameVal(b.overtime[k], a.overtime[k])) overtime++
+  let added = 0      // 本机没有、恢复后会新增的
+  let removed = 0    // 本机有、恢复后会被删掉的（云端没有）
+  let changed = 0    // 两边都有但内容不同，以云端为准
+  ;['entries', 'overtime'].forEach(k => {
+    new Set([...Object.keys(b[k]), ...Object.keys(a[k])]).forEach(key => {
+      if (sameVal(b[k][key], a[k][key])) return
+      if (k === 'entries') entries++; else overtime++
+      const inB = b[k][key] !== undefined
+      const inA = a[k][key] !== undefined
+      if (!inB) added++
+      else if (!inA) removed++
+      else changed++
+    })
   })
   const leavesOf = s => (Array.isArray((s || {}).customLeaves) ? s.customLeaves.length : 0)
   const leaves = leavesOf(after.settings)
   return {
     entries,
     overtime,
+    added,
+    removed,
+    changed,
     leaves,
     leavesDelta: leaves - leavesOf(before.settings),
     total: entries + overtime
   }
+}
+
+/**
+ * 「从云端恢复」的试算：只算不动。UI 拿它把「云端到底有什么、
+ * 恢复会改掉什么」摆在确认框里，用户点确认才有意义——
+ * 内容完全一致时直接拒绝弹确认，从根上消灭「点了没效果」。
+ * 与 restoreFromCloud 共用 buildRestore，保证预览=实作。
+ */
+export async function previewRestore() {
+  const r = await checkRemote()
+  if (!r.ok) return r
+  const res = remoteCache
+  if (!res || !res.exists) return { ok: true, exists: false }
+  const { merged, receipt, keptLeaves, syncedTime, remoteCount } = buildRestore(res)
+  return { ok: true, exists: true, receipt, keptLeaves, syncedTime, remoteCount, merged }
+}
+
+/** 读 remoteCache，算出恢复后的完整数据与回执（不写任何存储） */
+function buildRestore(res) {
+  const before = snapshotData()
+  // 只恢复「历史」：云端若还残留旧版本推上去的未来记录，不能搬回来当计划，
+  // 那些多半已经过期或被本机重新规划过。本机的未来计划在覆盖中保留。
+  const merged = mergeRestore(historyData(res.data || {}), futureOnly(before))
+  const keptLeaves = repairLeaveRefs(merged, before.settings || {})
+  const receipt = diffReceipt(before, merged)
+  return { merged, receipt, keptLeaves, syncedTime: res.synced_time || null, remoteCount: countOf(res.data) }
 }
 
 /** 从云端整份恢复本机（覆盖前自动备份） */
@@ -759,12 +796,7 @@ export async function restoreFromCloud() {
   if (!r.ok) return r
   const res = remoteCache || {}
   if (!res.exists) return { ok: false, reason: 'empty' }
-  const before = snapshotData()
-  // 只恢复「历史」：云端若还残留旧版本推上去的未来记录，不能搬回来当计划，
-  // 那些多半已经过期或被本机重新规划过。本机的未来计划在覆盖中保留。
-  const merged = mergeRestore(historyData(res.data || {}), futureOnly(before))
-  const keptLeaves = repairLeaveRefs(merged, before.settings || {})
-  const receipt = diffReceipt(before, merged)
+  const { merged, receipt, keptLeaves } = buildRestore(res)
   backupLocal()
   writeSnapshot(merged)
   settleAfterSync(res)
