@@ -8,7 +8,7 @@
       <view class="nav-holder"></view>
     </view>
 
-    <!-- 卡面切换：左右滑动预览图即可换卡面，圆点指示当前位置 -->
+    <!-- 卡面切换：swiper 轮播，邻卡露边即「还能滑」的提示，跟手拖动原生 60fps -->
     <view class="style-bar">
       <view class="dots">
         <view
@@ -16,27 +16,33 @@
           :key="key"
           class="dot"
           :class="{ 'dot-on': key === style }"
-          @click="setStyle(key)"
+          @click="onDotTap(key)"
         ></view>
       </view>
-      <text class="style-name">{{ styleName }}</text>
+      <text :key="style" class="style-name">{{ styleName }}</text>
     </view>
 
-    <view
-      class="preview-area"
-      @touchstart="onTouchStart"
-      @touchend="onTouchEnd"
-    >
-      <image
-        v-if="imagePath"
-        class="preview-img"
-        :src="imagePath"
-        mode="widthFix"
-        @click="previewImage"
-      />
-      <view v-else class="preview-state" @click="failed ? generate() : null">
-        <text class="state-text">{{ failed ? t.genFailed : t.generating }}</text>
-      </view>
+    <view class="preview-area">
+      <swiper
+        class="style-swiper"
+        :current="swiperCurrent"
+        previous-margin="90rpx"
+        next-margin="90rpx"
+        @change="onSwiperChange"
+      >
+        <swiper-item v-for="key in styleKeys" :key="key" class="style-item">
+          <image
+            v-if="images[key]"
+            class="preview-img"
+            :src="images[key]"
+            mode="widthFix"
+            @click="previewImage(images[key])"
+          />
+          <view v-else class="preview-state" @click="failed ? generateAll() : null">
+            <text class="state-text">{{ placeholderText }}</text>
+          </view>
+        </swiper-item>
+      </swiper>
     </view>
 
     <view class="action-bar">
@@ -67,14 +73,15 @@ export default {
     return {
       language: 'zh-CN',
       topSafe: 44,
-      imagePath: '',
+      // 每个卡面一张图：{ calendar: 'wxfile://...', receipt: '...' }
+      images: {},
       failed: false,
       model: null,
       year: 0,
       month: 0,
       style: DEFAULT_STYLE,
-      touchX: 0,
-      touchY: 0
+      styleKeys: STYLE_KEYS,
+      swiperCurrent: 0
     }
   },
   computed: {
@@ -86,6 +93,11 @@ export default {
     styleName() {
       const map = { calendar: this.t.styleCalendar, receipt: this.t.styleReceipt }
       return map[this.style] || this.style
+    },
+    /** 还没出图的滑轨位显示什么：生成中 / 失败重试 */
+    placeholderText() {
+      if (this.failed && !Object.keys(this.images).length) return this.t.genFailed
+      return this.t.generating
     }
   },
   onLoad(options) {
@@ -94,6 +106,7 @@ export default {
     // 记住上次选的卡面；老版本存了非法值时回退默认
     const savedStyle = wioService.getSettings().cardStyle
     this.style = isKnownStyle(savedStyle) ? savedStyle : DEFAULT_STYLE
+    this.swiperCurrent = Math.max(0, STYLE_KEYS.indexOf(this.style))
     // 从首页滑到历史月份再点分享：带上年月，别把上个月的数据画成当月
     const y = Number(options && options.y) || 0
     const m = Number(options && options.m) || 0
@@ -101,21 +114,21 @@ export default {
     this.month = m
   },
   onReady() {
-    this.generate()
+    this.generateAll()
   },
   onShareAppMessage() {
     const m = this.model
     return {
       title: m ? `${m.title} ${m.rate}%` : 'WIO Tracker',
       path: '/pages/index/index',
-      imageUrl: this.imagePath || undefined
+      imageUrl: this.images[this.style] || undefined
     }
   },
   onShareTimeline() {
     const m = this.model
     return {
       title: m ? `${m.title} ${m.rate}%` : 'WIO Tracker',
-      imageUrl: this.imagePath || undefined
+      imageUrl: this.images[this.style] || undefined
     }
   },
   methods: {
@@ -137,46 +150,32 @@ export default {
           .exec(res => resolve(res && res[0] ? res[0].node : null))
       })
     },
-    /** 切换卡面：换样式立刻重画，旧图留在原位直到新图就绪，不闪白 */
-    setStyle(key) {
-      if (key === this.style || !isKnownStyle(key)) return
+    // ---- 卡面切换 ----
+    /** swiper 滑动 / 圆点点击都会走到这里，统一在此同步状态并记住选择 */
+    onSwiperChange(e) {
+      const i = e && e.detail ? e.detail.current : 0
+      const key = STYLE_KEYS[i]
+      if (!key || key === this.style) return
       haptic('light')
       this.style = key
       const s = wioService.getSettings()
       wioService.saveSettings({ ...s, cardStyle: key })
-      this.generate()
     },
-    // ---- 左右滑动切换卡面 ----
-    onTouchStart(e) {
-      const t = e.touches && e.touches[0]
-      if (t) {
-        this.touchX = t.clientX
-        this.touchY = t.clientY
-      }
+    /** 圆点直达：驱动 swiper 滑过去，状态变化交给 onSwiperChange */
+    onDotTap(key) {
+      const i = STYLE_KEYS.indexOf(key)
+      if (i === -1 || i === this.swiperCurrent) return
+      haptic('light')
+      this.swiperCurrent = i
     },
-    onTouchEnd(e) {
-      const t = e.changedTouches && e.changedTouches[0]
-      if (!t) return
-      const dx = t.clientX - this.touchX
-      const dy = t.clientY - this.touchY
-      // 水平位移够大、且明显比纵向位移大，才算一次滑动（避免和纵向滚动打架）
-      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-        this.swipeStyle(dx < 0 ? 1 : -1)
-      }
-    },
-    /** 按样式表顺序循环：往左滑 = 下一张，往右滑 = 上一张 */
-    swipeStyle(dir) {
-      const keys = STYLE_KEYS
-      const i = keys.indexOf(this.style)
-      if (i === -1) return
-      this.setStyle(keys[(i + dir + keys.length) % keys.length])
-    },
-    async generate() {
-      // 正在出图时又切了样式：等这一张画完，finally 会按最新选择补一张
+    /**
+     * 把所有卡面一次画完：二维码只加载一次，之后逐个样式重画导出。
+     * 当前卡面排最前先出图，其余样式随后补齐——滑过去时图已就绪。
+     */
+    async generateAll() {
       if (this.busy) return
       this.busy = true
       this.failed = false
-      const drawnStyle = this.style
       try {
         const model = buildShareModel(this.language, this.year || undefined, this.month || undefined)
         this.model = model
@@ -191,29 +190,34 @@ export default {
         const qrPath = await getShareQrPath(model.scene)
         const qrImage = qrPath ? await loadCanvasImage(canvas, qrPath) : null
 
-        paintShareCard(canvas, model, qrImage, this.style)
-        this.imagePath = await exportCanvas(canvas)
+        // 当前样式先出，其余按注册顺序补齐
+        const order = [this.style, ...STYLE_KEYS.filter(k => k !== this.style)]
+        for (const key of order) {
+          paintShareCard(canvas, model, qrImage, key)
+          const path = await exportCanvas(canvas)
+          // 整体替换对象保证 Vue2 响应式
+          this.images = { ...this.images, [key]: path }
+        }
       } catch (e) {
         console.error('share card generate failed', e)
         this.failed = true
       } finally {
         this.busy = false
-        // 出图期间用户切到别的样式了：按最新选择再画一次
-        if (this.style !== drawnStyle) this.generate()
       }
     },
-    previewImage() {
-      if (!this.imagePath) return
-      uni.previewImage({ urls: [this.imagePath], current: this.imagePath })
+    previewImage(path) {
+      if (!path) return
+      uni.previewImage({ urls: [path], current: path })
     },
     saveToAlbum() {
-      if (!this.imagePath) {
-        if (this.failed) this.generate()
+      const path = this.images[this.style]
+      if (!path) {
+        if (this.failed) this.generateAll()
         return
       }
       haptic('light')
       uni.saveImageToPhotosAlbum({
-        filePath: this.imagePath,
+        filePath: path,
         success: () => {
           uni.showToast({ title: this.t.saved, icon: 'none' })
         },
@@ -325,26 +329,51 @@ export default {
 .style-name {
   font-size: 11px;
   color: #8A9099;
+  /* 换卡面时名字轻淡入，:key 绑定 style 让元素重挂载、动画重放 */
+  animation: nameIn 0.24s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-/* ===== 预览 ===== */
+@keyframes nameIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ===== 预览（swiper 轮播，邻卡露边）===== */
 .preview-area {
   flex: 1;
   min-height: 0;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: center;
   padding: 8px 0 12px;
+  overflow: hidden;
+}
+
+.style-swiper {
+  width: 100%;
+  height: 100%;
+}
+
+.style-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .preview-img {
-  width: 76vw;
+  width: 570rpx;
   border-radius: 14px;
   box-shadow: 0 12px 32px rgba(20, 40, 36, 0.14);
 }
 
 .preview-state {
-  width: 76vw;
+  width: 570rpx;
   /* 与卡片同为 3:4，加载时不跳动 */
   aspect-ratio: 3 / 4;
   border-radius: 14px;
