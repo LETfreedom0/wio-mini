@@ -68,8 +68,8 @@
               <view class="sync-btn" :class="{ 'sync-btn-off': !syncLocalCount }" @click.stop="onUploadTap">
                 <text class="sync-btn-text">{{ i18n.profile.syncUpload }}</text>
               </view>
-              <view class="sync-btn sync-btn-ghost" @click.stop="onRestoreTap">
-                <text class="sync-btn-ghost-text">{{ i18n.profile.syncRestore }}</text>
+              <view class="sync-btn sync-btn-ghost" :class="{ 'sync-btn-busy': readingRemote }" @click.stop="onRestoreTap">
+                <text class="sync-btn-ghost-text">{{ readingRemote ? i18n.profile.syncReading : i18n.profile.syncRestore }}</text>
               </view>
             </view>
             <text v-if="syncLocalCount === 0" class="sync-foot">{{ i18n.profile.syncUploadDisabled }}</text>
@@ -313,6 +313,8 @@ export default {
       // 上传前算出来的差异计划，非空即弹出确认层
       uploadPlan: null,
       busy: false,
+      // 恢复分两段：先读云端（按钮就地转圈），再整份覆盖（全屏 loading）
+      readingRemote: false,
       lastNx: 0
     }
   },
@@ -394,6 +396,15 @@ export default {
     lastSyncText() {
       if (!this.lastSyncAt) return '—'
       const d = new Date(this.lastSyncAt)
+      const pad = n => String(n).padStart(2, '0')
+      return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    },
+    /** 云端快照的写入时间：确认层里给用户一个「这是哪一份」的锚点 */
+    remoteSyncedText() {
+      const t = this.syncSummary.remoteSyncedTime
+      if (!t) return '—'
+      const d = new Date(t)
+      if (isNaN(d.getTime())) return '—'
       const pad = n => String(n).padStart(2, '0')
       return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
     }
@@ -505,18 +516,22 @@ export default {
     /** 上传：先算差异 → 弹层说清「会上传什么、会改什么」→ 用户确认才动云端 */
     async onUploadTap() {
       haptic('light')
-      if (this.busy) return
+      const L = this.i18n.profile
+      if (this.busy) {
+        this.notify(L.syncBusy)
+        return
+      }
       if (!this.syncLocalCount) {
-        uni.showToast({ title: this.i18n.profile.syncUploadDisabled, icon: 'none' })
+        this.notify(L.syncUploadDisabled)
         return
       }
       this.busy = true
-      uni.showLoading({ title: '' })
+      uni.showLoading({ title: L.syncReading, mask: true })
       try {
         const r = await syncService.prepareUpload()
         uni.hideLoading()
         if (!r.ok) {
-          uni.showToast({ title: this.i18n.profile.syncFail, icon: 'none' })
+          this.notify(L.syncFail)
           return
         }
         const plan = r.plan
@@ -525,7 +540,7 @@ export default {
         this.uploadPlan = plan
       } catch (e) {
         uni.hideLoading()
-        uni.showToast({ title: this.i18n.profile.syncFail, icon: 'none' })
+        this.notify(L.syncFail)
       } finally {
         this.busy = false
       }
@@ -560,7 +575,7 @@ export default {
     },
     /** 云端被别处改过：按最新数据重算清单，并还原用户刚才的勾选 */
     async reopenPlanWithChoices(choices) {
-      uni.showLoading({ title: '' })
+      uni.showLoading({ title: this.i18n.profile.syncReading, mask: true })
       try {
         const r = await syncService.prepareUpload()
         uni.hideLoading()
@@ -586,7 +601,7 @@ export default {
       const L = this.i18n.profile
       // 记住用户勾过的选择，云端被抢跑后重开清单时还原
       const choices = this.snapshotChoices(plan)
-      uni.showLoading({ title: '' })
+      uni.showLoading({ title: L.syncUploading, mask: true })
       try {
         const r = await syncService.uploadMerge(plan)
         uni.hideLoading()
@@ -600,18 +615,18 @@ export default {
             : (r.remoteCount !== undefined ? L.syncDoneCount.replace('{n}', r.remoteCount) : L.syncDone)
           // 回读发现「该删的还在」：如实说，别让用户以为删干净了
           if (r.stuck > 0) title = L.syncDeleteStuck.replace('{n}', r.stuck)
-          uni.showToast({ title, icon: 'none' })
+          this.notify(title)
         } else if (r.reason === 'cloud_changed') {
           // 不能静默失败：云端刚被别处改过，马上按新数据重算清单，
           // 并把刚才的勾选还原，用户再点一次就行
           await this.reopenPlanWithChoices(choices)
-          uni.showToast({ title: L.syncCloudChanged, icon: 'none' })
+          this.notify(L.syncCloudChanged)
         } else {
-          uni.showToast({ title: L.syncFail, icon: 'none' })
+          this.notify(L.syncFail)
         }
       } catch (e) {
         uni.hideLoading()
-        uni.showToast({ title: L.syncFail, icon: 'none' })
+        this.notify(L.syncFail)
       }
     },
     askOverwrite() {
@@ -622,7 +637,7 @@ export default {
       const plan = this.uploadPlan
       if (!plan) return
       const L = this.i18n.profile
-      uni.showLoading({ title: '' })
+      uni.showLoading({ title: L.syncUploading, mask: true })
       try {
         const r = await syncService.uploadOverwrite(plan)
         uni.hideLoading()
@@ -630,98 +645,120 @@ export default {
           this.uploadPlan = null
           this.load()
           this.lastSyncAt = syncService.getLastSyncTime()
-          uni.showToast({ title: L.syncDone, icon: 'success' })
+          this.notify(L.syncDone)
         } else {
-          uni.showToast({ title: L.syncFail, icon: 'none' })
+          this.notify(L.syncFail)
         }
       } catch (e) {
         uni.hideLoading()
-        uni.showToast({ title: L.syncFail, icon: 'none' })
+        this.notify(L.syncFail)
       }
+    },
+
+    /**
+     * 小程序里 showLoading / showToast / showModal 共用同一个原生交互层：
+     * hideLoading() 之后紧接着调 showToast / showModal，后者会被静默吞掉。
+     * 表现出来就是「点了完全没有任何反应」——所以统一延迟一拍再弹。
+     */
+    notify(title, icon = 'none') {
+      setTimeout(() => {
+        uni.showToast({ title, icon, duration: 2200 })
+      }, 160)
+    },
+    popupModal(opts) {
+      setTimeout(() => {
+        uni.showModal(opts)
+      }, 60)
     },
 
     /** 从云端恢复：整份覆盖本机，先备份，可撤销 */
     async onRestoreTap() {
       haptic('light')
-      if (this.busy) return
       const L = this.i18n.profile
-      this.busy = true
-      uni.showLoading({ title: '' })
+      // 这里以前是静默 return：busy 卡住时用户点几次都毫无反应
+      if (this.busy || this.readingRemote) {
+        this.notify(L.syncBusy)
+        return
+      }
+      this.readingRemote = true
       let r = null
       try {
-        // 先看一次云端最新状态，避免拿过期的条数吓用户
+        // 先看一次云端最新状态：拿到确切条数，也顺手验证网络
         r = await syncService.checkRemote()
       } catch (e) { r = null }
-      uni.hideLoading()
-      this.busy = false
+      this.readingRemote = false
       if (!r || !r.ok) {
-        uni.showToast({ title: L.syncFail, icon: 'none' })
+        this.notify(L.syncFail)
         return
       }
       if (!r.exists) {
-        uni.showToast({ title: L.syncCloudEmpty, icon: 'none' })
+        this.notify(L.syncCloudEmpty)
         return
       }
       this.syncSummary = syncService.getSyncSummary()
       const n = r.remoteCount || 0
-      uni.showModal({
+      const when = this.remoteSyncedText
+      this.popupModal({
         title: L.syncRestoreTitle,
-        content: L.syncRestoreConfirm.replace('{n}', n),
+        content: L.syncRestoreConfirm.replace('{n}', n).replace('{time}', when),
         confirmText: L.syncRestore,
         cancelText: L.cancel,
-        success: async (res) => {
+        success: (res) => {
           if (!res.confirm) return
-          this.busy = true
-          uni.showLoading({ title: '' })
-          try {
-            const out = await syncService.restoreFromCloud()
-            uni.hideLoading()
-            if (out.ok) {
-              this.load()
-              this.lastSyncAt = syncService.getLastSyncTime()
-              // 内容一致时不能再报「已恢复」：用户只会觉得点了没反应。
-              // 有变化就把变化量摆出来，一眼能对上日历。
-              const rc = out.receipt || {}
-              let title = L.syncRestoreDone
-              if (!rc.total && !rc.leavesDelta) {
-                title = L.syncRestoreNoChange
-              } else {
-                title = L.syncRestoreDoneDetail
-                  .replace('{e}', rc.entries || 0)
-                  .replace('{o}', rc.overtime || 0)
-                  .replace('{l}', rc.leaves || 0)
-              }
-              uni.showToast({ title, icon: 'none' })
-            } else if (out.reason === 'empty') {
-              uni.showToast({ title: L.syncCloudEmpty, icon: 'none' })
-            } else {
-              uni.showToast({ title: L.syncFail, icon: 'none' })
-            }
-          } catch (e) {
-            uni.hideLoading()
-            uni.showToast({ title: L.syncFail, icon: 'none' })
-          } finally {
-            this.busy = false
-          }
+          this.runRestore()
         }
       })
+    },
+    /** 真正的覆盖动作（确认之后才走这里） */
+    async runRestore() {
+      const L = this.i18n.profile
+      this.busy = true
+      uni.showLoading({ title: L.syncRestoring, mask: true })
+      try {
+        const out = await syncService.restoreFromCloud()
+        uni.hideLoading()
+        if (out.ok) {
+          this.load()
+          this.lastSyncAt = syncService.getLastSyncTime()
+          // 内容一致时不能再报「已恢复」：用户只会觉得点了没反应。
+          // 有变化就把变化量摆出来，一眼能对上日历。
+          const rc = out.receipt || {}
+          let title = L.syncRestoreNoChange
+          if (rc.total || rc.leavesDelta) {
+            title = L.syncRestoreDoneDetail
+              .replace('{e}', rc.entries || 0)
+              .replace('{o}', rc.overtime || 0)
+              .replace('{l}', rc.leaves || 0)
+          }
+          this.notify(title)
+        } else if (out.reason === 'empty') {
+          this.notify(L.syncCloudEmpty)
+        } else {
+          this.notify(L.syncFail)
+        }
+      } catch (e) {
+        uni.hideLoading()
+        this.notify(L.syncFail)
+      } finally {
+        this.busy = false
+      }
     },
     async onUndoRestore() {
       haptic('light')
       const L = this.i18n.profile
-      uni.showLoading({ title: '' })
+      uni.showLoading({ title: L.syncRestoring, mask: true })
       try {
         const r = await syncService.undoRestore()
         uni.hideLoading()
         if (r.ok) {
           this.load()
-          uni.showToast({ title: L.syncUndoDone, icon: 'success' })
+          this.notify(L.syncUndoDone)
         } else {
-          uni.showToast({ title: L.syncFail, icon: 'none' })
+          this.notify(L.syncFail)
         }
       } catch (e) {
         uni.hideLoading()
-        uni.showToast({ title: L.syncFail, icon: 'none' })
+        this.notify(L.syncFail)
       }
     },
     onDataRestored() {
