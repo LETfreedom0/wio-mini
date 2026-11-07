@@ -38,14 +38,16 @@ export const LAYOUT = {
   title: { x: 54, y: 136, w: 440, h: 42, size: 30, weight: 400 },
   hero: { x: 48, y: 172, w: 264, h: 340, size: 220, weight: 700 },
   percent: { size: 88, centerY: 315 },
-  badge: { x: 500, y: 222, w: 196, h: 54, r: 27, size: 26 },
+  // 右对齐元素共用一条右缘线 694（= 月份 / 构成条 / 分隔线的右端）：
+  // 徽章 498+196、OT 两行 400+294、末列数据 54+640，全部收在同一条线上
+  badge: { x: 498, y: 222, w: 196, h: 54, r: 27, size: 26 },
   otLine1: { x: 400, y: 352, w: 294, h: 44, size: 32, weight: 500, align: 'right' },
   otLine2: { x: 400, y: 408, w: 294, h: 34, size: 24, weight: 400, align: 'right' },
   gap: { x: 54, y: 470, w: 430, h: 42, size: 30, weight: 500 },
   section: { x: 54, y: 524, w: 520, h: 38, size: 26, weight: 400 },
   bar: { x: 56, y: 576, w: 638, h: 10, gap: 6, r: 5 },
   dataRow: {
-    x: 54, w: 638, y: 622,
+    x: 54, w: 640, y: 622,
     valueH: 52, valueSize: 40,
     unitH: 34, unitSize: 26,
     labelY: 678, labelH: 36, labelSize: 26
@@ -226,26 +228,35 @@ export function drawShareCard(ctx, m, qrImage) {
   drawText(ctx, m.compositionText, L.section, { color: P.muted })
   drawBar(ctx, m.bar, L.bar)
 
-  // ---- 数据行（列数随内容变化，等分 638）----
+  // ---- 数据行（列数随内容变化；末列右对齐，与上方徽章 / OT 同一条右缘线）----
   const D = L.dataRow
   const cols = m.cols || []
   const step = cols.length ? D.w / cols.length : D.w
   cols.forEach((col, i) => {
+    const isLast = cols.length > 1 && i === cols.length - 1
     const x = D.x + i * step
+    const valueStr = String(col.value)
+    setFont(ctx, D.valueSize, 700)
+    const vw = ctx.measureText(valueStr).width
+    setFont(ctx, D.unitSize, 400)
+    const uw = ctx.measureText(col.unit || '').width
+    // 末列整块右对齐到 D.x + D.w，补上右侧缺失的对齐线
+    const startX = isLast ? D.x + D.w - (vw + 6 + uw) : x
+
     const valueColor = col.accent ? P.gold : P.ink
-    setFont(ctx, D.valueSize, 700)
-    const vw = ctx.measureText(String(col.value)).width
-    setFont(ctx, D.valueSize, 700)
     ctx.fillStyle = valueColor
     ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
-    ctx.fillText(String(col.value), x, D.y + D.valueH / 2)
+    ctx.fillText(valueStr, startX, D.y + D.valueH / 2)
 
+    // 单位与数字同中心：旧版单位框中心低 7px，视觉上「天」往下坠
     drawText(ctx, col.unit,
-      { x: x + vw + 6, y: D.y + 16, w: 60, h: D.unitH, size: D.unitSize },
+      { x: startX + vw + 6, y: D.y + (D.valueH - D.unitH) / 2, w: 60, h: D.unitH, size: D.unitSize },
       { color: P.muted })
     drawText(ctx, col.label,
-      { x, y: D.labelY, w: step - 12, h: D.labelH, size: D.labelSize },
+      isLast
+        ? { x, y: D.labelY, w: D.x + D.w - x, h: D.labelH, size: D.labelSize, align: 'right' }
+        : { x, y: D.labelY, w: step - 12, h: D.labelH, size: D.labelSize },
       { color: P.muted, minSize: 18 })
   })
 
