@@ -25,6 +25,8 @@ const DEFAULT_SETTINGS = {
   halfFullDays: {},
   // 每天往返通勤分钟数（用于年度统计「节约通勤」换算）
   commuteMinutes: 90,
+  // 分享卡卡面样式：'calendar'（日历格）| 'receipt'（打卡小票）
+  cardStyle: 'calendar',
   // 调休配置规则 (Key: 节日名称, Value: boolean 是否调休)
   // 默认只有春节调休
   compOffRules: {

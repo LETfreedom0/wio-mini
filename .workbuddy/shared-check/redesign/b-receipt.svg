@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="750" height="1000">
+  <rect width="750" height="1000" fill="#EAE4D8"/>
+  <!-- 票 + 轻投影 -->
+  <rect x="75" y="52" width="600" height="908" rx="22" fill="#D9D1C0" opacity="0.55"/>
+  <rect x="75" y="44" width="600" height="908" rx="22" fill="#FFFDF6"/>
+
+  <!-- 打孔线 -->
+  <g fill="#EAE4D8">
+    <circle cx="103" cy="44" r="8"/><circle cx="131" cy="44" r="8"/><circle cx="159" cy="44" r="8"/>
+    <circle cx="187" cy="44" r="8"/><circle cx="215" cy="44" r="8"/><circle cx="243" cy="44" r="8"/>
+    <circle cx="271" cy="44" r="8"/><circle cx="299" cy="44" r="8"/><circle cx="327" cy="44" r="8"/>
+    <circle cx="355" cy="44" r="8"/><circle cx="383" cy="44" r="8"/><circle cx="411" cy="44" r="8"/>
+    <circle cx="439" cy="44" r="8"/><circle cx="467" cy="44" r="8"/><circle cx="495" cy="44" r="8"/>
+    <circle cx="523" cy="44" r="8"/><circle cx="551" cy="44" r="8"/><circle cx="579" cy="44" r="8"/>
+    <circle cx="607" cy="44" r="8"/><circle cx="635" cy="44" r="8"/><circle cx="663" cy="44" r="8"/>
+  </g>
+
+  <text x="375" y="124" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="22" fill="#A09884" text-anchor="middle" letter-spacing="6">WIO TRACKER</text>
+  <text x="375" y="176" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="36" font-weight="700" fill="#2A3836" text-anchor="middle">2026年11月 · 战绩单</text>
+
+  <line x1="105" y1="216" x2="645" y2="216" stroke="#D8D2C4" stroke-width="3" stroke-dasharray="1 12" stroke-linecap="round"/>
+
+  <!-- 圆形达标章 -->
+  <g transform="rotate(-12 556 250)">
+    <circle cx="556" cy="250" r="54" fill="none" stroke="#0E6E62" stroke-width="3"/>
+    <circle cx="556" cy="250" r="42" fill="none" stroke="#0E6E62" stroke-width="1.5"/>
+    <text x="556" y="259" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="25" font-weight="600" fill="#0E6E62" text-anchor="middle">已达标</text>
+  </g>
+
+  <!-- 大数字 -->
+  <text x="212" y="452" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="230" font-weight="800" fill="#0E6E62">41</text>
+  <text x="470" y="452" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="92" font-weight="800" fill="#0E6E62">%</text>
+
+  <text x="375" y="526" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="30" font-weight="600" fill="#C08A2D" text-anchor="middle">超出目标 11%</text>
+
+  <line x1="105" y1="572" x2="645" y2="572" stroke="#D8D2C4" stroke-width="3" stroke-dasharray="1 12" stroke-linecap="round"/>
+
+  <!-- 收银条数据 -->
+  <g font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="26">
+    <text x="105" y="620" fill="#5F6E6B">公司办公</text>
+    <line x1="230" y1="612" x2="560" y2="612" stroke="#D8D2C4" stroke-width="2.5" stroke-dasharray="2 10" stroke-linecap="round"/>
+    <text x="645" y="620" fill="#2A3836" font-weight="700" text-anchor="end">9 天</text>
+
+    <text x="105" y="666" fill="#5F6E6B">居家办公</text>
+    <line x1="230" y1="658" x2="560" y2="658" stroke="#D8D2C4" stroke-width="2.5" stroke-dasharray="2 10" stroke-linecap="round"/>
+    <text x="645" y="666" fill="#2A3836" font-weight="700" text-anchor="end">7 天</text>
+
+    <text x="105" y="712" fill="#5F6E6B">年假</text>
+    <line x1="230" y1="704" x2="560" y2="704" stroke="#D8D2C4" stroke-width="2.5" stroke-dasharray="2 10" stroke-linecap="round"/>
+    <text x="645" y="712" fill="#2A3836" font-weight="700" text-anchor="end">2 天</text>
+
+    <text x="105" y="758" fill="#5F6E6B">加班</text>
+    <line x1="230" y1="750" x2="560" y2="750" stroke="#D8D2C4" stroke-width="2.5" stroke-dasharray="2 10" stroke-linecap="round"/>
+    <text x="645" y="754" fill="#2A3836" font-weight="700" text-anchor="end">12 小时</text>
+    <text x="645" y="782" fill="#C08A2D" font-size="21" text-anchor="end">≈ 1.5 天班</text>
+
+    <text x="105" y="820" fill="#5F6E6B">剩余</text>
+    <line x1="230" y1="812" x2="560" y2="812" stroke="#D8D2C4" stroke-width="2.5" stroke-dasharray="2 10" stroke-linecap="round"/>
+    <text x="645" y="820" fill="#C08A2D" font-weight="700" text-anchor="end">6 天</text>
+  </g>
+
+  <line x1="105" y1="846" x2="645" y2="846" stroke="#D8D2C4" stroke-width="3" stroke-dasharray="1 12" stroke-linecap="round"/>
+
+  <!-- 底部：收进票内，距打孔留 24px -->
+  <rect x="120" y="864" width="66" height="66" rx="10" fill="#F1EDE2"/>
+  <text x="153" y="906" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="18" fill="#C9C2B2" text-anchor="middle">WIO</text>
+  <text x="216" y="892" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="24" fill="#2A3836">长按识别小程序码</text>
+  <text x="216" y="922" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="19" fill="#9AA1A8">每月自动生成战绩</text>
+</svg>

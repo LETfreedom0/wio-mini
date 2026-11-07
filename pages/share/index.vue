@@ -8,6 +8,27 @@
       <view class="nav-holder"></view>
     </view>
 
+    <!-- 卡面样式：两套版式数据一致，只是表达方式不同，切换即重画 -->
+    <view class="style-bar">
+      <text class="style-label">{{ t.styleLabel }}</text>
+      <view class="seg">
+        <view
+          class="seg-item"
+          :class="{ 'seg-on': style === 'calendar' }"
+          @click="setStyle('calendar')"
+        >
+          <text class="seg-text" :class="{ 'seg-text-on': style === 'calendar' }">{{ t.styleCalendar }}</text>
+        </view>
+        <view
+          class="seg-item"
+          :class="{ 'seg-on': style === 'receipt' }"
+          @click="setStyle('receipt')"
+        >
+          <text class="seg-text" :class="{ 'seg-text-on': style === 'receipt' }">{{ t.styleReceipt }}</text>
+        </view>
+      </view>
+    </view>
+
     <view class="preview-area">
       <image
         v-if="imagePath"
@@ -39,6 +60,7 @@
 import wioService from '@/utils/wioService.js'
 import { locales } from '@/utils/locales.js'
 import { buildShareModel, paintShareCard, exportCanvas, loadCanvasImage, CARD_W, CARD_H } from '@/utils/shareCard.js'
+import { isKnownStyle, DEFAULT_STYLE } from '@/utils/shareCardArt.js'
 import { getShareQrPath } from '@/utils/shareQr.js'
 import { getTopSafeArea } from '@/utils/safeArea.js'
 import { tap as haptic } from '@/utils/haptic.js'
@@ -52,7 +74,8 @@ export default {
       failed: false,
       model: null,
       year: 0,
-      month: 0
+      month: 0,
+      style: DEFAULT_STYLE
     }
   },
   computed: {
@@ -64,6 +87,9 @@ export default {
   onLoad(options) {
     this.language = wioService.getSettings().language || 'zh-CN'
     this.topSafe = getTopSafeArea().totalHeight
+    // 记住上次选的卡面；老版本存了非法值时回退默认
+    const savedStyle = wioService.getSettings().cardStyle
+    this.style = isKnownStyle(savedStyle) ? savedStyle : DEFAULT_STYLE
     // 从首页滑到历史月份再点分享：带上年月，别把上个月的数据画成当月
     const y = Number(options && options.y) || 0
     const m = Number(options && options.m) || 0
@@ -107,10 +133,21 @@ export default {
           .exec(res => resolve(res && res[0] ? res[0].node : null))
       })
     },
+    /** 切换卡面：换样式立刻重画，旧图留在原位直到新图就绪，不闪白 */
+    setStyle(key) {
+      if (key === this.style || !isKnownStyle(key)) return
+      haptic('light')
+      this.style = key
+      const s = wioService.getSettings()
+      wioService.saveSettings({ ...s, cardStyle: key })
+      this.generate()
+    },
     async generate() {
+      // 正在出图时又切了样式：等这一张画完，finally 会按最新选择补一张
       if (this.busy) return
       this.busy = true
       this.failed = false
+      const drawnStyle = this.style
       try {
         const model = buildShareModel(this.language, this.year || undefined, this.month || undefined)
         this.model = model
@@ -125,13 +162,15 @@ export default {
         const qrPath = await getShareQrPath(model.scene)
         const qrImage = qrPath ? await loadCanvasImage(canvas, qrPath) : null
 
-        paintShareCard(canvas, model, qrImage)
+        paintShareCard(canvas, model, qrImage, this.style)
         this.imagePath = await exportCanvas(canvas)
       } catch (e) {
         console.error('share card generate failed', e)
         this.failed = true
       } finally {
         this.busy = false
+        // 出图期间用户切到别的样式了：按最新选择再画一次
+        if (this.style !== drawnStyle) this.generate()
       }
     },
     previewImage() {
@@ -221,6 +260,47 @@ export default {
 .nav-holder {
   width: 36px;
   height: 36px;
+}
+
+/* ===== 卡面样式切换 ===== */
+.style-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 16px 8px;
+}
+
+.style-label {
+  font-size: 12px;
+  color: #8A9099;
+}
+
+.seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: #E9EBED;
+}
+
+.seg-item {
+  padding: 5px 14px;
+  border-radius: 8px;
+}
+
+.seg-on {
+  background: #FFFFFF;
+}
+
+.seg-text {
+  font-size: 12px;
+  color: #6B737B;
+}
+
+.seg-text-on {
+  color: #0E6E62;
+  font-weight: 600;
 }
 
 /* ===== 预览 ===== */

@@ -42,14 +42,15 @@ export function buildShareModel(lang, year, month) {
   const singleName = typeKeys.length === 1 ? shortNames[typeKeys[0]] : ''
   const leaveLabel = singleName || S.colLeave
 
+  // key 供两种卡面各自配色 / 取行，label 才是给人看的字
   const cols = [
-    { value: formatNumber(r.company), unit: S.unitDay, label: S.colOffice },
-    { value: formatNumber(r.home), unit: S.unitDay, label: S.colHome }
+    { key: 'company', value: formatNumber(r.company), unit: S.unitDay, label: S.colOffice },
+    { key: 'home', value: formatNumber(r.home), unit: S.unitDay, label: S.colHome }
   ]
   if (r.leave > 0) {
-    cols.push({ value: formatNumber(r.leave), unit: S.unitDay, label: leaveLabel })
+    cols.push({ key: 'leave', value: formatNumber(r.leave), unit: S.unitDay, label: leaveLabel })
   }
-  cols.push({ value: formatNumber(r.rest), unit: S.unitDay, label: S.colRemain, accent: true })
+  cols.push({ key: 'rest', value: formatNumber(r.rest), unit: S.unitDay, label: S.colRemain, accent: true })
 
   const hasOt = r.otHours > 0
 
@@ -73,6 +74,10 @@ export function buildShareModel(lang, year, month) {
     hasOt,
     otLine1: S.otTitle.replace('{n}', formatHours(r.otHours)),
     otLine2: S.otDays.replace('{n}', formatHours(r.otDays)),
+    // 小票风要把加班排成一行收银条，需要拆开的标签 / 数值 / 单位
+    otCol: S.otCol,
+    otValue: formatHours(r.otHours),
+    otUnitHour: S.unitHour,
     bar: [
       { key: 'company', days: r.company, color: PALETTE.barCompany },
       { key: 'home', days: r.home, color: PALETTE.barHome },
@@ -106,12 +111,12 @@ export function loadCanvasImage(canvas, src) {
 }
 
 /** 在已就绪的 canvas 节点上完成绘制 */
-export function paintShareCard(canvas, model, qrImage) {
+export function paintShareCard(canvas, model, qrImage, style) {
   if (!canvas) return
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   ctx.setTransform(1, 0, 0, 1, 0, 0)
-  drawShareCard(ctx, model, qrImage)
+  drawShareCard(ctx, model, qrImage, style)
 }
 
 /** 导出为临时图片路径（750×1000，与设计稿同尺寸） */

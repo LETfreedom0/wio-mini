@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="750" height="1000">
+  <rect width="750" height="1000" fill="#FFFDF8"/>
+
+  <!-- 日历页签：月份数字做主角入口 -->
+  <rect x="54" y="48" width="92" height="10" rx="5" fill="#C08A2D"/>
+  <rect x="54" y="56" width="92" height="92" rx="14" fill="#0E6E62"/>
+  <text x="100" y="122" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="46" font-weight="700" fill="#FFFDF8" text-anchor="middle">11</text>
+  <text x="696" y="88" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="26" fill="#9AA1A8" text-anchor="end" letter-spacing="4">NOV 2026</text>
+
+  <text x="54" y="196" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="30" fill="#5F6E6B">本月回公司率</text>
+
+  <!-- 大数字（字形顶 222，与印章顶对齐） -->
+  <text x="54" y="412" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="260" font-weight="800" fill="#0E6E62">41</text>
+  <text x="368" y="412" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="98" font-weight="800" fill="#0E6E62">%</text>
+
+  <!-- 达标印章：轻旋转，盖章感 -->
+  <g transform="rotate(-4 596 249)">
+    <rect x="498" y="222" width="196" height="54" rx="27" fill="none" stroke="#0E6E62" stroke-width="2.5"/>
+    <text x="596" y="259" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="26" font-weight="600" fill="#0E6E62" text-anchor="middle">已达标</text>
+  </g>
+
+  <text x="696" y="380" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="30" fill="#2A3836" text-anchor="end">OT 12 小时</text>
+  <text x="696" y="424" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="24" fill="#C08A2D" text-anchor="end">≈ 多上 1.5 天班</text>
+
+  <!-- 结论行 + 金色批注线 -->
+  <text x="54" y="490" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="32" font-weight="600" fill="#C08A2D">超出目标 11%</text>
+  <rect x="54" y="506" width="272" height="3" rx="1.5" fill="#C08A2D" opacity="0.55"/>
+
+  <!-- 构成：一天一格的日历格子 -->
+  <text x="54" y="568" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="24" fill="#8A94A0">本月构成 · 24 个工作日</text>
+  <g>
+    <!-- 9 公司 -->
+    <rect x="54" y="592" width="20" height="36" rx="5" fill="#0E6E62"/>
+    <rect x="78.75" y="592" width="20" height="36" rx="5" fill="#0E6E62"/>
+    <rect x="103.5" y="592" width="20" height="36" rx="5" fill="#0E6E62"/>
+    <rect x="128.25" y="592" width="20" height="36" rx="5" fill="#0E6E62"/>
+    <rect x="153" y="592" width="20" height="36" rx="5" fill="#0E6E62"/>
+    <rect x="177.75" y="592" width="20" height="36" rx="5" fill="#0E6E62"/>
+    <rect x="202.5" y="592" width="20" height="36" rx="5" fill="#0E6E62"/>
+    <rect x="227.25" y="592" width="20" height="36" rx="5" fill="#0E6E62"/>
+    <rect x="252" y="592" width="20" height="36" rx="5" fill="#0E6E62"/>
+    <!-- 7 居家 -->
+    <rect x="276.75" y="592" width="20" height="36" rx="5" fill="#5FA89E"/>
+    <rect x="301.5" y="592" width="20" height="36" rx="5" fill="#5FA89E"/>
+    <rect x="326.25" y="592" width="20" height="36" rx="5" fill="#5FA89E"/>
+    <rect x="351" y="592" width="20" height="36" rx="5" fill="#5FA89E"/>
+    <rect x="375.75" y="592" width="20" height="36" rx="5" fill="#5FA89E"/>
+    <rect x="400.5" y="592" width="20" height="36" rx="5" fill="#5FA89E"/>
+    <rect x="425.25" y="592" width="20" height="36" rx="5" fill="#5FA89E"/>
+    <!-- 2 年假 -->
+    <rect x="450" y="592" width="20" height="36" rx="5" fill="#C08A2D"/>
+    <rect x="474.75" y="592" width="20" height="36" rx="5" fill="#C08A2D"/>
+    <!-- 6 剩余：空心 -->
+    <rect x="499.5" y="592" width="20" height="36" rx="5" fill="#F7F4EC" stroke="#D8D2C4" stroke-width="1.5"/>
+    <rect x="524.25" y="592" width="20" height="36" rx="5" fill="#F7F4EC" stroke="#D8D2C4" stroke-width="1.5"/>
+    <rect x="549" y="592" width="20" height="36" rx="5" fill="#F7F4EC" stroke="#D8D2C4" stroke-width="1.5"/>
+    <rect x="573.75" y="592" width="20" height="36" rx="5" fill="#F7F4EC" stroke="#D8D2C4" stroke-width="1.5"/>
+    <rect x="598.5" y="592" width="20" height="36" rx="5" fill="#F7F4EC" stroke="#D8D2C4" stroke-width="1.5"/>
+    <rect x="623.25" y="592" width="20" height="36" rx="5" fill="#F7F4EC" stroke="#D8D2C4" stroke-width="1.5"/>
+  </g>
+
+  <!-- 图例 -->
+  <g font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="24" fill="#5F6E6B">
+    <rect x="54" y="652" width="16" height="16" rx="4" fill="#0E6E62"/>
+    <text x="80" y="668">公司 <tspan font-weight="700" fill="#2A3836">9</tspan></text>
+    <rect x="192" y="652" width="16" height="16" rx="4" fill="#5FA89E"/>
+    <text x="218" y="668">居家 <tspan font-weight="700" fill="#2A3836">7</tspan></text>
+    <rect x="330" y="652" width="16" height="16" rx="4" fill="#C08A2D"/>
+    <text x="356" y="668">年假 <tspan font-weight="700" fill="#2A3836">2</tspan></text>
+    <rect x="468" y="652" width="16" height="16" rx="4" fill="#F7F4EC" stroke="#D8D2C4" stroke-width="1.5"/>
+    <text x="494" y="668">剩余 <tspan font-weight="700" fill="#C08A2D">6 天</tspan></text>
+  </g>
+
+  <line x1="54" y1="732" x2="696" y2="732" stroke="#EFEADF" stroke-width="2"/>
+
+  <!-- 底部 -->
+  <rect x="54" y="768" width="140" height="140" rx="18" fill="#F1EDE2"/>
+  <text x="124" y="850" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="30" fill="#C9C2B2" text-anchor="middle">WIO</text>
+  <text x="226" y="830" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="30" fill="#2A3836">长按识别小程序码</text>
+  <text x="226" y="876" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="24" fill="#9AA1A8">每月自动生成战绩</text>
+</svg>

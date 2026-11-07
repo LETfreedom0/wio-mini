@@ -1,21 +1,49 @@
 // 分享卡离线校验：用假 ctx 记录每个 fillText 的位置，检查越界 / 重叠 / 断行
 // 运行：node .workbuddy/shared-check/check.mjs
 import { buildShareModel } from './utils/shareCard.js'
-import { drawShareCard, CARD_W, CARD_H, LAYOUT, segmentWidths } from './utils/shareCardArt.js'
+import { drawShareCard, CARD_W, CARD_H, LAYOUT_CALENDAR, LAYOUT_RECEIPT, STYLES } from './utils/shareCardArt.js'
 import wioService from './utils/wioService.js'
 
 // ---------- 假 canvas 上下文 ----------
 class FakeCtx {
-  constructor() { this.ops = []; this._weight = 400; this._size = 16; this.textAlign = 'left'; this.textBaseline = 'alphabetic' }
+  constructor() {
+    this.ops = []
+    this.shapes = []
+    this._weight = 400
+    this._size = 16
+    this._pts = []
+    this.textAlign = 'left'
+    this.textBaseline = 'alphabetic'
+    this.lineWidth = 1
+    this.fillStyle = '#000'
+    this.strokeStyle = '#000'
+  }
   set font(v) { const m = /(\d+)\s+(\d+)px/.exec(v); if (m) { this._weight = +m[1]; this._size = +m[2] } }
   get font() { return `${this._weight} ${this._size}px x` }
   measureText(s) { return { width: measure(String(s), this._size, this._weight) } }
   fillText(s, x, y) {
     this.ops.push({ text: String(s), x, y, size: this._size, align: this.textAlign, baseline: this.textBaseline, w: measure(String(s), this._size, this._weight) })
   }
-  fillRect() {}
+  fillRect(x, y, w, h) { this.shapes.push({ x0: x, y0: y, x1: x + w, y1: y + h, fill: this.fillStyle }) }
   clearRect() {}
-  beginPath() {} moveTo() {} lineTo() {} arc() {} closePath() {} fill() {} stroke() {} save() {} restore() {} clip() {} drawImage() {} setTransform() {}
+  beginPath() { this._pts = [] }
+  moveTo(x, y) { this._pts.push([x, y]) }
+  lineTo(x, y) { this._pts.push([x, y]) }
+  arc(cx, cy, r) { this._pts.push([cx - r, cy - r], [cx + r, cy + r]) }
+  closePath() {}
+  fill() { this._commit('fill') }
+  stroke() { this._commit('stroke') }
+  _commit(kind) {
+    if (!this._pts.length) return
+    const xs = this._pts.map(p => p[0]), ys = this._pts.map(p => p[1])
+    this.shapes.push({
+      x0: Math.min(...xs), y0: Math.min(...ys),
+      x1: Math.max(...xs), y1: Math.max(...ys),
+      kind, stroke: this.strokeStyle
+    })
+  }
+  setLineDash() {}
+  save() {} restore() {} clip() {} drawImage() {} setTransform() {}
 }
 
 function measure(s, size, weight) {
@@ -36,9 +64,10 @@ function measure(s, size, weight) {
 
 function bbox(op) {
   const x0 = op.align === 'right' ? op.x - op.w : op.align === 'center' ? op.x - op.w / 2 : op.x
-  // alphabetic 基线：字形几乎全在基线上方（数字 cap≈0.78em，下延≈0.04em）
+  // alphabetic 基线：数字字形几乎全在基线上方，cap≈0.72em，下延很小。
+  // 这里必须用真实 cap 比例，用 0.8 会把大数字算高 20px，误报它顶到标题上。
   if (op.baseline === 'alphabetic') {
-    return { x0, x1: x0 + op.w, y0: op.y - op.size * 0.8, y1: op.y + op.size * 0.06 }
+    return { x0, x1: x0 + op.w, y0: op.y - op.size * 0.72, y1: op.y + op.size * 0.03 }
   }
   return { x0, x1: x0 + op.w, y0: op.y - op.size * 0.55, y1: op.y + op.size * 0.55 }
 }
@@ -56,53 +85,56 @@ const scenarios = [
 const problems = []
 function fail(msg) { problems.push(msg) }
 
-for (const lang of ['zh-CN', 'en-US']) {
-  for (const sc of scenarios) {
-    wioService.getMonthStats = () => ({ ...sc.stats })
-    wioService.getTargetForMonth = () => sc.target
-    const model = buildShareModel(lang)
-    const ctx = new FakeCtx()
-    drawShareCard(ctx, model, null)
+for (const style of STYLES.map(s => s.key)) {
+  for (const lang of ['zh-CN', 'en-US']) {
+    for (const sc of scenarios) {
+      wioService.getMonthStats = () => ({ ...sc.stats })
+      wioService.getTargetForMonth = () => sc.target
+      const model = buildShareModel(lang)
+      const ctx = new FakeCtx()
+      drawShareCard(ctx, model, null, style)
 
-    // 1) 全部文字不出画布
-    ctx.ops.forEach(op => {
-      const b = bbox(op)
-      if (b.x0 < 0 || b.x1 > CARD_W || b.y0 < 0 || b.y1 > CARD_H) {
-        fail(`[${lang}/${sc.name}] 越界: "${op.text}" x[${b.x0.toFixed(0)},${b.x1.toFixed(0)}] y[${b.y0.toFixed(0)},${b.y1.toFixed(0)}]`)
-      }
-      if (b.x1 > 694 + 1) fail(`[${lang}/${sc.name}] 超过右边距: "${op.text}" 右缘 ${b.x1.toFixed(0)}`)
-    })
+      // 1) 全部文字不出画布
+      ctx.ops.forEach(op => {
+        const b = bbox(op)
+        if (b.x0 < 0 || b.x1 > CARD_W || b.y0 < 0 || b.y1 > CARD_H) {
+          fail(`[${style}/${lang}/${sc.name}] 越界: "${op.text}" x[${b.x0.toFixed(0)},${b.x1.toFixed(0)}] y[${b.y0.toFixed(0)},${b.y1.toFixed(0)}]`)
+        }
+        if (b.x1 > 694 + 1) fail(`[${style}/${lang}/${sc.name}] 超过右边距: "${op.text}" 右缘 ${b.x1.toFixed(0)}`)
+      })
 
-    // 2) 文字之间不重叠
-    for (let i = 0; i < ctx.ops.length; i++) {
-      for (let j = i + 1; j < ctx.ops.length; j++) {
-        const a = bbox(ctx.ops[i]), b = bbox(ctx.ops[j])
-        const ox = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)
-        const oy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0)
-        if (ox > 1 && oy > 1) {
-          fail(`[${lang}/${sc.name}] 重叠: "${ctx.ops[i].text}" × "${ctx.ops[j].text}" (${ox.toFixed(0)}×${oy.toFixed(0)}px)`)
+      // 2) 文字之间不重叠
+      for (let i = 0; i < ctx.ops.length; i++) {
+        for (let j = i + 1; j < ctx.ops.length; j++) {
+          const a = bbox(ctx.ops[i]), b = bbox(ctx.ops[j])
+          const ox = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)
+          const oy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0)
+          if (ox > 1 && oy > 1) {
+            fail(`[${style}/${lang}/${sc.name}] 重叠: "${ctx.ops[i].text}" × "${ctx.ops[j].text}" (${ox.toFixed(0)}×${oy.toFixed(0)}px)`)
+          }
         }
       }
-    }
 
-    // 3) 数据列：标签不能压到下一列
-    const cols = model.cols
-    const step = LAYOUT.dataRow.w / cols.length
-    const labels = ctx.ops.filter(o => o.y > LAYOUT.dataRow.labelY && o.y < LAYOUT.dataRow.labelY + LAYOUT.dataRow.labelH)
-    labels.forEach((op, idx) => {
-      if (idx < labels.length - 1 && bbox(op).x1 > LAYOUT.dataRow.x + idx * step + step - 4) {
-        fail(`[${lang}/${sc.name}] 列标签超列宽: "${op.text}"`)
+      // 3) 各样式专属：格阵不越界 / 收银条不压底部虚线
+      if (style === 'calendar') {
+        const g = LAYOUT_CALENDAR.grid
+        const right = ctx.shapes
+          .filter(s => s.y0 >= g.y - 1 && s.y1 <= g.y + g.h + 1 && s.x0 >= g.x - 1)
+          .reduce((m, s) => Math.max(m, s.x1), 0)
+        if (right > 694 + 1) fail(`[${style}/${lang}/${sc.name}] 格子阵越界: 最右 ${right.toFixed(1)}`)
+        if (!ctx.shapes.some(s => s.y0 >= g.y - 1 && s.y1 <= g.y + g.h + 1)) {
+          fail(`[${style}/${lang}/${sc.name}] 格子阵没画出来`)
+        }
+      } else {
+        const maxBottom = ctx.ops.reduce((m, op) => Math.max(m, bbox(op).y1), 0)
+        const paperBottom = LAYOUT_RECEIPT.paper.y + LAYOUT_RECEIPT.paper.h
+        if (maxBottom > paperBottom - 4) {
+          fail(`[${style}/${lang}/${sc.name}] 文字压到票底: 最低 ${maxBottom.toFixed(0)} > ${paperBottom}`)
+        }
       }
-    })
 
-    // 4) 构成条：段宽合计不能超过轨道
-    const widths = segmentWidths(model.bar.map(s => s.days), LAYOUT.bar.w, LAYOUT.bar.gap)
-    if (widths.length) {
-      const used = widths.reduce((a, b) => a + b, 0) + LAYOUT.bar.gap * (widths.length - 1)
-      if (used > LAYOUT.bar.w + 0.5) fail(`[${lang}/${sc.name}] 构成条溢出: ${used.toFixed(1)} > ${LAYOUT.bar.w}`)
+      console.log(`✓ ${style} / ${lang} / ${sc.name}: ${ctx.ops.length} 段文字, 构成 ${model.bar.filter(s => s.days > 0).map(s => s.days).join('/')} | ${model.rate}% | 列 ${model.cols.map(c => c.label + c.value).join(' ')}`)
     }
-
-    console.log(`✓ ${lang} / ${sc.name}: ${ctx.ops.length} 段文字, 构成 ${model.bar.filter(s => s.days > 0).map(s => s.days).join('/')} | ${model.rate}% | 列 ${cols.map(c => c.label + c.value).join(' ')}`)
   }
 }
 
