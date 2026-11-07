@@ -739,6 +739,7 @@ function diffReceipt(before, after) {
   let added = 0      // 本机没有、恢复后会新增的
   let removed = 0    // 本机有、恢复后会被删掉的（云端没有）
   let changed = 0    // 两边都有但内容不同，以云端为准
+  const items = []   // 逐条明细，给确认层摆出来
   ;['entries', 'overtime'].forEach(k => {
     new Set([...Object.keys(b[k]), ...Object.keys(a[k])]).forEach(key => {
       if (sameVal(b[k][key], a[k][key])) return
@@ -748,8 +749,10 @@ function diffReceipt(before, after) {
       if (!inB) added++
       else if (!inA) removed++
       else changed++
+      items.push({ kind: k, key, local: inB ? b[k][key] : null, cloud: inA ? a[k][key] : null })
     })
   })
+  items.sort((x, y) => (x.key < y.key ? -1 : x.key > y.key ? 1 : 0))
   const leavesOf = s => (Array.isArray((s || {}).customLeaves) ? s.customLeaves.length : 0)
   const leaves = leavesOf(after.settings)
   return {
@@ -758,6 +761,7 @@ function diffReceipt(before, after) {
     added,
     removed,
     changed,
+    items,
     leaves,
     leavesDelta: leaves - leavesOf(before.settings),
     total: entries + overtime
@@ -775,8 +779,8 @@ export async function previewRestore() {
   if (!r.ok) return r
   const res = remoteCache
   if (!res || !res.exists) return { ok: true, exists: false }
-  const { merged, receipt, keptLeaves, syncedTime, remoteCount } = buildRestore(res)
-  return { ok: true, exists: true, receipt, keptLeaves, syncedTime, remoteCount, merged }
+  const { merged, receipt, keptLeaves, cloudCounts, syncedTime, remoteCount } = buildRestore(res)
+  return { ok: true, exists: true, receipt, keptLeaves, cloudCounts, syncedTime, remoteCount, merged }
 }
 
 /** 读 remoteCache，算出恢复后的完整数据与回执（不写任何存储） */
@@ -787,7 +791,13 @@ function buildRestore(res) {
   const merged = mergeRestore(historyData(res.data || {}), futureOnly(before))
   const keptLeaves = repairLeaveRefs(merged, before.settings || {})
   const receipt = diffReceipt(before, merged)
-  return { merged, receipt, keptLeaves, syncedTime: res.synced_time || null, remoteCount: countOf(res.data) }
+  const d = res.data || {}
+  const cloudCounts = {
+    entries: Object.keys(d.entries || {}).length,
+    overtime: Object.keys(d.overtime || {}).length,
+    leaves: Array.isArray((d.settings || {}).customLeaves) ? d.settings.customLeaves.length : 0
+  }
+  return { merged, receipt, keptLeaves, cloudCounts, syncedTime: res.synced_time || null, remoteCount: countOf(res.data) }
 }
 
 /** 从云端整份恢复本机（覆盖前自动备份） */

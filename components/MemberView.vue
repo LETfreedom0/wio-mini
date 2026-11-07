@@ -277,6 +277,50 @@
         </view>
       </view>
     </view>
+
+    <!-- 恢复预览：云端有什么、恢复会改什么，逐条看清楚再确认 -->
+    <view v-if="restorePlan" class="sheet-mask" @click.stop="closeRestoreSheet">
+      <view class="upload-card" @click.stop>
+        <view class="upload-head">
+          <text class="upload-title">{{ i18n.profile.syncRestoreTitle }}</text>
+          <text class="upload-close" @click.stop="closeRestoreSheet">✕</text>
+        </view>
+
+        <scroll-view scroll-y="true" class="upload-body">
+          <text class="upload-note">{{ restoreSnapshotLine }}</text>
+
+          <view v-if="restoreItems('added').length" class="upload-sec">
+            <text class="upload-sec-title">{{ restoreItems('added').length }}{{ i18n.profile.syncRestoreAdded }}</text>
+            <text v-for="it in restoreItems('added')" :key="'ra' + it.kind + it.key" class="upload-item">
+              {{ it.key }} · {{ itemText(it, 'cloud') }}
+            </text>
+          </view>
+
+          <view v-if="restoreItems('changed').length" class="upload-sec">
+            <text class="upload-sec-title">{{ restoreItems('changed').length }}{{ i18n.profile.syncRestoreChanged }}</text>
+            <text v-for="it in restoreItems('changed')" :key="'rc' + it.kind + it.key" class="upload-item">
+              {{ it.key }} · {{ itemText(it, 'local') }} → {{ itemText(it, 'cloud') }}
+            </text>
+          </view>
+
+          <view v-if="restoreItems('removed').length" class="upload-sec">
+            <text class="upload-sec-title upload-sec-warn">{{ restoreItems('removed').length }}{{ i18n.profile.syncRestoreRemoved }}</text>
+            <text v-for="it in restoreItems('removed')" :key="'rr' + it.kind + it.key" class="upload-item upload-item-warn">
+              {{ it.key }} · {{ itemText(it, 'local') }}
+            </text>
+          </view>
+
+          <text class="upload-hint">{{ i18n.profile.syncRestoreNote }}</text>
+        </scroll-view>
+
+        <view class="upload-actions">
+          <view class="upload-primary" @click="runRestore">
+            <text class="upload-primary-text">{{ i18n.profile.syncRestore }}</text>
+          </view>
+          <text class="upload-alt" @click="closeRestoreSheet">{{ i18n.profile.cancel }}</text>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -312,6 +356,8 @@ export default {
       syncSummary: { localCount: 0, remoteCount: 0, remoteNewer: false, canUndoRestore: false },
       // 上传前算出来的差异计划，非空即弹出确认层
       uploadPlan: null,
+      // 恢复预览：云端快照与本机的逐条差异，确认后才真覆盖
+      restorePlan: null,
       busy: false,
       // 恢复分两段：先读云端（按钮就地转圈），再整份覆盖（全屏 loading）
       readingRemote: false,
@@ -399,14 +445,23 @@ export default {
       const pad = n => String(n).padStart(2, '0')
       return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
     },
+    /** 云端快照摘要行：让用户先知道「云端那份到底有什么」 */
+    restoreSnapshotLine() {
+      const p = this.restorePlan
+      if (!p) return ''
+      const L = this.i18n.profile
+      const c = p.cloudCounts || {}
+      return L.syncRestoreSnapshot
+        .replace('{time}', p.syncedTime ? this.fmtStamp(p.syncedTime) : '—')
+        .replace('{e}', c.entries || 0)
+        .replace('{o}', c.overtime || 0)
+        .replace('{l}', c.leaves || 0)
+    },
     /** 云端快照的写入时间：确认层里给用户一个「这是哪一份」的锚点 */
     remoteSyncedText() {
       const t = this.syncSummary.remoteSyncedTime
       if (!t) return '—'
-      const d = new Date(t)
-      if (isNaN(d.getTime())) return '—'
-      const pad = n => String(n).padStart(2, '0')
-      return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+      return this.fmtStamp(t)
     }
   },
   mounted() {
@@ -670,8 +725,15 @@ export default {
         uni.showModal(opts)
       }, 60)
     },
+    /** 统一的时间戳格式：MM-DD HH:mm */
+    fmtStamp(v) {
+      const d = new Date(v)
+      if (isNaN(d.getTime())) return '—'
+      const pad = n => String(n).padStart(2, '0')
+      return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    },
 
-    /** 从云端恢复：先试算（只算不动），把「云端有什么、会改什么」摆出来再确认 */
+    /** 从云端恢复：先试算（只算不动），把「云端有什么、会改什么」逐条摆出来再确认 */
     async onRestoreTap() {
       haptic('light')
       const L = this.i18n.profile
@@ -696,33 +758,37 @@ export default {
       }
       this.syncSummary = syncService.getSyncSummary()
       const rc = r.receipt || {}
-      // 云端与本机完全一致：不弹确认（确认了也不会有任何变化），
-      // 直说真相——这才是「点了没效果」的完整答案
+      // 云端与本机完全一致：不弹层（确认了也不会有任何变化），直说真相
       if (!rc.total && !rc.leavesDelta) {
         this.notify(L.syncRestoreNoChange)
         return
       }
-      this.popupModal({
-        title: L.syncRestoreTitle,
-        content: L.syncRestoreConfirm
-          .replace('{time}', this.remoteSyncedText)
-          .replace('{e}', rc.entries || 0)
-          .replace('{o}', rc.overtime || 0)
-          .replace('{l}', rc.leaves || 0)
-          .replace('{a}', rc.added || 0)
-          .replace('{c}', rc.changed || 0)
-          .replace('{r}', rc.removed || 0),
-        confirmText: L.syncRestore,
-        cancelText: L.cancel,
-        success: (res) => {
-          if (!res.confirm) return
-          this.runRestore()
-        }
-      })
+      // 用页面内弹层（与上传同一套 UI）：原生 showModal 会被 hideLoading 吞，
+      // 且它放不下逐条差异——用户必须亲眼看到云端有什么、恢复会改什么
+      this.restorePlan = {
+        receipt: rc,
+        cloudCounts: r.cloudCounts || {},
+        syncedTime: r.syncedTime || null,
+        remoteCount: r.remoteCount || 0
+      }
     },
-    /** 真正的覆盖动作（确认之后才走这里） */
+    closeRestoreSheet() {
+      this.restorePlan = null
+    },
+    /** 恢复明细行的分组：新增 / 修改 / 删除 */
+    restoreItems(kind) {
+      const p = this.restorePlan
+      if (!p || !p.receipt || !p.receipt.items) return []
+      return p.receipt.items.filter(it => kind === 'mixed' ? true : (
+        kind === 'added' ? it.local === null && it.cloud !== null
+          : kind === 'removed' ? it.local !== null && it.cloud === null
+          : it.local !== null && it.cloud !== null
+      ))
+    },
+    /** 真正的覆盖动作（预览层确认之后才走这里） */
     async runRestore() {
       const L = this.i18n.profile
+      this.restorePlan = null
       this.busy = true
       uni.showLoading({ title: L.syncRestoring, mask: true })
       try {
