@@ -1,10 +1,39 @@
 <script>
 	import { initCloud } from './utils/cloud.js'
-	import { init as cloudInit, flush as cloudFlush } from './utils/syncService.js'
+	import { init as cloudInit, flush as cloudFlush, hasPendingConflict } from './utils/syncService.js'
 
 	// 首次 onShow 紧跟 onLaunch（那里已经 pull 过），避免启动时白拉两次；
 	// 之后每次从后台切回都补一次拉取，多设备改的数据才能及时合并进来
 	let hasShownOnce = false
+	let lastConflictPromptAt = 0
+
+	// 冲突弹窗只在「我的」页 / 会员页监听。在日历页改完历史数据再切回前台，
+	// 冲突会一直挂在 pendingConflict 里没人接管，用户只看到「改动没同步上去」。
+	// 这里做全局兜底：等页面有机会消费后再探测，仍没人接管就提示去处理。
+	function promptConflictIfOrphaned() {
+		setTimeout(() => {
+			if (!hasPendingConflict()) return
+			if (Date.now() - lastConflictPromptAt < 60000) return
+			lastConflictPromptAt = Date.now()
+			let lang = 'zh-CN'
+			try {
+				const raw = uni.getStorageSync('wio_settings')
+				lang = (raw && JSON.parse(raw).language) || 'zh-CN'
+			} catch (e) { /* 读不到就按中文 */ }
+			const en = lang === 'en-US'
+			uni.showModal({
+				title: en ? 'Sync needs your input' : '同步待处理',
+				content: en
+					? 'Both this device and the cloud have changes. Choose which one to keep, otherwise new edits will not upload.'
+					: '本机和云端的数据都改过，需要你选择保留哪一份；不选的话，刚改的记录不会上传。',
+				confirmText: en ? 'Resolve' : '去处理',
+				cancelText: en ? 'Later' : '稍后',
+				success: (r) => {
+					if (r.confirm) uni.switchTab({ url: '/pages/profile/index' })
+				}
+			})
+		}, 600)
+	}
 
 	export default {
 		onLaunch: function() {
@@ -15,6 +44,7 @@
 			initCloud()
 
 			// 云同步：登录用户启动时拉取云端比对合并（静默，失败不打扰）
+			uni.$on('wio:sync-conflict', promptConflictIfOrphaned)
 			cloudInit().catch(() => {})
 
 			//#ifdef MP-WEIXIN || MP-ALIPAY || MP-BAIDU || MP-TOUTIAO

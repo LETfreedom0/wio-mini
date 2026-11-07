@@ -21,6 +21,9 @@ const KEY_BACKUP = 'wio_backup'         // 覆盖本地前的备份，防误恢�
 
 let pushTimer = null
 let pushing = false
+// 每次本地写入递增。push 起飞时记下序号，回来后发现序号变了，说明「这次上传的
+// 是旧快照，期间又有新改动」——绝不能把脏标记清掉，否则新改动永远传不上去。
+let dirtySeq = 0
 // 冲突暂存：冲突可能发生在 App 启动/切后台（此时没有任何页面在监听事件），
 // 不能让它静默丢掉，否则用户永远停在旧数据上还以为已同步
 let pendingConflict = null
@@ -30,6 +33,11 @@ export function takePendingConflict() {
   const c = pendingConflict
   pendingConflict = null
   return c
+}
+
+/** 只读探针：给 App 层的兜底提示判断「冲突还没被任何页面接管」 */
+export function hasPendingConflict() {
+  return !!pendingConflict
 }
 
 function rememberConflict(info) {
@@ -77,6 +85,23 @@ export function buildSnapshot() {
   }
 }
 
+/**
+ * 本地三份数据的稳定摘要（不含 meta.savedAt）。
+ * 每次成功同步都把当时的摘要记进 sync_state：下次 pull 时只要摘要变了，
+ * 就说明本地有改动——哪怕它漏走了 markDirty、或者脏标记被旧响应误清过，
+ * 也绝不能拿云端快照静默覆盖掉用户主动改的历史数据。
+ */
+function localFingerprint() {
+  const snap = buildSnapshot()
+  const str = JSON.stringify({ settings: snap.settings, entries: snap.entries, overtime: snap.overtime })
+  let h = 2166136261
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return String(h >>> 0)
+}
+
 // ---------- 写入钩子（由 wioService 的 saveXxx 调用） ----------
 
 export function markDirty() {
@@ -85,6 +110,7 @@ export function markDirty() {
   // 数据至少不会静默丢失。
   const s = getSyncState()
   s.dirty = true
+  dirtySeq++
   setSyncState(s)
   if (!isLogin() || !isAutoSyncOn()) return
   schedulePush()
@@ -112,10 +138,16 @@ export function schedulePush(delay = 3000) {
  * @returns {{ok:boolean, conflict?:boolean, reason?:string}}
  */
 export async function push(force = false) {
-  if (!isCloudAvailable() || !isLogin() || pushing) return { ok: false, reason: 'skip' }
+  if (!isCloudAvailable() || !isLogin()) return { ok: false, reason: 'skip' }
+  if (pushing) {
+    // 已有推送在飞：这次请求不能直接扔，否则期间产生的新改动再没人补推
+    if (getSyncState().dirty) schedulePush(500)
+    return { ok: false, reason: 'busy' }
+  }
   const s = getSyncState()
   if (!s.dirty && !force) return { ok: true, skipped: true }
 
+  const seqAtStart = dirtySeq
   pushing = true
   try {
     const res = await callCloud('sync', {
@@ -125,7 +157,7 @@ export async function push(force = false) {
       base_version: s.dataVersion || 0,
       force
     })
-    applyServerState(res)
+    applyServerState(res, seqAtStart)
     return { ok: true }
   } catch (e) {
     if (e && e.conflict) {
@@ -160,13 +192,21 @@ export async function pull() {
       //  只要云端返回订阅就抛 ReferenceError 让整个 pull 失败）
       updateCachedSubscription(res.subscription)
     }
+    const s = getSyncState()
     if (!res.exists) {
-      const s = getSyncState()
       s.dirty = true
+      dirtySeq++
       setSyncState(s)
       return await push()
     }
-    const s = getSyncState()
+    // 兜底：本次启动后本地相对「上次成功同步的快照」有变化，却没有脏标记。
+    // 可能是某个写入路径漏了 markDirty，也可能是推送期间被旧响应清了脏。
+    // 一律按「本地有改动」处理，绝不能让 applyCloud 把用户改的历史数据覆盖掉。
+    if (!s.dirty && s.fingerprint && localFingerprint() !== s.fingerprint) {
+      s.dirty = true
+      dirtySeq++
+      setSyncState(s)
+    }
     if (s.dirty) {
       // 本地有未推的改动，但云端版本已经比本地基线新 → 两台都改过。
       // 这里绝不能再 push 覆盖（哪怕非 force 也会被判冲突、force 更会直接
@@ -223,6 +263,7 @@ export async function applyCloud(res) {
  */
 export async function resolveConflict(choice, conflictInfo) {
   if (choice === 'local') {
+    const seqAtStart = dirtySeq
     try {
       const res = await callCloud('sync', {
         action: 'push',
@@ -231,7 +272,7 @@ export async function resolveConflict(choice, conflictInfo) {
         base_version: (conflictInfo && conflictInfo.cloudVersion) || getSyncState().dataVersion || 0,
         force: true
       })
-      applyServerState(res)
+      applyServerState(res, seqAtStart)
       return { ok: true }
     } catch (e) {
       return { ok: false }
@@ -288,10 +329,15 @@ export function getLastSyncTime() {
 
 // ---------- 内部 ----------
 
-function applyServerState(res) {
+function applyServerState(res, seqAtStart) {
   const s = getSyncState()
   s.dataVersion = res.data_version
-  s.dirty = false
   s.lastSyncAt = new Date().toISOString()
+  // 上传途中又有新写入：这次成功的只是旧快照，脏标记要留着并立刻补推。
+  // 不传 seqAtStart 的调用（applyCloud / 用户选云端）= 明确以云端为准，正常清脏。
+  const stale = seqAtStart != null && seqAtStart !== dirtySeq
+  s.dirty = !!stale
+  s.fingerprint = localFingerprint()
   setSyncState(s)
+  if (stale) schedulePush(300)
 }
