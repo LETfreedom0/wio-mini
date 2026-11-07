@@ -208,7 +208,9 @@
           </view>
 
           <view v-if="uploadPlan.toDownload.length" class="upload-sec">
-            <text class="upload-sec-title">{{ uploadPlan.toDownload.length }}{{ i18n.profile.syncWillDownload }}</text>
+            <text class="upload-sec-title">
+              {{ uploadPlan.toDownload.length }}{{ i18n.profile.syncWillDownload }}<text v-if="dropCount" class="upload-sec-warn">，{{ dropCount }}{{ i18n.profile.syncDropCount }}</text>
+            </text>
             <text class="upload-hint">{{ i18n.profile.syncHintDrop }}</text>
             <view
               v-for="it in uploadPlan.toDownload"
@@ -221,6 +223,7 @@
               <text class="upload-row-text" :class="{ 'val-dim': it.cloudWins === false }">
                 {{ it.key }} · {{ itemText(it) }}
               </text>
+              <text v-if="it.cloudWins === false" class="upload-drop-badge">{{ i18n.profile.syncDropBadge }}</text>
             </view>
           </view>
 
@@ -359,6 +362,12 @@ export default {
       if (!p) return false
       return !p.toUpload.length && !p.toDownload.length && !p.bothDiffer.length
         && !p.localDeleted.length && !p.cloudDeleted.length && !p.settingsDiffer.length
+    },
+    /** 本次上传将从云端删掉的条数（云端有、本机没有，且被取消了勾选） */
+    dropCount() {
+      const p = this.uploadPlan
+      if (!p) return 0
+      return p.toDownload.filter(it => it.cloudWins === false).length
     },
     planLine() {
       void this.trialStamp
@@ -1200,6 +1209,22 @@ export default {
   font-size: 11.5px;
   line-height: 19px;
   color: #3D444B;
+}
+
+/* 取消勾选的云端记录：后果显性化 */
+.upload-sec-warn {
+  color: #B4542A;
+}
+
+.upload-drop-badge {
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 9.5px;
+  line-height: 14px;
+  color: #B4542A;
+  background: #FBF0E9;
+  border-radius: 4px;
 }
 
 .upload-row-key {
