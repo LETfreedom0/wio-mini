@@ -45,9 +45,12 @@ export const LAYOUT = {
   // 右对齐元素共用一条右缘线 694（= 月份 / 构成条 / 分隔线的右端）：
   // 徽章 498+196、OT 两行 400+294、末列数据 54+640，全部收在同一条线上
   badge: { x: 498, y: 222, w: 196, h: 54, r: 27, size: 26 },
-  otLine1: { x: 400, y: 352, w: 294, h: 44, size: 32, weight: 500, align: 'right' },
-  otLine2: { x: 400, y: 408, w: 294, h: 34, size: 24, weight: 400, align: 'right' },
-  gap: { x: 54, y: 470, w: 430, h: 42, size: 30, weight: 500 },
+  // OT 两行与大数字同底：右列（徽章 + OT）收在与数字块相同的底线上，
+  // 否则「≈ 多上 N 天班」孤零零垂在数字右下方，右侧整体下坠
+  otLine1: { x: 400, y: 326, w: 294, h: 44, size: 32, weight: 500, align: 'right' },
+  otLine2: { x: 400, y: 382, w: 294, h: 34, size: 24, weight: 400, align: 'right' },
+  // 超标/还差是数字的结论行：紧贴数字底（36px），与「本月构成」之间拉开分组
+  gap: { x: 54, y: 448, w: 430, h: 42, size: 30, weight: 500 },
   section: { x: 54, y: 524, w: 520, h: 38, size: 26, weight: 400 },
   bar: { x: 56, y: 576, w: 638, h: 10, gap: 6, r: 5 },
   dataRow: {
