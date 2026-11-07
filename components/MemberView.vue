@@ -189,16 +189,39 @@
 
           <view v-if="uploadPlan.bothDiffer.length" class="upload-sec">
             <text class="upload-sec-title">{{ uploadPlan.bothDiffer.length }}{{ i18n.profile.syncWillOverride }}</text>
-            <text v-for="it in uploadPlan.bothDiffer" :key="'d' + it.kind + it.key" class="upload-item upload-item-warn">
-              {{ it.key }} · {{ i18n.profile.syncLocal }} {{ itemText(it, 'local') }} / {{ i18n.profile.syncCloud }} {{ itemText(it, 'cloud') }}
-            </text>
+            <text class="upload-hint">{{ i18n.profile.syncHintPick }}</text>
+            <view
+              v-for="it in uploadPlan.bothDiffer"
+              :key="'d' + it.kind + it.key"
+              class="upload-row"
+              @click="toggleCloudWin(it)">
+              <view class="upload-box" :class="{ on: it.cloudWins }">
+                <text v-if="it.cloudWins" class="upload-box-tick">✓</text>
+              </view>
+              <text class="upload-row-text">
+                <text class="upload-row-key">{{ it.key }} · </text>
+                <text :class="it.cloudWins ? 'val-dim' : 'val-win'">{{ i18n.profile.syncLocal }} {{ itemText(it, 'local') }}</text>
+                <text class="val-sep"> / </text>
+                <text :class="it.cloudWins ? 'val-win' : 'val-dim'">{{ i18n.profile.syncCloud }} {{ itemText(it, 'cloud') }}</text>
+              </text>
+            </view>
           </view>
 
           <view v-if="uploadPlan.toDownload.length" class="upload-sec">
             <text class="upload-sec-title">{{ uploadPlan.toDownload.length }}{{ i18n.profile.syncWillDownload }}</text>
-            <text v-for="it in uploadPlan.toDownload" :key="'g' + it.kind + it.key" class="upload-item">
-              {{ it.key }} · {{ itemText(it) }}
-            </text>
+            <text class="upload-hint">{{ i18n.profile.syncHintDrop }}</text>
+            <view
+              v-for="it in uploadPlan.toDownload"
+              :key="'g' + it.kind + it.key"
+              class="upload-row"
+              @click="toggleCloudWin(it)">
+              <view class="upload-box" :class="{ on: it.cloudWins !== false }">
+                <text v-if="it.cloudWins !== false" class="upload-box-tick">✓</text>
+              </view>
+              <text class="upload-row-text" :class="{ 'val-dim': it.cloudWins === false }">
+                {{ it.key }} · {{ itemText(it) }}
+              </text>
+            </view>
           </view>
 
           <view v-if="uploadPlan.localDeleted.length" class="upload-sec">
@@ -498,6 +521,11 @@ export default {
       else if (side === 'cloud') v = it.cloud
       if (it.kind === 'overtime') return `${v || 0}h`
       return syncService.entryText(v)
+    },
+    /** 勾选 = 以云端为准：云端独有的取消勾选即从云端删掉，分歧条目勾选即采用云端 */
+    toggleCloudWin(it) {
+      haptic('light')
+      it.cloudWins = !it.cloudWins
     },
     async doUploadMerge() {
       const plan = this.uploadPlan
@@ -1126,6 +1154,69 @@ export default {
 
 .upload-item-warn {
   color: #A9631F;
+}
+
+/* 可勾选条目：勾选 = 以云端为准 */
+.upload-hint {
+  font-size: 10px;
+  line-height: 15px;
+  color: #9AA1A8;
+  margin-bottom: 4px;
+}
+
+.upload-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 5px 0;
+}
+
+.upload-box {
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  margin-right: 8px;
+  border-radius: 4px;
+  border: 1.5px solid #C9D2D1;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.upload-box.on {
+  background: #0E6E62;
+  border-color: #0E6E62;
+}
+
+.upload-box-tick {
+  font-size: 9px;
+  line-height: 1;
+  color: #FFFFFF;
+}
+
+.upload-row-text {
+  flex: 1;
+  font-size: 11.5px;
+  line-height: 19px;
+  color: #3D444B;
+}
+
+.upload-row-key {
+  color: #6B7480;
+}
+
+.val-win {
+  color: #0E6E62;
+  font-weight: 600;
+}
+
+.val-dim {
+  color: #A8B0B8;
+}
+
+.val-sep {
+  color: #C9D2D1;
 }
 
 .upload-note {

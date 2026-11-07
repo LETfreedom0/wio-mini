@@ -111,6 +111,14 @@ const snap = (entries, extra) => ({
   overtime: (extra && extra.overtime) || {}
 })
 
+// 与 syncService 的 todayStr 同口径（本地时区）
+function dayOffset(n) {
+  const d = new Date()
+  d.setDate(d.getDate() + n)
+  const p = x => String(x).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 // ---------- A. 不再有任何自动同步 ----------
 
 await scenario('A1 markDirty 不发任何请求', async ({ env, cloud, s }) => {
@@ -241,6 +249,116 @@ await scenario('D5 推送失败时本机保持原样', async ({ env, cloud, s })
   const local = env.read('wio_entries')
   ok(local['2026-04-11'] === undefined, '★ 推送失败不能把云端记录偷写进本机（不留半合并中间态）')
   ok(local['2026-04-10'] === 'home', '本机原有记录不能被改动')
+})
+
+await scenario('D6 云端错误记录可逐条丢弃', async ({ env, cloud, s }) => {
+  env.write('wio_entries', { '2026-04-20': 'home' })
+  cloud.seed(snap({ '2026-04-21': 'sick', '2026-04-22': 'company' }), 6)
+  const r = await s.prepareUpload()
+  ok(r.plan.toDownload.length === 2, '云端独有的两条都应列出')
+  ok(r.plan.toDownload.every(it => it.cloudWins === true), '★ 默认全部收下（宁可多留）')
+
+  const target = r.plan.toDownload.find(it => it.key === '2026-04-22')
+  target.cloudWins = false   // 用户取消勾选 = 这条云端记录是错的
+
+  const up = await s.uploadMerge(r.plan)
+  ok(up.ok, '上传应成功')
+  const c = cloud.peek().data.entries
+  ok(c['2026-04-22'] === undefined, '★ 取消勾选的那条要从云端删掉')
+  ok(c['2026-04-21'] === 'sick', '没取消的那条要保留')
+  const local = env.read('wio_entries')
+  ok(local['2026-04-22'] === undefined, '★ 被丢弃的记录不能写进本机')
+  ok(local['2026-04-21'] === 'sick', '保留的记录要落到本机')
+})
+
+await scenario('D7 分歧记录可改选云端那一份', async ({ env, cloud, s }) => {
+  env.write('wio_entries', { '2026-04-25': 'company' })
+  cloud.seed(snap({ '2026-04-25': 'vacation' }), 8)
+  const r = await s.prepareUpload()
+  const it0 = r.plan.bothDiffer[0]
+  ok(it0 && it0.cloudWins === false, '★ 分歧默认本机赢')
+
+  it0.cloudWins = true              // 用户承认云端那份才是对的
+  const up = await s.uploadMerge(r.plan)
+  ok(up.ok, '上传应成功')
+  ok(cloud.peek().data.entries['2026-04-25'] === 'vacation', '勾选后应推云端那份')
+  ok(env.read('wio_entries')['2026-04-25'] === 'vacation', '本机也应同步成云端那份')
+})
+
+// ---------- G. 只同步「今天含今天之前」 ----------
+
+await scenario('G1 未来的打卡与加班不上传', async ({ env, cloud, s }) => {
+  const y = dayOffset(-1), t = dayOffset(0), tm = dayOffset(1), tm2 = dayOffset(3)
+  cloud.seed(snap({}), 1)
+  env.write('wio_entries', { [y]: 'company', [t]: 'home', [tm]: 'vacation' })
+  env.write('wio_overtime', { [tm2]: 2 })
+
+  const r = await s.prepareUpload()
+  ok(r.plan.toUpload.length === 2, '★ 差异清单只列今天含今天之前的条目')
+
+  await s.uploadMerge(r.plan)
+  const c = cloud.peek().data
+  ok(c.entries[y] === 'company' && c.entries[t] === 'home', '过去与今天的数据应上传')
+  ok(c.entries[tm] === undefined, '★ 未来的打卡不上传')
+  ok(c.overtime[tm2] === undefined, '★ 未来的加班不上传')
+  ok(env.read('wio_entries')[tm] === 'vacation', '★ 本机的未来计划不能被合并抹掉')
+
+  const r2 = await s.prepareUpload()
+  ok(r2.plan.toUpload.length === 0, '上传后不该再有待上传项')
+  ok(r2.plan.cloudDeleted.length === 0, '★ 基线不含未来键，不该冒出「云端已删除」假差异')
+  ok(env.read('wio_sync_base').entries[tm] === undefined, '★ 基线只记今天含今天之前')
+})
+
+await scenario('G2 整份覆盖也不带未来', async ({ env, cloud, s }) => {
+  const y = dayOffset(-1), tm = dayOffset(2)
+  env.write('wio_entries', { [y]: 'company', [tm]: 'sick' })
+  cloud.seed(snap({ [y]: 'home' }), 3)
+  const r = await s.prepareUpload()
+  await s.uploadOverwrite(r.plan)
+  const c = cloud.peek().data.entries
+  ok(c[y] === 'company', '覆盖后过去的数据以本机为准')
+  ok(c[tm] === undefined, '★ 整份覆盖同样不把未来数据推上去')
+})
+
+await scenario('G3 按日期键的设置同样裁掉未来', async ({ env, cloud, s }) => {
+  const y = dayOffset(-1), tm = dayOffset(2)
+  env.write('wio_settings', {
+    language: 'zh-CN',
+    customMarks: { [y]: { id: 'lv1', part: 'full' }, [tm]: { id: 'lv2', part: 'am' } },
+    halfFullDays: { [tm]: true },
+    touchedAt: { [y]: '2026-01-01T00:00:00.000Z', [tm]: '2026-02-02T00:00:00.000Z' }
+  })
+  cloud.seed(snap({}), 1)
+  const r = await s.prepareUpload()
+  await s.uploadMerge(r.plan)
+  const cs = cloud.peek().data.settings
+  ok(!!cs.customMarks[y], '过去的福利假标记要上传')
+  ok(!cs.customMarks[tm], '★ 未来的福利假标记不上传')
+  ok(!cs.halfFullDays[tm], '★ 未来的半天口径不上传')
+  ok(!cs.touchedAt[tm], '★ 未来的操作时间戳不上传')
+  const ls = env.read('wio_settings')
+  ok(!!ls.customMarks[tm] && !!ls.halfFullDays[tm], '★ 本机的未来设置要原样留着')
+})
+
+await scenario('G4 只有未来记录时可上传条数为 0', async ({ env, cloud, s }) => {
+  env.write('wio_entries', { [dayOffset(1)]: 'company' })
+  ok(s.localCount() === 0, '★ 未来记录不算「可上传」')
+  ok(s.getSyncSummary().localCount === 0, '摘要口径要一致')
+  env.write('wio_entries', { [dayOffset(0)]: 'company' })
+  ok(s.localCount() === 1, '今天的数据要算进去')
+})
+
+await scenario('G5 恢复历史时保留本机计划', async ({ env, cloud, s }) => {
+  const y = dayOffset(-2), t = dayOffset(-1), f = dayOffset(5)
+  env.write('wio_entries', { [y]: 'company', [f]: 'vacation' })
+  // 云端还残留旧版本推上去的未来记录，不能当计划搬回来
+  cloud.seed(snap({ [t]: 'home', [f]: 'sick' }), 9)
+  const r = await s.restoreFromCloud()
+  ok(r.ok, '恢复应成功')
+  const l = env.read('wio_entries')
+  ok(l[t] === 'home', '云端历史应恢复')
+  ok(l[y] === undefined, '恢复仍是整份覆盖：本机独有历史消失')
+  ok(l[f] === 'vacation', '★ 未来计划以本机为准，不被云端的旧计划盖掉')
 })
 
 // ---------- E. 恢复与撤销 ----------

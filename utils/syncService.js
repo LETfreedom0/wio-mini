@@ -57,24 +57,91 @@ function readKey(key) {
   }
 }
 
-/** 打包本地数据为云端快照 */
-export function buildSnapshot() {
+/** 只取三份业务数据（不含 meta） */
+function snapshotData() {
   return {
-    version: 1,
     settings: readKey('wio_settings'),
     entries: readKey('wio_entries'),
-    overtime: readKey('wio_overtime'),
-    meta: {
-      savedAt: new Date().toISOString(),
-      appVersion: APP_VERSION
-    }
+    overtime: readKey('wio_overtime')
   }
 }
 
-/** 只取三份业务数据（不含 meta） */
-function snapshotData() {
-  const snap = buildSnapshot()
-  return { settings: snap.settings, entries: snap.entries, overtime: snap.overtime }
+// ---------- 日期边界：只同步「今天含今天之前」 ----------
+// 未来的标记是计划，不是事实：下次大概率还会改，上来下去只会把云端弄脏，
+// 换设备恢复时还会把旧计划搬回来。所以同步视野里只留 <= 今天。
+
+/** 三个按日期键的 settings 容器（customLeaves 是区间配置，不在此列） */
+const DATE_MAPS = ['customMarks', 'halfFullDays', 'touchedAt']
+
+function todayStr() {
+  const d = new Date()
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/** 只保留 key <= today 的日期映射（'YYYY-MM-DD' 字典序即时间序） */
+function pickPast(map, today) {
+  const out = {}
+  if (!map || typeof map !== 'object') return out
+  Object.keys(map).forEach(k => {
+    if (k <= today) out[k] = map[k]
+  })
+  return out
+}
+
+/**
+ * 同步视野下的数据视图：砍掉所有未来的日期键。
+ * 用于推送载荷、基线、差异比对、条数统计——四处必须同一个口径，
+ * 否则会算出「云端删了、本机还有」这种假差异。
+ */
+export function historyData(data) {
+  const d = data || {}
+  const today = todayStr()
+  const settings = { ...(d.settings || {}) }
+  DATE_MAPS.forEach(k => {
+    if (settings[k] !== undefined) settings[k] = pickPast(settings[k], today)
+  })
+  return {
+    settings,
+    entries: pickPast(d.entries, today),
+    overtime: pickPast(d.overtime, today)
+  }
+}
+
+/** historyData 的补集：只留 > 今天 的日期键（本机的计划数据） */
+function futureOnly(data) {
+  const d = data || {}
+  const today = todayStr()
+  const pickFuture = map => {
+    const out = {}
+    if (!map || typeof map !== 'object') return out
+    Object.keys(map).forEach(k => { if (k > today) out[k] = map[k] })
+    return out
+  }
+  const settings = {}
+  DATE_MAPS.forEach(k => {
+    if (d.settings && d.settings[k] !== undefined) settings[k] = pickFuture(d.settings[k])
+  })
+  return {
+    settings,
+    entries: pickFuture(d.entries),
+    overtime: pickFuture(d.overtime)
+  }
+}
+
+/** 恢复用：历史取云端，计划取本机 */
+function mergeRestore(history, future) {
+  const settings = { ...(history.settings || {}) }
+  DATE_MAPS.forEach(k => {
+    const a = settings[k]
+    const b = future.settings[k]
+    if (a !== undefined || b !== undefined) settings[k] = { ...(a || {}), ...(b || {}) }
+  })
+  return {
+    settings,
+    entries: { ...(history.entries || {}), ...(future.entries || {}) },
+    overtime: { ...(history.overtime || {}), ...(future.overtime || {}) }
+  }
 }
 
 /** 把一份内存里的数据打成云端快照（用于先推后落的合并上传） */
@@ -121,14 +188,16 @@ function writeBase(data) {
   } catch (e) { /* 基线写不进去只影响差异精度，不阻断同步 */ }
 }
 
-/** 本机记录条数（打卡 + 加班） */
+/** 本机记录条数（打卡 + 加班，只算 <= 今天） */
 export function localCount() {
-  return Object.keys(readKey('wio_entries')).length + Object.keys(readKey('wio_overtime')).length
+  const h = historyData(snapshotData())
+  return Object.keys(h.entries).length + Object.keys(h.overtime).length
 }
 
 function countOf(data) {
   if (!data) return 0
-  return Object.keys(data.entries || {}).length + Object.keys(data.overtime || {}).length
+  const h = historyData(data)
+  return Object.keys(h.entries).length + Object.keys(h.overtime).length
 }
 
 // ---------- 变更标记 ----------
@@ -176,14 +245,16 @@ export function entryText(v) {
 function diffPlan(base, local, cloud) {
   const plan = {
     toUpload: [],    // 本机有、云端没有 → 补上去
-    toDownload: [],  // 云端有、本机从来没有 → 合并时补下来
-    bothDiffer: [],  // 两边都有但值不同 → 上传方向下采用本机
+    toDownload: [],  // 云端有、本机从来没有 → 默认合并下来，可逐条丢弃
+    bothDiffer: [],  // 两边都有但值不同 → 默认本机，可逐条改选云端
     localDeleted: [],// 基线有、本机删了、云端还有 → 尊重删除
     cloudDeleted: [],// 基线有、云端删了、本机还有 → 本机为准，补回云端
     settingsDiffer: [],
     noBaseline: !base
   }
 
+  // cloudWins：这条记录以云端为准（用户在清单里勾的）。
+  // 默认值就是「不改动时」的语义：云端独有的默认留着，两边打架的默认本机赢。
   ;['entries', 'overtime'].forEach(kind => {
     const b = (base && base[kind]) || {}
     const l = local[kind] || {}
@@ -198,7 +269,7 @@ function diffPlan(base, local, cloud) {
       const cv = c[k]
       if (hasL && hasC) {
         if (JSON.stringify(lv) !== JSON.stringify(cv)) {
-          plan.bothDiffer.push({ kind, key: k, local: lv, cloud: cv })
+          plan.bothDiffer.push({ kind, key: k, local: lv, cloud: cv, cloudWins: false })
         }
         return
       }
@@ -216,7 +287,7 @@ function diffPlan(base, local, cloud) {
           // 基线有、本机没了 → 本机删的，尊重删除
           plan.localDeleted.push({ kind, key: k, value: cv })
         } else {
-          plan.toDownload.push({ kind, key: k, value: cv })
+          plan.toDownload.push({ kind, key: k, value: cv, cloudWins: true })
         }
       }
     })
@@ -321,9 +392,12 @@ export async function prepareUpload() {
   const r = await checkRemote()
   if (!r.ok) return r
   const res = remoteCache || {}
-  const local = snapshotData()
-  const cloud = res.exists ? (res.data || {}) : {}
-  const plan = diffPlan(readBase(), local, cloud)
+  // 比对口径：三边都只看 <= 今天，未来项不参与，
+  // 否则会列出「将上传」却又不传的条目
+  const local = historyData(snapshotData())
+  const cloud = historyData(res.exists ? (res.data || {}) : {})
+  const base = readBase()
+  const plan = diffPlan(base ? historyData(base) : null, local, cloud)
   plan.cloudVersion = res.data_version || 0
   plan.cloudExists = !!res.exists
   plan.cloudSyncedTime = res.synced_time || null
@@ -334,11 +408,14 @@ export async function prepareUpload() {
 }
 
 /**
- * 合并上传：本机为准，但云端独有的记录会一并补下来（不是删除就不该丢）。
- * 上传结束后两侧内容完全一致。
+ * 合并上传：默认本机为准，云端独有的记录补下来。
+ * cloudWins 是用户在清单里勾选的「以云端为准」的条目（'kind:key'），
+ * 勾了就采用云端那份；云端独有但被取消勾选的，等于从云端删掉。
  */
-export function mergeForUpload(base, local, cloud) {
+export function mergeForUpload(base, local, cloud, cloudWins) {
   const out = { entries: {}, overtime: {} }
+  const wins = {}
+  ;(cloudWins || []).forEach(id => { wins[id] = true })
 
   ;['entries', 'overtime'].forEach(kind => {
     const b = (base && base[kind]) || {}
@@ -349,9 +426,13 @@ export function mergeForUpload(base, local, cloud) {
       const hasL = Object.prototype.hasOwnProperty.call(l, k)
       const hasC = Object.prototype.hasOwnProperty.call(c, k)
       const hasB = Object.prototype.hasOwnProperty.call(b, k)
+      if (wins[`${kind}:${k}`]) {
+        if (hasC) out[kind][k] = c[k]   // 用户选了云端 → 用云端那份
+        return
+      }
       if (hasL) { out[kind][k] = l[k]; return }   // 本机有 → 本机赢
       if (hasB) return                             // 本机删过 → 保持删除
-      if (hasC) out[kind][k] = c[k]                // 云端独有 → 补下来
+      // 云端独有、且没被勾选 → 不带下来（推上去后云端这份就没了）
     })
   })
 
@@ -383,13 +464,25 @@ export function mergeForUpload(base, local, cloud) {
  */
 export async function uploadMerge(plan) {
   if (!plan) return { ok: false, reason: 'no_plan' }
-  const merged = mergeForUpload(readBase(), snapshotData(), plan.cloud || {})
+  // 勾选态 → 名单。toDownload 默认收下（除非被显式取消），
+  // bothDiffer 默认本机赢（除非被显式勾成云端）
+  const wins = []
+  ;(plan.toDownload || []).forEach(it => {
+    if (it.cloudWins !== false) wins.push(`${it.kind}:${it.key}`)
+  })
+  ;(plan.bothDiffer || []).forEach(it => {
+    if (it.cloudWins) wins.push(`${it.kind}:${it.key}`)
+  })
+  const base = readBase()
+  const merged = mergeForUpload(base ? historyData(base) : null, snapshotData(), plan.cloud || {}, wins)
   try {
     // 先推云端，成功了才落本地：推送失败（网络/版本变了）时
-    // 本机必须保持原样，不能落一个「只合了一半」的中间态
+    // 本机必须保持原样，不能落一个「只合了一半」的中间态。
+    // 载荷再砍一次未来：merged 里带着本机的未来计划是为了写回本地时不丢，
+    // 但云端只该存确定发生过的数据。
     const res = await callCloud('sync', {
       action: 'push',
-      data: snapshotOf(merged),
+      data: snapshotOf(historyData(merged)),
       client_updated_at: new Date().toISOString(),
       base_version: plan.cloudVersion || 0
     })
@@ -410,7 +503,7 @@ export async function uploadOverwrite(plan) {
   try {
     const res = await callCloud('sync', {
       action: 'push',
-      data: buildSnapshot(),
+      data: snapshotOf(historyData(snapshotData())),
       client_updated_at: new Date().toISOString(),
       base_version: (plan && plan.cloudVersion) || 0,
       force: true
@@ -448,7 +541,9 @@ export async function restoreFromCloud() {
   const res = remoteCache || {}
   if (!res.exists) return { ok: false, reason: 'empty' }
   backupLocal()
-  writeSnapshot(res.data || {})
+  // 只恢复「历史」：云端若还残留旧版本推上去的未来记录，不能搬回来当计划，
+  // 那些多半已经过期或被本机重新规划过。本机的未来计划在覆盖中保留。
+  writeSnapshot(mergeRestore(historyData(res.data || {}), futureOnly(snapshotData())))
   settleAfterSync(res)
   try { uni.$emit('wio:data-restored', {}) } catch (e) { /* ignore */ }
   return { ok: true, count: countOf(res.data) }
@@ -468,7 +563,7 @@ export async function undoRestore() {
     const s = getSyncState()
     const res = await callCloud('sync', {
       action: 'push',
-      data: buildSnapshot(),
+      data: snapshotOf(historyData(snapshotData())),
       client_updated_at: new Date().toISOString(),
       base_version: s.dataVersion || 0,
       force: true
@@ -498,6 +593,7 @@ function settleAfterSync(res) {
   s.remoteCheckedAt = s.lastSyncAt
   s.remoteExists = true
   setSyncState(s)
-  writeBase(snapshotData())
+  // 基线记「云端现在持有的那份」，同样砍掉未来，否则下次会算出假差异
+  writeBase(historyData(snapshotData()))
   remoteCache = null
 }
