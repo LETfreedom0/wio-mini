@@ -36,8 +36,11 @@ export const LAYOUT = {
   brand: { x: 56, y: 52, w: 300, h: 38, size: 26, weight: 500 },
   month: { x: 538, y: 52, w: 156, h: 38, size: 26, weight: 500, align: 'right' },
   title: { x: 54, y: 136, w: 440, h: 42, size: 30, weight: 400 },
-  hero: { x: 48, y: 172, w: 264, h: 340, size: 220, weight: 700 },
-  percent: { size: 88, centerY: 315 },
+  // 大数字按「字形顶部」定位（top），与右侧徽章的顶边 222 严格平齐。
+  // 字号加大到 260 后视觉重量压得住留白，三位数（100%）仍按 w 自动缩字号。
+  hero: { x: 48, top: 222, w: 336, size: 260, weight: 700, cap: 0.72 },
+  // 百分号随数字字号等比缩放（ratio），顶边比数字低 topRatio 个字高，保留上标感
+  percent: { ratio: 0.38, topRatio: 0.3 },
   // 右对齐元素共用一条右缘线 694（= 月份 / 构成条 / 分隔线的右端）：
   // 徽章 498+196、OT 两行 400+294、末列数据 54+640，全部收在同一条线上
   badge: { x: 498, y: 222, w: 196, h: 54, r: 27, size: 26 },
@@ -184,23 +187,30 @@ export function drawShareCard(ctx, m, qrImage) {
   drawText(ctx, m.title, L.title, { color: P.label })
 
   // ---- 大数字 + 百分号（百分号跟随数字宽度，不写死 x）----
+  // 定位基准是「字形的视觉顶边」，不是文本框顶部：PingFang 的数字只占
+  // 约 0.72em 高，按文本框顶对齐会整体偏低，看着就不在一条线上。
+  const HERO = L.hero
+  const CAP = HERO.cap || 0.72
   const heroStr = String(m.rate)
-  setFont(ctx, L.hero.size, 700)
+  let heroSize = HERO.size
+  setFont(ctx, heroSize, 700)
   let heroWidth = ctx.measureText(heroStr).width
-  if (heroWidth > L.hero.w) {
-    const s2 = Math.floor((L.hero.size * L.hero.w) / heroWidth)
-    setFont(ctx, s2, 700)
+  if (heroWidth > HERO.w) {
+    heroSize = Math.floor((heroSize * HERO.w) / heroWidth)
+    setFont(ctx, heroSize, 700)
     heroWidth = ctx.measureText(heroStr).width
   }
+  const heroCy = HERO.top + (heroSize * CAP) / 2
   ctx.fillStyle = P.hero
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
-  ctx.fillText(heroStr, L.hero.x, L.hero.y + L.hero.h / 2)
+  ctx.fillText(heroStr, HERO.x, heroCy)
 
-  setFont(ctx, L.percent.size, 700)
+  const pctSize = Math.round(heroSize * L.percent.ratio)
+  setFont(ctx, pctSize, 700)
   const pctWidth = ctx.measureText('%').width
-  const px = Math.min(L.hero.x + heroWidth + 8, L.badge.x - pctWidth - 20)
-  ctx.fillText('%', px, L.percent.centerY)
+  const px = Math.min(HERO.x + heroWidth + 8, L.badge.x - pctWidth - 20)
+  ctx.fillText('%', px, HERO.top + heroSize * L.percent.topRatio + (pctSize * CAP) / 2)
 
   // ---- 状态徽章 ----
   const B = L.badge

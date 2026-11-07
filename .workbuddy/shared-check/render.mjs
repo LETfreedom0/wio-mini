@@ -71,6 +71,9 @@ for (const [key, sc] of Object.entries(scenarios)) {
   // 文字
   ctx.ops.forEach(op => {
     if (op.type === 'rect') {
+      // 背景已在 body 开头手写过；drawShareCard 的 fillRect(0,0,W,H) 若再输出
+      // 会排到徽章描边之后，把整卡描边盖掉（离线渲染图一直缺徽章框的原因）
+      if (op.w === CARD_W && op.h === CARD_H) return
       body += `<rect x="${op.x}" y="${op.y}" width="${op.w}" height="${op.h}" fill="${op.color}"/>`
       return
     }
