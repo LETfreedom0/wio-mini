@@ -271,6 +271,48 @@ await scenario('D6 云端错误记录可逐条丢弃', async ({ env, cloud, s })
   ok(local['2026-04-21'] === 'sick', '保留的记录要落到本机')
 })
 
+await scenario('D8 复刻：云端独有 3 条全取消 + 本机删过 1 条', async ({ env, cloud, s }) => {
+  env.write('wio_entries', { '2026-04-01': 'office' })
+  env.write('wio_sync_base', {
+    __v: 1, settings: { language: 'zh-CN' },
+    entries: { '2026-04-01': 'office', '2026-04-04': 'vacation' }, overtime: {}
+  })
+  cloud.seed(snap({
+    '2026-04-01': 'office',
+    '2026-04-04': 'vacation',
+    '2026-04-20': 'home', '2026-04-21': 'home', '2026-04-22': 'home'
+  }), 12)
+
+  const r = await s.prepareUpload()
+  ok(r.plan.toDownload.length === 3, '3 条云端独有')
+  ok(r.plan.localDeleted.length === 1, '1 条本机已删')
+  r.plan.toDownload.forEach(it => { it.cloudWins = false })
+
+  const up = await s.uploadMerge(r.plan)
+  ok(up.ok, '上传成功')
+  ok(up.deleted === 4, '★ 回执如实报告：3 条主动丢弃 + 1 条本机已删（云端共少 4 条）')
+  const e = cloud.peek().data.entries
+  ok(Object.keys(e).length === 1 && e['2026-04-01'] === 'office', '★ 云端只剩本机那条')
+  ok(cloud.peek().data_version === 13, '云端版本 +1')
+  const local = env.read('wio_entries')
+  ok(Object.keys(local).length === 1, '★ 被丢弃的记录没写进本机')
+})
+
+await scenario('D9 云端版本被抢跑：不得假装成功', async ({ env, cloud, s }) => {
+  env.write('wio_entries', { '2026-04-10': 'office' })
+  cloud.seed(snap({ '2026-04-10': 'office', '2026-04-11': 'home' }), 20)
+  const r = await s.prepareUpload()
+  r.plan.toDownload.forEach(it => { it.cloudWins = false })
+
+  // 另一台设备在这期间推了一次，版本变成 21
+  cloud.seed(snap({ '2026-04-10': 'office', '2026-04-11': 'home', '2026-04-12': 'company' }), 21)
+
+  const up = await s.uploadMerge(r.plan)
+  ok(!up.ok && up.reason === 'cloud_changed', '★ 版本变了要报 cloud_changed，不能假装成功')
+  ok(cloud.peek().data.entries['2026-04-11'] === 'home', '★ 云端保持原样，没有误删')
+  ok(env.read('wio_entries')['2026-04-11'] === undefined, '本机也没被写脏')
+})
+
 await scenario('D7 分歧记录可改选云端那一份', async ({ env, cloud, s }) => {
   env.write('wio_entries', { '2026-04-25': 'company' })
   cloud.seed(snap({ '2026-04-25': 'vacation' }), 8)

@@ -475,6 +475,9 @@ export async function uploadMerge(plan) {
   })
   const base = readBase()
   const merged = mergeForUpload(base ? historyData(base) : null, snapshotData(), plan.cloud || {}, wins)
+  // 本次会从云端消失的条数：显式丢弃的云端独有 + 本机已删除的（云端跟着删）
+  const deleted = (plan.toDownload || []).filter(it => it.cloudWins === false).length
+    + (plan.localDeleted || []).length
   try {
     // 先推云端，成功了才落本地：推送失败（网络/版本变了）时
     // 本机必须保持原样，不能落一个「只合了一半」的中间态。
@@ -488,7 +491,14 @@ export async function uploadMerge(plan) {
     })
     writeSnapshot(merged)
     settleAfterSync(res)
-    return { ok: true }
+    // 回读一次云端，用「云端现在真实的条数」回报给用户。
+    // 不做假设：推送返回成功不等于数据就长这样。
+    let remoteCount = countOf(historyData(merged))
+    try {
+      const after = await checkRemote()
+      if (after && after.ok) remoteCount = after.remoteCount
+    } catch (e) { /* 回读失败不影响上传结果 */ }
+    return { ok: true, deleted, remoteCount }
   } catch (e) {
     if (e && e.conflict) {
       // 检查期间云端又被别的设备改了：不要硬推，让用户重新看一次差异

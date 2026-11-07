@@ -536,10 +536,46 @@ export default {
       haptic('light')
       it.cloudWins = !it.cloudWins
     },
+    /** 记下当前勾选：待丢弃的云端记录、改选云端的条目 */
+    snapshotChoices(plan) {
+      const drop = {}
+      const pick = {}
+      ;(plan.toDownload || []).forEach(it => {
+        if (it.cloudWins === false) drop[`${it.kind}:${it.key}`] = true
+      })
+      ;(plan.bothDiffer || []).forEach(it => {
+        if (it.cloudWins) pick[`${it.kind}:${it.key}`] = true
+      })
+      return { drop, pick }
+    },
+    /** 云端被别处改过：按最新数据重算清单，并还原用户刚才的勾选 */
+    async reopenPlanWithChoices(choices) {
+      uni.showLoading({ title: '' })
+      try {
+        const r = await syncService.prepareUpload()
+        uni.hideLoading()
+        if (!r.ok) { this.uploadPlan = null; return }
+        const plan = r.plan
+        plan.overwriteMode = false
+        ;(plan.toDownload || []).forEach(it => {
+          if (choices.drop[`${it.kind}:${it.key}`]) it.cloudWins = false
+        })
+        ;(plan.bothDiffer || []).forEach(it => {
+          if (choices.pick[`${it.kind}:${it.key}`]) it.cloudWins = true
+        })
+        this.syncSummary = syncService.getSyncSummary()
+        this.uploadPlan = plan
+      } catch (e) {
+        uni.hideLoading()
+        this.uploadPlan = null
+      }
+    },
     async doUploadMerge() {
       const plan = this.uploadPlan
       if (!plan) return
       const L = this.i18n.profile
+      // 记住用户勾过的选择，云端被抢跑后重开清单时还原
+      const choices = this.snapshotChoices(plan)
       uni.showLoading({ title: '' })
       try {
         const r = await syncService.uploadMerge(plan)
@@ -548,9 +584,15 @@ export default {
           this.uploadPlan = null
           this.load()
           this.lastSyncAt = syncService.getLastSyncTime()
-          uni.showToast({ title: L.syncDone, icon: 'success' })
+          // 回执要具体：删了几条、云端现在几条，用户才知道真的生效了
+          const title = r.deleted > 0
+            ? L.syncDoneDeleted.replace('{n}', r.deleted)
+            : (r.remoteCount !== undefined ? L.syncDoneCount.replace('{n}', r.remoteCount) : L.syncDone)
+          uni.showToast({ title, icon: 'none' })
         } else if (r.reason === 'cloud_changed') {
-          this.uploadPlan = null
+          // 不能静默失败：云端刚被别处改过，马上按新数据重算清单，
+          // 并把刚才的勾选还原，用户再点一次就行
+          await this.reopenPlanWithChoices(choices)
           uni.showToast({ title: L.syncCloudChanged, icon: 'none' })
         } else {
           uni.showToast({ title: L.syncFail, icon: 'none' })
