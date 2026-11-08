@@ -145,25 +145,16 @@ export default {
         else if (code === 'ios_version' || code === 'base_lib' || code === 'not_weixin') {
           msg = t('profile.payUnsupported', lang)
         }
-        // 测试期把微信返回的原始错误码与 errMsg 完整带出来（-15014 道具未生效 / -15013 金额不符 /
-        // -15006 签名错 / -15010 道具未发布），用弹窗是为了能看到全文并截图；上线前改回 toast。
-        if (e && e.errCode) {
-          const lines = [msg + ' (' + e.errCode + ')']
-          try {
-            const d = JSON.parse(e.signData || '{}')
-            if (d.productId) lines.push('道具 ' + d.productId + ' · ' + d.goodsPrice + ' 分')
-          } catch (_) { /* signData 解析失败就算了，不影响提示 */ }
-          if (e.message) lines.push(e.message)
-          uni.showModal({
-            title: '支付失败',
-            content: lines.join('\n\n'),
-            showCancel: false,
-            confirmText: '知道了'
-          })
-        } else {
-          uni.showToast({ title: msg, icon: 'none' })
-        }
-        console.warn('[pay] 支付未完成', e)
+        // 一律 toast，不上弹窗：取消（-2）是用户的主动选择，轻提示即可；
+        // 真失败也只给一句人话，原始 errCode / errMsg / signData 只进控制台日志，
+        // 道具 ID、分值这类内部信息不暴露给用户。
+        uni.showToast({ title: msg, icon: 'none' })
+        console.warn('[pay] 支付未完成', {
+          code,
+          errCode: e && e.errCode,
+          errMsg: e && e.message,
+          signData: e && e.signData
+        })
       } finally {
         this.paying = false
       }
