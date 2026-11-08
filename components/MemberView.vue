@@ -272,7 +272,7 @@
       </view>
     </view>
 
-    <!-- 恢复预览：云端有什么、恢复会改什么，逐条看清楚再确认 -->
+    <!-- 恢复预览：只报云端规模和净变化；逐条明细折起来，想核对再展开 -->
     <view v-if="restorePlan" class="sheet-mask" @click.stop="closeRestoreSheet">
       <view class="upload-card" @click.stop>
         <view class="upload-head">
@@ -281,27 +281,67 @@
         </view>
 
         <scroll-view scroll-y="true" class="upload-body">
-          <text class="upload-note">{{ restoreSnapshotLine }}</text>
-
-          <view v-if="restoreItems('added').length" class="upload-sec">
-            <text class="upload-sec-title">{{ restoreItems('added').length }}{{ i18n.profile.syncRestoreAdded }}</text>
-            <text v-for="it in restoreItems('added')" :key="'ra' + it.kind + it.key" class="upload-item">
-              {{ it.key }} · {{ itemText(it, 'cloud') }}
-            </text>
+          <!-- 云端那份有多少东西：三个数字说完，不铺开 -->
+          <view class="restore-snap">
+            <view class="restore-snap-top">
+              <text class="restore-snap-cap">{{ i18n.profile.syncRestoreCloudCap }}</text>
+              <text class="restore-snap-time">{{ restoreSnapTime }}</text>
+            </view>
+            <view class="restore-figs">
+              <view class="restore-fig">
+                <text class="restore-fig-num">{{ restoreCloud.entries }}</text>
+                <text class="restore-fig-cap">{{ i18n.profile.syncRestoreEntriesCap }}</text>
+              </view>
+              <view class="restore-sep"></view>
+              <view class="restore-fig">
+                <text class="restore-fig-num">{{ restoreCloud.overtime }}</text>
+                <text class="restore-fig-cap">{{ i18n.profile.syncRestoreOvertimeCap }}</text>
+              </view>
+              <view class="restore-sep"></view>
+              <view class="restore-fig">
+                <text class="restore-fig-num">{{ restoreCloud.leaves }}</text>
+                <text class="restore-fig-cap">{{ i18n.profile.syncRestoreLeavesCap }}</text>
+              </view>
+            </view>
           </view>
 
-          <view v-if="restoreItems('changed').length" class="upload-sec">
-            <text class="upload-sec-title">{{ restoreItems('changed').length }}{{ i18n.profile.syncRestoreChanged }}</text>
-            <text v-for="it in restoreItems('changed')" :key="'rc' + it.kind + it.key" class="upload-item">
-              {{ it.key }} · {{ itemText(it, 'local') }} → {{ itemText(it, 'cloud') }}
+          <!-- 恢复之后本机会变成什么样：三个净变化，一句说完 -->
+          <view class="restore-delta">
+            <text class="restore-delta-cap">{{ i18n.profile.syncRestoreDeltaCap }}</text>
+            <text
+              v-for="d in restoreDeltas"
+              :key="'rd' + d.key"
+              class="restore-delta-item">
+              <text>{{ d.pre }}</text><text class="restore-delta-num" :class="'d-' + d.key">{{ d.n }}</text><text>{{ d.post }}</text>
             </text>
           </view>
+          <text v-if="restoreLeaveLine" class="restore-leave-line">{{ restoreLeaveLine }}</text>
 
-          <view v-if="restoreItems('removed').length" class="upload-sec">
-            <text class="upload-sec-title upload-sec-warn">{{ restoreItems('removed').length }}{{ i18n.profile.syncRestoreRemoved }}</text>
-            <text v-for="it in restoreItems('removed')" :key="'rr' + it.kind + it.key" class="upload-item upload-item-warn">
-              {{ it.key }} · {{ itemText(it, 'local') }}
-            </text>
+          <text class="restore-more" @click.stop="restoreDetail = !restoreDetail">
+            {{ restoreDetail ? i18n.profile.syncRestoreHideDetail : i18n.profile.syncRestoreShowDetail }}
+          </text>
+
+          <view v-if="restoreDetail" class="restore-detail">
+            <view v-if="restoreItems('added').length" class="upload-sec">
+              <text class="upload-sec-title">{{ restoreItems('added').length }}{{ i18n.profile.syncRestoreAdded }}</text>
+              <text v-for="it in restoreItems('added')" :key="'ra' + it.kind + it.key" class="upload-item">
+                {{ it.key }} · {{ itemText(it, 'cloud') }}
+              </text>
+            </view>
+
+            <view v-if="restoreItems('changed').length" class="upload-sec">
+              <text class="upload-sec-title">{{ restoreItems('changed').length }}{{ i18n.profile.syncRestoreChanged }}</text>
+              <text v-for="it in restoreItems('changed')" :key="'rc' + it.kind + it.key" class="upload-item">
+                {{ it.key }} · {{ itemText(it, 'local') }} → {{ itemText(it, 'cloud') }}
+              </text>
+            </view>
+
+            <view v-if="restoreItems('removed').length" class="upload-sec">
+              <text class="upload-sec-title upload-sec-warn">{{ restoreItems('removed').length }}{{ i18n.profile.syncRestoreRemoved }}</text>
+              <text v-for="it in restoreItems('removed')" :key="'rr' + it.kind + it.key" class="upload-item upload-item-warn">
+                {{ it.key }} · {{ itemText(it, 'local') }}
+              </text>
+            </view>
           </view>
 
           <text class="upload-hint">{{ i18n.profile.syncRestoreNote }}</text>
@@ -354,8 +394,9 @@ export default {
       syncSummary: { localCount: 0, remoteCount: 0, remoteNewer: false, canUndoRestore: false },
       // 上传前算出来的差异计划，非空即弹出确认层
       uploadPlan: null,
-      // 恢复预览：云端快照与本机的逐条差异，确认后才真覆盖
+      // 恢复预览：只摆总体规模与净变化，明细默认收起
       restorePlan: null,
+      restoreDetail: false,
       busy: false,
       // 恢复分两段：先读云端（按钮就地转圈），再整份覆盖（全屏 loading）
       readingRemote: false,
@@ -443,17 +484,40 @@ export default {
       const pad = n => String(n).padStart(2, '0')
       return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
     },
-    /** 云端快照摘要行：让用户先知道「云端那份到底有什么」 */
-    restoreSnapshotLine() {
+    /** 云端那份的规模：只给三个数，不铺明细 */
+    restoreCloud() {
+      const c = (this.restorePlan && this.restorePlan.cloudCounts) || {}
+      return { entries: c.entries || 0, overtime: c.overtime || 0, leaves: c.leaves || 0 }
+    },
+    restoreSnapTime() {
       const p = this.restorePlan
-      if (!p) return ''
+      return p && p.syncedTime ? this.fmtStamp(p.syncedTime) : '—'
+    },
+    /**
+     * 净变化：补进多少、改写多少、删掉多少。
+     * 文案用 {n} 占位再切开，是为了让中英各自保持语序
+     * （「补入 12 条」/「12 added」），而不是硬拼数字。
+     */
+    restoreDeltas() {
+      const p = this.restorePlan
+      if (!p || !p.receipt) return []
       const L = this.i18n.profile
-      const c = p.cloudCounts || {}
-      return L.syncRestoreSnapshot
-        .replace('{time}', p.syncedTime ? this.fmtStamp(p.syncedTime) : '—')
-        .replace('{e}', c.entries || 0)
-        .replace('{o}', c.overtime || 0)
-        .replace('{l}', c.leaves || 0)
+      const rc = p.receipt
+      return [
+        { key: 'add', n: rc.added || 0, tpl: L.syncRestoreDAdd },
+        { key: 'mod', n: rc.changed || 0, tpl: L.syncRestoreDMod },
+        { key: 'del', n: rc.removed || 0, tpl: L.syncRestoreDDel }
+      ].filter(d => d.n > 0).map(d => {
+        const parts = String(d.tpl).split('{n}')
+        return { key: d.key, n: d.n, pre: parts[0] || '', post: parts[1] || '' }
+      })
+    },
+    /** 只改了假期配置（打卡一条没变）时，也得让用户看见 */
+    restoreLeaveLine() {
+      const p = this.restorePlan
+      if (!p || !p.receipt || !p.receipt.leavesDelta) return ''
+      if (this.restoreDeltas.length) return ''
+      return String(this.i18n.profile.syncRestoreLeaveLine).replace('{n}', p.receipt.leaves || 0)
     },
     /** 云端快照的写入时间：确认层里给用户一个「这是哪一份」的锚点 */
     remoteSyncedText() {
@@ -793,6 +857,7 @@ export default {
       }
       // 用页面内弹层（与上传同一套 UI）：原生 showModal 会被 hideLoading 吞，
       // 且它放不下逐条差异——用户必须亲眼看到云端有什么、恢复会改什么
+      this.restoreDetail = false
       this.restorePlan = {
         receipt: rc,
         cloudCounts: r.cloudCounts || {},
@@ -802,6 +867,7 @@ export default {
     },
     closeRestoreSheet() {
       this.restorePlan = null
+      this.restoreDetail = false
     },
     /** 恢复明细行的分组：新增 / 修改 / 删除 */
     restoreItems(kind) {
@@ -817,6 +883,7 @@ export default {
     async runRestore() {
       const L = this.i18n.profile
       this.restorePlan = null
+      this.restoreDetail = false
       this.busy = true
       uni.showLoading({ title: L.syncRestoring, mask: true })
       try {
@@ -1384,6 +1451,128 @@ export default {
 
 .upload-item-warn {
   color: #A9631F;
+}
+
+/* ===== 恢复预览：云端规模 ===== */
+.restore-snap {
+  background: #FFF9EE;
+  border-radius: 16px;
+  padding: 13px 16px 15px;
+  margin-top: 4px;
+}
+
+.restore-snap-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 11px;
+}
+
+.restore-snap-cap {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8A6A2A;
+  letter-spacing: 0.3px;
+}
+
+.restore-snap-time {
+  font-size: 10.5px;
+  color: #AAA191;
+}
+
+.restore-figs {
+  display: flex;
+  align-items: center;
+}
+
+.restore-fig {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.restore-fig-num {
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #2B2F33;
+  letter-spacing: -0.4px;
+}
+
+.restore-fig-cap {
+  font-size: 10px;
+  color: #918877;
+  margin-top: 4px;
+}
+
+.restore-sep {
+  width: 1px;
+  height: 22px;
+  margin-right: 14px;
+  background: rgba(192, 138, 45, 0.2);
+}
+
+/* ===== 恢复预览：净变化一行 ===== */
+.restore-delta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin-top: 14px;
+}
+
+.restore-delta-cap {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B7480;
+  margin-right: 10px;
+}
+
+.restore-delta-item {
+  font-size: 11.5px;
+  color: #7C868C;
+  margin-right: 12px;
+}
+
+.restore-delta-num {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 1px;
+}
+
+.d-add {
+  color: #0E6E62;
+}
+
+.d-mod {
+  color: #A9761F;
+}
+
+.d-del {
+  color: #B4542A;
+}
+
+.restore-leave-line {
+  display: block;
+  font-size: 11px;
+  line-height: 16px;
+  color: #7C868C;
+  margin-top: 6px;
+}
+
+/* 明细折叠：默认收起，想核对的人自己展开 */
+.restore-more {
+  display: block;
+  text-align: center;
+  font-size: 11px;
+  color: #8A94A0;
+  padding: 14px 0 2px;
+}
+
+.restore-detail {
+  margin-top: 10px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(192, 138, 45, 0.18);
 }
 
 /* 可勾选条目：勾选 = 以云端为准 */
