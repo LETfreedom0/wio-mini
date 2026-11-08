@@ -1,7 +1,7 @@
 <script>
 	import { initCloud } from './utils/cloud.js'
 	import { checkRemote } from './utils/syncService.js'
-	import { isLogin } from './utils/auth.js'
+	import { isLogin, purgeLegacyStorage } from './utils/auth.js'
 	import { isProUser } from './utils/pro.js'
 
 	// 同步是纯手动动作：启动时只做一次「只读检查」——问云端有没有更新，
@@ -22,6 +22,9 @@
 		onLaunch: function() {
 			console.log('App Launch')
 			uni.hideTabBar()
+
+			// 清掉 2.0.0 之前本地兑换码通道留下的权益残留（已不再生效）
+			purgeLegacyStorage()
 
 			// 云开发初始化（仅微信小程序端生效）
 			initCloud()

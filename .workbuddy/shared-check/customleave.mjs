@@ -62,14 +62,20 @@ function ok(label, cond) {
   console.log(`  ✗ ${label}`)
 }
 
-// PRO 权益：trial 未过期即视为会员
+// PRO 权益：2.0.0 起唯一来源是会话里的云端订阅镜像（wio_auth.subscription），
+// 旧的本地通道 wio_pro_trial 已移除，这里必须走真实口径。
 const FUTURE = Date.now() + 86400000 * 30
-store['wio_pro_trial'] = JSON.stringify({ expiresAt: FUTURE })
+const PRO_KEY = 'wio_auth'
+const proSession = exp => JSON.stringify({
+  user: { openid: 'o_test', nickname: '', avatarFileID: '' },
+  subscription: { plan: 'month', expiresAt: exp }
+})
+store[PRO_KEY] = proSession(FUTURE)
 
 /** 直接铺一份 settings + entries，绕开 save 路径做题设 */
 function seed({ leaves = [], marks = {}, entries = {}, overtime = {}, settings = {} } = {}) {
-  Object.keys(store).forEach(k => { if (k !== 'wio_pro_trial') delete store[k] })
-  store['wio_pro_trial'] = JSON.stringify({ expiresAt: FUTURE })
+  Object.keys(store).forEach(k => { if (k !== PRO_KEY) delete store[k] })
+  store[PRO_KEY] = proSession(FUTURE)
   store['wio_settings'] = JSON.stringify({
     language: 'zh-CN',
     targetPercentage: 40,
@@ -342,7 +348,7 @@ seed({
 eq('同日不双算（额度）', S.getCustomLeaveUsage('d1').used, 0.5)
 eq('同日不双算（统计）', S.getMonthStats(2026, 3).customLeaveDays, 0.5)
 
-store['wio_pro_trial'] = JSON.stringify({ expiresAt: 1 })
+store[PRO_KEY] = proSession(1)
 ok('非会员不能标福利假', S.saveDayParts('2026-03-16', customVal, customVal) === false)
 
 // ---------- M. 删除按天假连带清理 ----------
@@ -361,7 +367,7 @@ eq('删除后同日上午的公司段保留', afterDel.companyDays, 0.5)
 // ---------- I. 半天额度 ----------
 // 表单里额度可以给到 0.5（半天假），数据层要能存住、用量要按 0.5 扣。
 console.log('I. 半天额度')
-store['wio_pro_trial'] = JSON.stringify({ expiresAt: Date.now() + 86400000 * 3650 })
+store[PRO_KEY] = proSession(Date.now() + 86400000 * 3650)
 store['wio_settings'] = JSON.stringify({ language: 'zh-CN' })
 S.saveCustomLeave({ name: '半天假', color: '#0E6E62', mode: 'day', quota: 0.5, quotaRule: 'yearly' })
 const halfList = S.getCustomLeaves()
@@ -397,7 +403,7 @@ ok('用满后仍可清空', S.saveEntry('2026-11-10', null) === true)
 ok('指向已删的假被拒绝', S.saveEntry('2026-11-13', 'custom:ghost') === false)
 
 // 非会员：条目与标记都拿不到（但存储保留）
-store['wio_pro_trial'] = JSON.stringify({ expiresAt: 1 })
+store[PRO_KEY] = proSession(1)
 eq('非会员看不到假期', S.getCustomLeaves().length, 0)
 eq('非会员看不到标记', Object.keys(S.getCustomMarks()).length, 0)
 ok('非会员写不进标记', S.setCustomMark('2026-03-10', 'd1', 'full') === false)

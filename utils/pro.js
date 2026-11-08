@@ -9,8 +9,10 @@
 //
 // 规则：
 //   - 每次调用都实时读本地存储，不做任何缓存
-//   - 云端订阅（subscriptions 表）优先；本地兑换码试用仅作为
-//     未登录/离线时的兜底（测试通道，上线前会移除）
+//   - 唯一来源是 wio_auth 里的 subscription，也就是云端 subscriptions
+//     表的本地镜像。权益只能由服务端产生（购买 / 兑换码 / 首次体验）
+//   - 2.0.0 起移除了旧的本地通道 wio_pro_trial：那是前端码表核销时代
+//     的测试路径，前端写库等于自己给自己发会员，不能带进线上
 //   - 时间戳兼容数字、毫秒字符串、ISO 字符串、Date
 // ============================================================
 
@@ -40,40 +42,31 @@ export function toTimestamp(v) {
 /**
  * 读取当前 PRO 状态（实时，无过期缓存）
  *
- * 缓存策略：只缓存「解析结果」，键为两份存储的原始字符串。
- * 登录 / 退出 / 核销都会改写存储 → 键变化 → 自动失效，
+ * 缓存策略：只缓存「解析结果」，键为会话存储的原始字符串。
+ * 登录 / 退出 / 核销 / 支付都会改写存储 → 键变化 → 自动失效，
  * 因此不需要依赖事件就能保证正确；是否过期仍按当前时间实时判断。
  */
 export function getProState() {
   const rawAuth = readRaw('wio_auth')
-  const rawTrial = readRaw('wio_pro_trial')
 
-  if (cache.state && cache.key === rawAuth + '|' + rawTrial) {
+  if (cache.state && cache.key === rawAuth) {
     return decorate(cache.state)
   }
 
   let session = null
-  let trial = null
   try {
     session = rawAuth ? JSON.parse(rawAuth) : null
   } catch (e) {
     session = null
-  }
-  try {
-    trial = rawTrial ? JSON.parse(rawTrial) : null
-  } catch (e) {
-    trial = null
   }
 
   const base = {
     session,
     subExp: toTimestamp(session && session.subscription && (session.subscription.expiresAt || session.subscription.expires_at)),
     subPlan: (session && session.subscription && session.subscription.plan) || 'trial',
-    hasSub: !!(session && session.subscription),
-    trialExp: toTimestamp(trial && trial.expiresAt),
-    hasTrial: !!trial
+    hasSub: !!(session && session.subscription)
   }
-  cache.key = rawAuth + '|' + rawTrial
+  cache.key = rawAuth
   cache.state = base
   return decorate(base)
 }
@@ -103,16 +96,6 @@ function decorate(b) {
       expiresAt: b.subExp,
       session,
       source: 'cloud'
-    }
-  }
-  if (b.hasTrial && b.trialExp > now) {
-    return {
-      isPro: true,
-      isLogin,
-      plan: 'trial',
-      expiresAt: b.trialExp,
-      session,
-      source: 'trial'
     }
   }
   return { isPro: false, isLogin, plan: '', expiresAt: 0, session, source: 'none' }

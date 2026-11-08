@@ -40,9 +40,15 @@ function ok(label, cond) {
 }
 
 const FUTURE = Date.now() + 86400000 * 30
+// PRO 唯一来源：会话里的云端订阅镜像（wio_pro_trial 通道已移除）
+const PRO_KEY = 'wio_auth'
+const proSession = exp => JSON.stringify({
+  user: { openid: 'o_test', nickname: '', avatarFileID: '' },
+  subscription: { plan: 'month', expiresAt: exp }
+})
 function seed({ leaves = [], marks = {}, entries = {}, overtime = {}, settings = {} } = {}) {
-  Object.keys(store).forEach(k => { if (k !== 'wio_pro_trial') delete store[k] })
-  store['wio_pro_trial'] = JSON.stringify({ expiresAt: FUTURE })
+  Object.keys(store).forEach(k => { if (k !== PRO_KEY) delete store[k] })
+  store[PRO_KEY] = proSession(FUTURE)
   store['wio_settings'] = JSON.stringify({
     language: 'zh-CN',
     targetPercentage: 40,

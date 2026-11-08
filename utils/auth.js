@@ -117,7 +117,7 @@ export async function refreshSubscription() {
 export function logout() {
   uni.removeStorageSync(KEY_AUTH)
   uni.removeStorageSync('wio_sync_state')
-  uni.removeStorageSync(KEY_TRIAL)
+  purgeLegacyStorage()
   notifyProChanged()
 }
 
@@ -132,25 +132,20 @@ export function logout() {
 // 码写在前端等于公开，清缓存还能重复领。
 // ============================================================
 
-const KEY_TRIAL = 'wio_pro_trial'
-
 /**
- * 本地试用订阅（历史遗留 / 断言脚本用）
- * 线上不再写入：所有会员权益都走云端订阅，这里只读不写。
+ * 清理 2.0.0 之前遗留的本地权益键。
+ *
+ * 旧版前端码表核销会往 wio_pro_trial 写一份订阅，那条通道已彻底移除
+ * （权益只能由服务端 subscriptions 产生）。老用户机器上可能还躺着这条
+ * 数据，启动时与退出登录时顺手清掉——虽然已经没人读它，但留着容易在
+ * 排查「为什么我是会员」时误导人。
  */
-export function getTrial() {
+export function purgeLegacyStorage() {
   try {
-    const raw = uni.getStorageSync(KEY_TRIAL)
-    return raw ? JSON.parse(raw) : null
+    uni.removeStorageSync('wio_pro_trial')
   } catch (e) {
-    return null
+    // 存储不可用时忽略
   }
-}
-
-/** 本地试用订阅是否有效 */
-export function isTrialActive() {
-  const t = getTrial()
-  return !!(t && t.expiresAt && t.expiresAt > Date.now())
 }
 
 /**
