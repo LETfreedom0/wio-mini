@@ -1618,13 +1618,16 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 14px 0 0;
+  /* 上下留白由 .legal-link 的 padding 提供，这里只补足视觉间距 */
+  padding: 2px 0 0;
 }
 
 .legal-link {
   font-size: 11px;
   color: #7C868C;
-  padding: 4px 6px;
+  /* 热区 37px 高、两链接间距 22px：文字视觉位置不变，只把可点范围撑开，
+     避免拇指点「用户协议」误跳「隐私政策」 */
+  padding: 12px 10px;
 }
 
 .legal-sep {
@@ -1636,7 +1639,8 @@ export default {
 .version-row {
   display: flex;
   justify-content: center;
-  padding: 12px 0 4px;
+  /* 上间距已由 .legal-link 的下 padding 提供，这里收窄以保持原有视觉节奏 */
+  padding: 6px 0 4px;
 }
 
 .version-text {
