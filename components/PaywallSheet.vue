@@ -64,7 +64,7 @@
         <text class="paywall-cta-text">{{ payPlan === 'year' ? i18n.profile.payCta : i18n.profile.payCtaMonth }}</text>
       </view>
       <text class="paywall-fine">{{ i18n.profile.payFine }}</text>
-      <text class="paywall-fine paywall-refund">{{ i18n.profile.payRefund }}</text>
+      <text class="paywall-fine paywall-refund">{{ refundNote }}</text>
       <!-- 交易前的协议告知：付费产品必须能在下单这一步读到条款 -->
       <view class="paywall-legal">
         <text class="paywall-legal-text">{{ i18n.profile.payAgreePrefix }}</text>
@@ -88,10 +88,20 @@ export default {
   },
   emits: ['close', 'upgraded'],
   data() {
+    // iOS 的钱由 Apple 结算，退款不经过我们；安卓/鸿蒙/Windows 走微信虚拟支付。
+    // 文案要按平台分开：混在一句里会读成「安卓不退、iOS 能退」。
+    let isIos = false
+    try {
+      const sys = uni.getSystemInfoSync()
+      isIos = String(sys.platform).toLowerCase() === 'ios'
+    } catch (e) {
+      // 取不到平台信息就按非 iOS 处理，显示通用文案（不下 iOS 结论）
+    }
     return {
       settings: { language: 'zh-CN' },
       payPlan: 'year',
-      paying: false
+      paying: false,
+      isIos
     }
   },
   computed: {
@@ -103,6 +113,11 @@ export default {
     },
     unitYear() {
       return this.settings.language === 'en-US' ? 'yr' : '年'
+    },
+    refundNote() {
+      // 非 iOS 不出现 Apple 字样，避免用户对照出「别人能退」
+      if (this.isIos && this.i18n.profile.payRefundIos) return this.i18n.profile.payRefundIos
+      return this.i18n.profile.payRefund
     }
   },
   watch: {
