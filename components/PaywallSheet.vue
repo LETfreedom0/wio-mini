@@ -65,6 +65,11 @@
       </view>
       <text class="paywall-fine">{{ i18n.profile.payFine }}</text>
       <text class="paywall-fine paywall-refund">{{ i18n.profile.payRefund }}</text>
+      <!-- 交易前的协议告知：付费产品必须能在下单这一步读到条款 -->
+      <view class="paywall-legal">
+        <text class="paywall-legal-text">{{ i18n.profile.payAgreePrefix }}</text>
+        <text class="paywall-legal-link" @click.stop="onLegalTap">{{ i18n.profile.userAgreement }}</text>
+      </view>
     </view>
   </view>
 </template>
@@ -73,6 +78,7 @@
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
 import { purchase } from '@/utils/pay.js'
+import { openAgreement } from '@/utils/legal.js'
 import { tap as haptic } from '@/utils/haptic.js'
 
 export default {
@@ -113,6 +119,10 @@ export default {
     onPayTap() {
       haptic('medium')
       this.startPurchase()
+    },
+    onLegalTap() {
+      haptic('light')
+      openAgreement()
     },
     async startPurchase() {
       if (this.paying) return
@@ -400,5 +410,27 @@ export default {
 /* 退款说明紧跟主说明，第二行不重复留白 */
 .paywall-refund {
   margin-top: 2px;
+}
+
+/* 协议告知：与上面小字同色系，链接色略提一级表示可点 */
+.paywall-legal {
+  margin-top: 4px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.paywall-legal-text {
+  font-size: 10px;
+  color: #B5BBC1;
+  line-height: 1.5;
+}
+
+.paywall-legal-link {
+  font-size: 10px;
+  color: #A8802F;
+  line-height: 1.5;
+  padding: 2px 2px;
 }
 </style>

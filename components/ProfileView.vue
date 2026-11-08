@@ -183,6 +183,13 @@
         </view>
       </view>
 
+      <!-- 协议入口：付费产品的协议必须随时可达，不能只藏在登录弹层里 -->
+      <view class="legal-row">
+        <text class="legal-link" @click="openLegalAgreement">{{ i18n.profile.legalAgreement }}</text>
+        <text class="legal-sep">·</text>
+        <text class="legal-link" @click="openLegalPrivacy">{{ i18n.profile.legalPrivacy }}</text>
+      </view>
+
       <view class="version-row" @click="onVersionTap"><text class="version-text">{{ versionLabel }}</text></view>
 
     </view>
@@ -260,9 +267,9 @@
           </view>
           <view class="agree-text-wrap">
             <text class="agree-text">{{ i18n.profile.privacyAgree }}</text>
-            <text class="agree-link">{{ i18n.profile.userAgreement }}</text>
+            <text class="agree-link" @click.stop="openLegalAgreement">{{ i18n.profile.userAgreement }}</text>
             <text class="agree-text">{{ i18n.profile.andText }}</text>
-            <text class="agree-link">{{ i18n.profile.privacyPolicy }}</text>
+            <text class="agree-link" @click.stop="openLegalPrivacy">{{ i18n.profile.privacyPolicy }}</text>
           </view>
         </view>
 
@@ -291,6 +298,7 @@ import CustomLeaveSheet from '@/components/CustomLeaveSheet.vue'
 import PaywallSheet from '@/components/PaywallSheet.vue'
 import RedeemSheet from '@/components/RedeemSheet.vue'
 import { isSecretTriggered } from '@/utils/secretTap.js'
+import { openAgreement, openPrivacy } from '@/utils/legal.js'
 import { tap as haptic } from '@/utils/haptic.js'
 import { APP_VERSION_LABEL } from '@/utils/appVersion.js'
 
@@ -816,6 +824,15 @@ export default {
       // 兑换码核销成功：trialStamp 触发 isPro 重算
       this.trialStamp++;
       this.showPaywall = false;
+    },
+    // ===== 协议 =====
+    openLegalAgreement() {
+      haptic('light')
+      openAgreement()
+    },
+    openLegalPrivacy() {
+      haptic('light')
+      openPrivacy()
     },
     // ===== 隐藏兑换入口 =====
     // 兑换码不做公开按钮（付费墙只留购买），版本号连点 5 次才出现输入层。
@@ -1596,6 +1613,26 @@ export default {
 }
 
 /* 页面底部版本号 */
+/* 协议入口：比版本号弱一级，但要比它好点——放在版本号上方 */
+.legal-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 14px 0 0;
+}
+
+.legal-link {
+  font-size: 11px;
+  color: #7C868C;
+  padding: 4px 6px;
+}
+
+.legal-sep {
+  font-size: 11px;
+  color: #C3C9CD;
+  margin: 0 2px;
+}
+
 .version-row {
   display: flex;
   justify-content: center;
