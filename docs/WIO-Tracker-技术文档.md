@@ -10,17 +10,19 @@
 
 核心设计取舍是 **本地优先（local-first）**：所有读写都发生在 `localStorage`，云端只承担两件事——可选的跨设备备份、会员权益校验。断网、退出登录、清空云端，都不影响核心功能。
 
-| 项 | 值 |
-|---|---|
-| 小程序 AppID | `wx9e594322f0cef94f` |
-| 云开发环境 | `prod-d1glr7pbd4f1ab2f5`（ap-shanghai） |
-| 虚拟支付 OfferID | `1450683826` |
-| 技术栈 | uni-app 3.x（Vue 3）+ Vite 5 + 微信云开发（云函数 / 云数据库） |
-| 后端形态 | Serverless，7 个云函数，前端不直连数据库 |
-| 代码量 | 约 1.8 万行（页面 3 989 / 组件 7 464 / utils 5 267 / 云函数 1 285） |
-| 规模 | 7 个页面、8 个组件、23 个 utils、7 个云函数、8 张集合 |
-| 提交 | 145 次（2026-01-18 起） |
-| 变现 | 微信虚拟支付（月卡 ¥6 / 年卡 ¥48）+ 兑换码 |
+| 项            | 值                                                       |
+| ------------ | ------------------------------------------------------- |
+| 小程序 AppID    | `wx9e594322f0cef94f`                                    |
+| 云开发环境        | `prod-d1glr7pbd4f1ab2f5`（ap-shanghai）                   |
+| 虚拟支付 OfferID | `1450683826`                                            |
+| 技术栈          | uni-app 3.x（Vue 3）+ Vite 5 + 微信云开发（云函数 / 云数据库）          |
+| 后端形态         | Serverless，7 个云函数，前端不直连数据库                              |
+| 代码量          | 约 1.8 万行（页面 3 989 / 组件 7 464 / utils 5 267 / 云函数 1 285） |
+| 规模           | 8 个页面、8 个组件、23 个 utils、7 个云函数、8 张集合                     |
+| 提交           | 145 次（2026-01-18 起）                                     |
+| 变现           | 微信虚拟支付（月卡 ¥6 / 年卡 ¥48）+ 兑换码                             |
+
+
 
 ---
 
@@ -30,13 +32,15 @@
 wio-mini/
 ├── App.vue                    # 启动：云开发初始化、残留存储清理、只读云端探测
 ├── main.js / manifest.json / pages.json / vite.config.js
-├── pages/                     # 页面层（7 个，含协议页）
+├── pages/                     # 页面层（8 个，含协议页与订单页）
 │   ├── index/index.vue        # 首页：本周打卡、月度达标率、年进度
 │   ├── calendar/index.vue     # 日历：月视图标记、批量操作、福利假
 │   ├── profile/index.vue      # 我的：账号、目标、假期额度、设置
 │   ├── member/index.vue       # 会员（二级页，非 tab）：权益、同步、付费
 │   ├── stats/index.vue        # 统计：月度/年度对比、图表
-│   └── share/index.vue        # 分享卡生成：双卡面轮播、保存相册
+│   ├── share/index.vue        # 分享卡生成：双卡面轮播、保存相册
+│   ├── legal/index.vue        # 用户协议 / 隐私政策（?type=）
+│   └── orders/index.vue       # 订单记录（微信「订单中心」登记的 path）
 ├── components/                # 组件层（8 个）
 │   ├── CustomTabBar.vue       # 自绘 3 格 tabBar
 │   ├── CustomHeader.vue       # 自定义导航栏（安全区适配）
@@ -58,30 +62,30 @@ wio-mini/
 ├── cloudfunctions/            # 云函数（7 个，独立部署）
 │   ├── login/  pay/  paysweep/  xpaynotify/  sync/  redeem/  wxacode/
 ├── docs/  static/  supabase/（早期方案存档，未启用）
-└── .workbuddy/shared-check/   # 离线断言脚本（11 套 + 1 渲染器）
+└── .workbuddy/shared-check/   # 离线断言脚本（13 套 + 1 渲染器）
 ```
 
 **分层约定**
 
-| 层 | 职责 | 铁律 |
-|---|---|---|
-| pages | 路由、生命周期、页面装配 | 不写业务计算 |
-| components | 视图与交互 | 不直接读写 storage |
-| utils | 数据、口径、同步、权益、绘制 | 唯一可信来源，可被断言直接加载 |
-| cloudfunctions | 鉴权、写库、支付、发权益 | 前端不直连数据库，openid 只从 `getWXContext()` 取 |
+| 层              | 职责             | 铁律                                    |
+| -------------- | -------------- | ------------------------------------- |
+| pages          | 路由、生命周期、页面装配   | 不写业务计算                                |
+| components     | 视图与交互          | 不直接读写 storage                         |
+| utils          | 数据、口径、同步、权益、绘制 | 唯一可信来源，可被断言直接加载                       |
+| cloudfunctions | 鉴权、写库、支付、发权益   | 前端不直连数据库，openid 只从 `getWXContext()` 取 |
 
 ---
 
 ## 2. 功能地图
 
-| 页面 | 核心能力 |
-|---|---|
-| **首页** | 本周打卡（公司/居家/休假一键标记）、月度达标率环、年进度、每日一句 |
-| **日历** | 月视图着色、单日/区间标记、半天（上午/下午）、自定义假（区间型与按天型）、法定节假日与调休自动识别 |
-| **我的** | 微信登录（头像昵称）、月度目标、年假/病假额度、生日假、调休规则、语言切换、版本号 |
-| **会员** | PRO 权益展示、云同步（上传/恢复）、付费墙（月卡/年卡）、兑换码（隐藏入口） |
-| **统计** | 月度/年度出勤构成、居家天数、节约通勤时间 |
-| **分享卡** | 750×1000 战绩卡，日历风 / 小票风双卡面左右滑动，带小程序码，保存相册 |
+| 页面      | 核心能力                                               |
+| ------- | -------------------------------------------------- |
+| **首页**  | 本周打卡（公司/居家/休假一键标记）、月度达标率环、年进度、每日一句                 |
+| **日历**  | 月视图着色、单日/区间标记、半天（上午/下午）、自定义假（区间型与按天型）、法定节假日与调休自动识别 |
+| **我的**  | 微信登录（头像昵称）、月度目标、年假/病假额度、生日假、调休规则、语言切换、版本号          |
+| **会员**  | PRO 权益展示、云同步（上传/恢复）、付费墙（月卡/年卡）、兑换码（隐藏入口）           |
+| **统计**  | 月度/年度出勤构成、居家天数、节约通勤时间                              |
+| **分享卡** | 750×1000 战绩卡，日历风 / 小票风双卡面左右滑动，带小程序码，保存相册           |
 
 **主链路**：打卡 → 日历着色 → 首页达标率 → 统计/分享卡 → 需要备份或更多权益时进会员页。
 
@@ -91,20 +95,23 @@ wio-mini/
 
 ### 3.1 本地存储（7 个键 + 1 个待清理）
 
-| Key | 内容 | 说明 |
-|---|---|---|
-| `wio_settings` | 目标、额度、语言、假期配置 | 单个 JSON 对象 |
-| `wio_entries` | 出勤记录 `{ 'YYYY-MM-DD': 状态 }` | 核心数据 |
-| `wio_overtime` | 加班记录 `{ 'YYYY-MM-DD': 小时 }` | |
-| `wio_auth` | 会话 `{ user, subscription }` | 云端状态的本地镜像 |
-| `wio_sync_base` | 上次同步成功时的三份快照 | 三向合并基线，**只在本机，不上传** |
-| `wio_sync_state` | 同步状态、红点、上次同步时间 | |
-| `wio_restore_backup` | 恢复前备份 | 支持撤销恢复 |
-| ~~`wio_pro_trial`~~ | 旧本地兑换码通道 | v2.0.0 起废弃，启动时清理 |
+| Key                  | 内容                          | 说明                  |
+| -------------------- | --------------------------- | ------------------- |
+| `wio_settings`       | 目标、额度、语言、假期配置               | 单个 JSON 对象          |
+| `wio_entries`        | 出勤记录 `{ 'YYYY-MM-DD': 状态 }` | 核心数据                |
+| `wio_overtime`       | 加班记录 `{ 'YYYY-MM-DD': 小时 }` |                     |
+| `wio_auth`           | 会话 `{ user, subscription }` | 云端状态的本地镜像           |
+| `wio_sync_base`      | 上次同步成功时的三份快照                | 三向合并基线，**只在本机，不上传** |
+| `wio_sync_state`     | 同步状态、红点、上次同步时间              |                     |
+| `wio_restore_backup` | 恢复前备份                       | 支持撤销恢复              |
+| ~~`wio_pro_trial`~~  | 旧本地兑换码通道                    | v2.0.0 起废弃，启动时清理    |
 
 ### 3.2 出勤记录模型
 
 `entries[dateStr]` 支持两种形态：
+
+|   |   |   |   |   |   |   |   |
+| - | - | - | - | - | - | - | - |
 
 - **字符串**：`'company' | 'home' | 'vacation' | 'birthday' | 'sick' | 'unpaid' | 'comp_off' | 'exclude_wio'`，也可为 `'custom:<leaveId>'`（按天型自定义假）
 - **对象**：`{ am, pm }`，用于上下午不同状态（上午公司 + 下午育儿假）
@@ -113,14 +120,16 @@ wio-mini/
 
 **折算口径**（业务核心，改动需谨慎）：
 
-| 类型 | 计入达标率分母 | 备注 |
-|---|---|---|
-| 公司 | 是，且计入分子 | |
-| 居家 | 是 | 拿不到分 |
-| 半天出勤 | 依 `halfFullDays` 开关：0.5 或 1 天 | 标记时当场确认 |
-| 半天居家 / 半天假期 | 恒定 0.5 天 | 保证开关只影响达标率 |
+| 类型          | 计入达标率分母                       | 备注         |
+| ----------- | ----------------------------- | ---------- |
+| 公司          | 是，且计入分子                       |            |
+| 居家          | 是                             | 拿不到分       |
+| 半天出勤        | 依 `halfFullDays` 开关：0.5 或 1 天 | 标记时当场确认    |
+| 半天居家 / 半天假期 | 恒定 0.5 天                      | 保证开关只影响达标率 |
 
-**按天型自定义假独立存 `settings.customMarks`**：`{ 'YYYY-MM-DD': { leaveId, part: 'full'|'am'|'pm' } }`。绝不塞进 `entries`——`entries` 是固定状态枚举，塞进去会污染出勤判断；两者并存时 `entries` 优先。
+|                                                                                 |      |                                                                           |
+| ------------------------------------------------------------------------------- | ---- | ------------------------------------------------------------------------- |
+| **按天型自定义假独立存 `settings.customMarks`**：\`{ 'YYYY-MM-DD': { leaveId, part: 'full' | 'am' | 'pm' } }`。绝不塞进 `entries`——`entries`是固定状态枚举，塞进去会污染出勤判断；两者并存时`entries\` 优先。 |
 
 ### 3.3 设置项（`wio_settings`）
 
@@ -128,16 +137,16 @@ wio-mini/
 
 ### 3.4 云端集合（8 张）
 
-| 集合 | 主键约定 | 主要字段 | 用途 |
-|---|---|---|---|
-| `users` | 自增 | `openid, nickname, avatarFileID, created_at, updated_at` | 用户资料 |
-| `user_data` | 自增（openid 唯一） | `openid, data, data_version, client_updated_at, updated_at` | 数据快照（整包） |
-| `subscriptions` | 自增 | `openid, plan, status, expires_at, wx_order_id, wx_transaction_id, out_trade_no, started_at` | 权益唯一来源 |
-| `payment_orders` | 自增 | `openid, plan, product_id, amount_fen, status, out_trade_no, created_at, paid_at` | 订单台账 |
-| `redeem_codes` | 自增 | `code, days, max_uses, used_count, enabled, expires_at, note` | 码表 |
-| `redeem_logs` | **`openid_code`** | `openid, code, days, expires_at, created_at` | 核销日志 |
-| `trial_grants` | **`openid`** | `openid, days, expires_at, created_at` | 体验发放记录 |
-| `sys_cache` | 固定键 | token 缓存 | access_token 复用 |
+| 集合               | 主键约定              | 主要字段                                                                                         | 用途              |
+| ---------------- | ----------------- | -------------------------------------------------------------------------------------------- | --------------- |
+| `users`          | 自增                | `openid, nickname, avatarFileID, created_at, updated_at`                                     | 用户资料            |
+| `user_data`      | 自增（openid 唯一）     | `openid, data, data_version, client_updated_at, updated_at`                                  | 数据快照（整包）        |
+| `subscriptions`  | 自增                | `openid, plan, status, expires_at, wx_order_id, wx_transaction_id, out_trade_no, started_at` | 权益唯一来源          |
+| `payment_orders` | 自增                | `openid, plan, product_id, amount_fen, status, out_trade_no, created_at, paid_at`            | 订单台账            |
+| `redeem_codes`   | 自增                | `code, days, max_uses, used_count, enabled, expires_at, note`                                | 码表              |
+| `redeem_logs`    | **`openid_code`** | `openid, code, days, expires_at, created_at`                                                 | 核销日志            |
+| `trial_grants`   | **`openid`**      | `openid, days, expires_at, created_at`                                                       | 体验发放记录          |
+| `sys_cache`      | 固定键               | token 缓存                                                                                     | access_token 复用 |
 
 **两个「靠主键唯一实现业务约束」的设计**（不用事务、不依赖分布式锁）：
 
@@ -163,41 +172,48 @@ expiresAt = base + plan 天数 × 86400000
 
 ## 4. 云函数
 
-| 函数 | 触发 | 入参 | 依赖集合 | 环境变量 |
-|---|---|---|---|---|
-| `login` | 前端调用 | `nickname, avatarFileID, claimTrial` | users, subscriptions, trial_grants | — |
-| `sync` | 前端调用 | `action: pull\|push` + 快照 | user_data, subscriptions | — |
-| `pay` | 前端调用 / 函数间调用 | `action: create\|query\|verify\|diag` | payment_orders, subscriptions, sys_cache | `VIRTUAL_PAY_APPKEY` `WX_APP_SECRET` `VIRTUAL_PAY_ITEM_MONTH` `VIRTUAL_PAY_ITEM_YEAR` |
-| `xpaynotify` | 微信发货推送（公网 URL） | XML | 经 `pay` 间接 | — |
-| `paysweep` | **定时器，每 5 分钟** | — | payment_orders | — |
-| `redeem` | 前端调用 | `action: redeem\|issue` | redeem_codes, redeem_logs, subscriptions | `REDEEM_ADMIN_TOKEN` |
-| `wxacode` | 前端调用 | `scene, page` | sys_cache | `WX_APP_SECRET` |
+| 函数           | 触发             | 入参                                    | 依赖集合                                     | 环境变量                                                                                  |
+| ------------ | -------------- | ------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------- |
+| `login`      | 前端调用           | `nickname, avatarFileID, claimTrial`  | users, subscriptions, trial_grants       | —                                                                                     |
+| `sync`       | 前端调用           | `action: pull\|push` + 快照             | user_data, subscriptions                 | —                                                                                     |
+| `pay`        | 前端调用 / 函数间调用   | `action: create\|query\|verify\|orders\|refund\|refundinfo\|diag` | payment_orders, subscriptions, sys_cache | `VIRTUAL_PAY_APPKEY` `WX_APP_SECRET` `VIRTUAL_PAY_ITEM_MONTH` `VIRTUAL_PAY_ITEM_YEAR` |
+| `xpaynotify` | 微信发货推送（公网 URL） | XML                                   | 经 `pay` 间接                               | —                                                                                     |
+| `paysweep`   | **定时器，每 5 分钟** | —                                     | payment_orders                           | —                                                                                     |
+| `redeem`     | 前端调用           | `action: redeem\|issue`               | redeem_codes, redeem_logs, subscriptions | `REDEEM_ADMIN_TOKEN`                                                                  |
+| `wxacode`    | 前端调用           | `scene, page`                         | sys_cache                                | `WX_APP_SECRET`                                                                       |
 
 ### 4.1 `login`
+
 微信登录入口。`getWXContext()` 取 openid（**不需要 AppSecret**）→ 建/更新 `users`（昵称截断 40 字、头像 fileID 截断 512 字，防超长串污染快照）→ 可选发放 7 天体验 → 返回用户资料 + 有效订阅。
 
 `claimTrial` 只在**用户主动登录**时携带，静默刷新不带，避免每次进会员页都多查两张表。
 
 ### 4.2 `sync`
+
 整包快照推拉 + 乐观锁。`push` 时比较 `base_version` 与云端 `data_version`：相等则接受并 +1；落后且非 `force` 返回冲突；`force` 强制覆盖。
 
 三处防御：快照 5MB 上限；`data` 字段用 `_.set()` 整体替换（见 5.2）；同一 openid 若存在重复文档，按版本倒序取主文档并顺手清理。
 
 ### 4.3 `pay`
+
 微信小程序**虚拟支付 · 道具直购**（个人主体可用）。`create` 用 `wx.login` 的 code 换 session_key → 生成 `outTradeNo` → 写 pending 订单 → 拼 `signData` → 算两个签名返回前端拉起支付。`query` / `verify` 一律向平台 `POST /xpay/query_order` 核实。`diag` 为部署自检，**存在 openid 时直接拒绝**。
 
 ### 4.4 `xpaynotify`
+
 接收微信「发货推送」。核心判断：**推送只是通知，不是发货依据**——谁拿到 `outTradeNo` 都能伪造一条推送，因此这里不直接写库，而是回调 `pay` 去平台查单，确认已支付才入账。必须回 `<ErrCode>0</ErrCode>`，否则平台重试 15 次，故入账必须幂等。
 
 ### 4.5 `paysweep`
+
 定时兜底。扫 `payment_orders` 中停留超过 1 分钟的 pending 订单，逐个查单补发货，超过 24 小时未支付标记 expired。存在理由：前端 `success` 回调会丢（用户付完直接杀微信），推送也可能丢——没有这一层就是「钱付了、会员没到」。
 
 ### 4.6 `redeem`
+
 服务端核销。`redeem`：验码 → 原子占额 → 记日志（主键唯一）→ 写 `subscriptions`。`issue`：批量发码，需 `REDEEM_ADMIN_TOKEN`，不配则自动关闭。
 
 入口不在付费墙，改为**版本号连点 5 次**唤起 `RedeemSheet`（`utils/secretTap.js`，间隔 >1.2s 重新计数）。
 
 ### 4.7 `wxacode`
+
 生成分享卡上的小程序码（`getUnlimited`，scene 为 `YYYYMM`）。不用 `cloud.openapi.wxacode`——云开发托管 token 在该环境恒为 invalid，改为自行用 `stable_token` 换取的 token 直接请求 HTTP 接口。
 
 ---
@@ -208,11 +224,11 @@ expiresAt = base + plan 天数 × 86400000
 
 服务端只存**整包**，冲突解决全部放在客户端，靠本机基线 `wio_sync_base` 做三向比对（base / local / cloud）：
 
-| 情形 | 结果 |
-|---|---|
-| 本机有 | 本机赢，纳入上传 |
-| 基线有 + 本机删 | 尊重删除，云端也要删 |
-| 云端独有 | 补下来 |
+| 情形               | 结果                            |
+| ---------------- | ----------------------------- |
+| 本机有              | 本机赢，纳入上传                      |
+| 基线有 + 本机删        | 尊重删除，云端也要删                    |
+| 云端独有             | 补下来                           |
 | 基线有 + 云端删 + 本机未改 | 补回云端（`cloudDeleted`，必须在确认层列出） |
 
 **日期边界**：云端只存 `<= 今天` 的数据。未来的标记是「计划」不是「事实」，不参与同步。`historyData()` 是唯一裁剪口径，必须同时用于四处——推送载荷、基线、三边比对、条数统计；少一处就会出现「云端已删除、将补回」的假差异。
@@ -258,7 +274,9 @@ where({ _id, used_count: _.lt(maxUses) }).update({ data: { used_count: _.inc(1) 
 
 只有真正把计数推进去的那次才算抢到名额；本人重复核销、入账失败都要 `inc(-1)` 退回。
 
-同时修了一个隐蔽 bug：`Number(doc.max_uses || 1)` —— `max_uses = 0` 表示不限次数，但 `0 || 1 === 1`，导致「不限次数的活动码」实际只能被领一次。改 `doc.max_uses == null ? 1 : Number(...)`。
+|                                    |   |                               |   |                                                                            |
+| ---------------------------------- | - | ----------------------------- | - | -------------------------------------------------------------------------- |
+| 同时修了一个隐蔽 bug：\`Number(doc.max_uses |   | 1)`——`max_uses = 0`表示不限次数，但`0 |   | 1 === 1`，导致「不限次数的活动码」实际只能被领一次。改 `doc.max_uses == null ? 1 : Number(...)\`。 |
 
 ### 5.6 首次登录发放体验
 
@@ -273,6 +291,7 @@ where({ _id, used_count: _.lt(maxUses) }).update({ data: { used_count: _.inc(1) 
 - **事件广播**：`wio:pro-changed`（登录/退出/兑换/订阅更新时发出），组件监听到后触发 `computed` 重算
 - **时间戳归一**：`toTimestamp()` 兼容数字 / 毫秒字符串 / ISO / Date——云数据库 date 经云函数序列化成字符串后，`expiresAt > Date.now()` 会得 `NaN`
 - **权益落到数据层**：无 PRO 时 `getSettings()` 语言降级、`getCustomLeaves()` 返回空、`saveCustomLeave()` 拒写。只做 UI 隐藏会变成「退出登录后还能用」
+
 
 ### 5.8 Canvas 分享卡
 
@@ -353,6 +372,8 @@ tcb fn deploy <name> --force  # ⚠️ 会套用 cloudbaserc.json 的 envVariabl
 - [ ] MP 后台隐私保护指引声明「用户信息（头像、昵称）」「相册（仅写入）」——**不配置则 `chooseAvatar`、`saveImageToPhotosAlbum` 真机直接失败**，比审核更早暴露
 - [ ] 协议页可点（登录弹层、付费墙、我的页三处入口）；隐私政策优先走 `wx.openPrivacyContract()` 打开平台登记版本，失败退回自建页
 - [ ] `paysweep` 定时触发器存在
+- [ ] **订单中心 path 已登记为 `pages/orders/index`**（MP 后台 → 设置 → 基本设置/服务内容声明）。交易类小程序不登记，代码提审会被驳回；path 只能填主路径，不能带 `?参数`
+- [ ] `pay` 云函数已重新部署（新增 `action: orders` 供订单页取数；`payment_orders` 权限为「所有用户不可读写」，客户端读不到，必须经它）
 - [ ] 云函数环境变量齐全（缺任一，支付返回 `not_configured`）
 - [ ] 版本号 `versionCode` 只升不降
 

@@ -468,7 +468,36 @@ export const locales = {
       noHoliday: '本年度无节日安排',
       saved: '已保存',
       language: '语言',
-      langProHint: '升级 PRO，解锁 English 界面'
+      langProHint: '升级 PRO，解锁 English 界面',
+      orderEntry: '订单记录'
+    },
+    orders: {
+      title: '订单记录',
+      count: '笔',
+      empty: '还没有订单',
+      emptySub: '购买会员后会显示在这里',
+      needLogin: '登录后查看你的订单',
+      needLoginSub: '登录只用于把订单和你的会员权益关联起来，不会获取其它信息',
+      login: '微信登录',
+      loading: '正在加载…',
+      failed: '订单加载失败',
+      retry: '重新加载',
+      planMonth: '月卡 · 30 天',
+      planYear: '年卡 · 366 天',
+      planCode: '兑换码 · 体验',
+      planTrial: '新用户体验 · 7 天',
+      planOther: '会员',
+      statusPending: '待支付',
+      statusPaid: '已支付',
+      statusRefunded: '已退款',
+      statusRefunding: '退款处理中',
+      orderNo: '订单号',
+      amount: '金额',
+      created: '下单时间',
+      paidAt: '支付时间',
+      copyNo: '订单号已复制',
+      help: '对订单有疑问？点这里复制联系邮箱',
+      viewMember: '查看会员权益'
     }
   },
   'en-US': {
@@ -933,7 +962,36 @@ export const locales = {
       noHoliday: 'No holidays this year',
       saved: 'Saved',
       language: 'Language',
-      langProHint: 'PRO unlocks English'
+      langProHint: 'PRO unlocks English',
+      orderEntry: 'Orders'
+    },
+    orders: {
+      title: 'Orders',
+      count: 'orders',
+      empty: 'No orders yet',
+      emptySub: 'Your purchases will show up here',
+      needLogin: 'Sign in to see your orders',
+      needLoginSub: 'Signing in only links orders to your membership. Nothing else is accessed.',
+      login: 'Sign in with WeChat',
+      loading: 'Loading…',
+      failed: 'Could not load your orders',
+      retry: 'Retry',
+      planMonth: 'Monthly · 30 days',
+      planYear: 'Yearly · 366 days',
+      planCode: 'Code · trial',
+      planTrial: 'New user trial · 7 days',
+      planOther: 'Membership',
+      statusPending: 'Unpaid',
+      statusPaid: 'Paid',
+      statusRefunded: 'Refunded',
+      statusRefunding: 'Refunding',
+      orderNo: 'Order',
+      amount: 'Amount',
+      created: 'Created',
+      paidAt: 'Paid',
+      copyNo: 'Order number copied',
+      help: 'Questions about an order? Tap to copy our email',
+      viewMember: 'View membership'
     }
   }
 };

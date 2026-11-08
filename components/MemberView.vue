@@ -42,6 +42,12 @@
           </view>
         </view>
 
+        <!-- ===== 订单记录（微信订单中心页的站内入口） ===== -->
+        <view class="order-entry" @click="openOrders">
+          <text class="order-entry-text">{{ i18n.profile.orderEntry }}</text>
+          <text class="order-entry-arrow">›</text>
+        </view>
+
         <!-- ===== 云端同步（手动：两个方向分开，永不自动覆盖） ===== -->
         <view class="settings-card" @click="onSyncCardTap">
           <view class="feat-head">
@@ -534,6 +540,10 @@ export default {
     openPaywall() {
       haptic('light')
       this.showPaywall = true
+    },
+    openOrders() {
+      haptic('light')
+      uni.navigateTo({ url: '/pages/orders/index' })
     },
     onProUpgraded() {
       this.trialStamp++
@@ -1109,6 +1119,32 @@ export default {
   font-size: 13px;
   font-weight: 700;
   color: #FFF9EE;
+}
+
+/* ===== 订单记录入口（thin row） ===== */
+.order-entry {
+  background: #FFFFFF;
+  border-radius: 14px;
+  padding: 12px 16px;
+  margin: -2px 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 10px rgba(15, 35, 40, 0.04);
+}
+
+.order-entry:active {
+  opacity: 0.85;
+}
+
+.order-entry-text {
+  font-size: 12px;
+  color: #6D777C;
+}
+
+.order-entry-arrow {
+  font-size: 15px;
+  color: #C5CDD1;
 }
 
 /* ===== 功能卡通用行 ===== */

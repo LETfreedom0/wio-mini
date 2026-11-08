@@ -619,6 +619,35 @@ exports.main = async (event) => {
       return await queryOrderAndDeliver(OPENID, order)
     }
 
+    // ---------- 订单列表（订单中心页） ----------
+    // 微信要求交易类小程序提供订单中心页，用户在「我-服务-钱包-账单」里
+    // 点进来要能看到自己的全部交易。这里只按 openid 取本人订单，
+    // 且只回传展示所需字段：openid / product_id / wx_order_id 一律不出服务端。
+    if (event.action === 'orders') {
+      const limit = Math.min(Math.max(Number(event.limit) || 20, 1), 50)
+      // 不依赖 orderBy：payment_orders 上没建 created_at 索引，
+      // 单个用户的订单量很小，取回来在内存里排更稳
+      const r = await db.collection('payment_orders')
+        .where({ openid: OPENID })
+        .limit(50)
+        .get()
+      const list = (r.data || [])
+        .map(o => ({
+          outTradeNo: o.out_trade_no || '',
+          plan: o.plan || '',
+          amountFen: Number(o.amount_fen) || 0,
+          status: o.status || 'pending',
+          refundStatus: o.refund_status || '',
+          createdAt: Number(o.created_at) || 0,
+          paidAt: Number(o.paid_at) || 0,
+          refundedAt: Number(o.refunded_at) || 0
+        }))
+        .filter(o => o.outTradeNo)
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, limit)
+      return { ok: true, orders: list }
+    }
+
     return { ok: false, code: 'bad_action', message: '未知 action' }
   } catch (e) {
     return { ok: false, code: 'internal', message: String(e && e.message ? e.message : e) }
