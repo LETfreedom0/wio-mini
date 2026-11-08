@@ -62,6 +62,9 @@ const ITEM = {
 const PRICE_FEN = { month: 600, year: 4800 }
 const PLAN_DAYS = { month: 30, year: 366 }
 const DAY_MS = 24 * 3600 * 1000
+// 订单页只展示「还可能有下文」的未支付单：超过这个时长的视为已放弃，
+// 与 paysweep 的过期窗口保持一致
+const ORDER_PENDING_TTL_MS = 24 * 3600 * 1000
 
 // ---------------- 基础工具 ----------------
 
@@ -625,6 +628,7 @@ exports.main = async (event) => {
     // 且只回传展示所需字段：openid / product_id / wx_order_id 一律不出服务端。
     if (event.action === 'orders') {
       const limit = Math.min(Math.max(Number(event.limit) || 20, 1), 50)
+      const now = Date.now()
       // 不依赖 orderBy：payment_orders 上没建 created_at 索引，
       // 单个用户的订单量很小，取回来在内存里排更稳
       const r = await db.collection('payment_orders')
@@ -643,6 +647,11 @@ exports.main = async (event) => {
           refundedAt: Number(o.refunded_at) || 0
         }))
         .filter(o => o.outTradeNo)
+        // 未支付且已过期的单不展示：它从没产生交易，出现在列表里会被读成
+        // 「我还欠着一笔」。paysweep 会把 24 小时未支付置 expired，
+        // 但触发器可能没建，所以这里再按时间兜一次底。
+        .filter(o => o.status !== 'expired')
+        .filter(o => o.status !== 'pending' || o.createdAt > now - ORDER_PENDING_TTL_MS)
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, limit)
       return { ok: true, orders: list }

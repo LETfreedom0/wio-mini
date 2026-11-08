@@ -129,6 +129,9 @@
               <text class="row-value">{{ fmt(o.paidAt) }}</text>
             </view>
 
+            <!-- 未支付：说清「没扣款」，否则用户会以为还欠着钱或还能继续付 -->
+            <text v-if="o.status === 'pending'" class="order-note">{{ L.pendingNote }}</text>
+
             <view class="order-no" @click="copyNo(o.outTradeNo)">
               <text class="no-label">{{ L.orderNo }}</text>
               <text class="no-value">{{ o.outTradeNo }}</text>
@@ -717,6 +720,14 @@ export default {
   font-size: 14px;
   font-weight: 600;
   color: #1F2A2E;
+}
+
+.order-note {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 16px;
+  color: #A38B63;
 }
 
 .order-no {

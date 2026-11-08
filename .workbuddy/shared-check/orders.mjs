@@ -155,6 +155,22 @@ console.log('\n5) 未登录直接拒')
   ok(r.ok === false && r.code === 'no_openid', '无 openid 返回 no_openid', r.code)
 }
 
+console.log('\n6) 未支付订单的展示口径')
+{
+  reset()
+  const now = Date.now()
+  addOrder({ status: 'pending', created_at: now - 3600 * 1000, out_trade_no: 'P_RECENT' })
+  addOrder({ status: 'pending', created_at: now - 25 * 3600 * 1000, out_trade_no: 'P_STALE' })
+  addOrder({ status: 'expired', created_at: now - 2 * 3600 * 1000, out_trade_no: 'P_EXPIRED' })
+  addOrder({ status: 'paid', created_at: now - 400 * 24 * 3600 * 1000, out_trade_no: 'PAID_OLD' })
+  const r = await handler({ action: 'orders' })
+  const nos = r.orders.map((o) => o.outTradeNo)
+  ok(nos.includes('P_RECENT'), '24 小时内的未支付单仍然展示（用户回来看得到刚才那笔）', nos)
+  ok(!nos.includes('P_STALE'), '超过 24 小时的未支付单不再展示', nos)
+  ok(!nos.includes('P_EXPIRED'), '巡检标记为 expired 的单不展示（从没产生交易）', nos)
+  ok(nos.includes('PAID_OLD'), '很久以前的已支付单照常展示', nos)
+}
+
 Module._load = origLoad
 console.log('\n' + '─'.repeat(46))
 console.log(`通过 ${pass} 条，失败 ${fail} 条`)
