@@ -9,25 +9,31 @@
 
       <view class="content">
 
-        <!-- ===== 会员状态卡 ===== -->
-        <view class="settings-card pro-status-card" :class="{ 'pro-locked': !isPro }">
+        <!-- ===== 会员状态卡（整卡可点：会员详情 + 订单记录都在下一页） ===== -->
+        <view
+          class="settings-card pro-status-card"
+          :class="{ 'pro-locked': !isPro }"
+          @click="openMemberDetail">
           <view class="pro-head">
             <view class="pro-head-left">
               <text class="pro-name">WIO PRO</text>
               <text class="pro-sub">{{ isPro ? planLine : i18n.profile.proCardSubOff }}</text>
             </view>
-            <view v-if="isPro" class="badge-on">
-              <text class="badge-on-text">{{ i18n.profile.proCardUnlocked }}</text>
-            </view>
-            <view v-else class="badge-off">
-              <text class="badge-off-text">PRO</text>
+            <view class="pro-head-right">
+              <view v-if="isPro" class="badge-on">
+                <text class="badge-on-text">{{ i18n.profile.proCardUnlocked }}</text>
+              </view>
+              <view v-else class="badge-off">
+                <text class="badge-off-text">PRO</text>
+              </view>
+              <text class="pro-chev">›</text>
             </view>
           </view>
 
-          <!-- 已开通：续费行 -->
+          <!-- 已开通：续费行（卡内按钮只负责下单，不触发整卡跳转） -->
           <template v-if="isPro">
             <view class="divider"></view>
-            <view class="renew-row" @click="openPaywall">
+            <view class="renew-row" @click.stop="openPaywall">
               <text class="renew-note">{{ i18n.profile.memberNoAutoRenew }}</text>
               <view class="renew-action">
                 <text class="renew-text">{{ i18n.profile.renewAction }}</text>
@@ -37,15 +43,9 @@
           </template>
 
           <!-- 未开通：升级 CTA -->
-          <view v-else class="upgrade-cta" @click="openPaywall">
+          <view v-else class="upgrade-cta" @click.stop="openPaywall">
             <text class="upgrade-text">{{ i18n.profile.upgradeProCta }}</text>
           </view>
-        </view>
-
-        <!-- ===== 订单记录（微信订单中心页的站内入口） ===== -->
-        <view class="order-entry" @click="openOrders">
-          <text class="order-entry-text">{{ i18n.profile.orderEntry }}</text>
-          <text class="order-entry-arrow">›</text>
         </view>
 
         <!-- ===== 云端同步（手动：两个方向分开，永不自动覆盖） ===== -->
@@ -541,7 +541,9 @@ export default {
       haptic('light')
       this.showPaywall = true
     },
-    openOrders() {
+    // 整卡入口：会员详情与订单记录在同一个页面（pages/orders/index，
+    // 同时是微信「订单中心」登记的 path），卡内按钮仍各自负责下单
+    openMemberDetail() {
       haptic('light')
       uni.navigateTo({ url: '/pages/orders/index' })
     },
@@ -1121,30 +1123,23 @@ export default {
   color: #FFF9EE;
 }
 
-/* ===== 订单记录入口（thin row） ===== */
-.order-entry {
-  background: #FFFFFF;
-  border-radius: 14px;
-  padding: 12px 16px;
-  margin: -2px 0 14px;
+/* 右上角：状态徽标 + 进入详情的箭头（整卡可点的可见提示） */
+.pro-head-right {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  box-shadow: 0 2px 10px rgba(15, 35, 40, 0.04);
+  flex-shrink: 0;
 }
 
-.order-entry:active {
-  opacity: 0.85;
+.pro-chev {
+  font-size: 16px;
+  line-height: 1;
+  color: rgba(25, 30, 34, 0.28);
+  margin-left: 6px;
+  margin-top: -1px;
 }
 
-.order-entry-text {
-  font-size: 12px;
-  color: #6D777C;
-}
-
-.order-entry-arrow {
-  font-size: 15px;
-  color: #C5CDD1;
+.pro-locked .pro-chev {
+  color: rgba(169, 118, 31, 0.55);
 }
 
 /* ===== 功能卡通用行 ===== */
