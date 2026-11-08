@@ -24,16 +24,35 @@ function notifyProChanged() {
 /**
  * 登录 / 刷新会话
  * @param {object} [profile] 可选的资料更新 { nickname, avatarFileID }
- * @returns {Promise<{user, subscription}>}
+ * @param {object} [opts] { claimTrial } 是否尝试领取首次登录体验——
+ *        只有用户主动登录时传 true；refreshSubscription 的静默刷新不传，
+ *        避免每次进会员页都多查一次表
+ * @returns {Promise<{user, subscription, trial}>}
  */
-export async function login(profile = {}) {
+export async function login(profile = {}, opts = {}) {
   if (!isCloudAvailable()) {
     throw { error: 'cloud_unavailable', message: '云开发仅支持微信小程序端' }
   }
-  const res = await callCloud('login', profile)
+  const payload = { ...profile }
+  if (opts.claimTrial) payload.claimTrial = true
+  const res = await callCloud('login', payload)
   uni.setStorageSync(KEY_AUTH, JSON.stringify(res))
   notifyProChanged()
   return res
+}
+
+/**
+ * 领取首次登录体验（7 天）
+ * 与登录解耦：已登录但当年没领过的人也能补领（服务端按 openid 判重）。
+ * @returns {Promise<{granted:boolean, days?:number, expiresAt?:number, reason?:string}>}
+ */
+export async function claimTrial() {
+  if (!isCloudAvailable()) throw { code: 'cloud_unavailable', message: '云开发仅支持微信小程序端' }
+  if (!isLogin()) throw { code: 'need_login', message: '请先登录' }
+  const res = await callCloud('login', { claimTrial: true })
+  uni.setStorageSync(KEY_AUTH, JSON.stringify(res))
+  notifyProChanged()
+  return res.trial || { granted: false, reason: 'unknown' }
 }
 
 /** 获取当前会话 { user:{openid,nickname,avatarFileID}, subscription } */

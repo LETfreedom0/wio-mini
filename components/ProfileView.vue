@@ -285,7 +285,7 @@
 <script>
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
-import { login, getAuth, logout, updateCachedUser, uploadAvatar, refreshSubscription } from '@/utils/auth.js'
+import { login, getAuth, logout, updateCachedUser, uploadAvatar, refreshSubscription, claimTrial } from '@/utils/auth.js'
 import { isProUser, getProState, proExpireDate, PRO_CHANGED_EVENT } from '@/utils/pro.js'
 import CustomLeaveSheet from '@/components/CustomLeaveSheet.vue'
 import PaywallSheet from '@/components/PaywallSheet.vue'
@@ -303,6 +303,12 @@ const holidayNameMap = {
   '中秋节': 'Mid-Autumn',
   '国庆节': 'National Day'
 };
+
+/** 时间戳 → YYYY-MM-DD（体验到期日展示用） */
+function fmtDate(ts) {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export default {
   name: 'ProfileView',
@@ -438,7 +444,8 @@ export default {
           : t('profile.proMemTrial', lang);
       }
       if (!this.isLogin) return this.i18n.profile.accountLoginHint;
-      return '';
+      // 已登录但没权益：提示还有一次 7 天体验可领（点卡片 → 领取）
+      return this.i18n.profile.accountClaimHint;
     },
     avatarSrc() {
       if (!this.isLogin) return '';
@@ -608,18 +615,53 @@ export default {
         this.openAuthSheet('login');
         return;
       }
-      // 已登录：提供完善资料 / 退出登录入口
+      // 已登录：提供完善资料 / 领取体验 / 退出登录
       const lang = this.settings.language;
+      const canClaim = !this.isPro;
+      const items = [t('profile.accountEditProfile', lang)];
+      if (canClaim) items.push(t('profile.trialClaimAction', lang));
+      items.push(t('profile.accountLogout', lang));
       uni.showActionSheet({
-        itemList: [t('profile.accountEditProfile', lang), t('profile.accountLogout', lang)],
+        itemList: items,
         success: (res) => {
           if (res.tapIndex === 0) {
             this.openAuthSheet('edit');
-          } else if (res.tapIndex === 1) {
+          } else if (canClaim && res.tapIndex === 1) {
+            this.onClaimTrial();
+          } else {
             this.onLogout();
           }
         }
       });
+    },
+    /** 补领 7 天体验：老用户已登录、当次登录没赶上发放时用这条路 */
+    async onClaimTrial() {
+      const lang = this.settings.language;
+      uni.showLoading({ title: '' });
+      try {
+        const trial = await claimTrial();
+        uni.hideLoading();
+        if (trial && trial.granted) {
+          const body = t('profile.trialGrantedBody', lang).replace('{d}', fmtDate(trial.expiresAt));
+          setTimeout(() => {
+            uni.showModal({
+              title: t('profile.trialGrantedTitle', lang),
+              content: body,
+              showCancel: false,
+              confirmText: t('profile.trialGrantedOk', lang)
+            });
+          }, 200);
+        } else {
+          setTimeout(() => {
+            uni.showToast({ title: t('profile.trialClaimedBefore', lang), icon: 'none' });
+          }, 160);
+        }
+      } catch (err) {
+        uni.hideLoading();
+        setTimeout(() => {
+          uni.showToast({ title: t('profile.loginFailed', lang), icon: 'none' });
+        }, 160);
+      }
     },
     onLogout() {
       // 云端数据保留，仅清本地会话与同步状态
@@ -700,13 +742,32 @@ export default {
             return;
           }
         }
+        // claimTrial：首次登录由服务端发 7 天体验（一人一次，重复登录不会重发）
         this.session = await login({
           nickname: this.authForm.nickname,
           avatarFileID: avatarFileId
-        });
+        }, { claimTrial: true });
         uni.hideLoading();
         this.showAuthSheet = false;
-        uni.showToast({ title: t('profile.loginSuccess', this.settings.language), icon: 'success' });
+        const lang = this.settings.language;
+        const trial = this.session && this.session.trial;
+        // hideLoading 之后立刻弹原生层会被系统吞掉（showToast/showModal 与
+        // loading 共用一层），所以统一延迟一帧再弹
+        if (trial && trial.granted) {
+          const body = t('profile.trialGrantedBody', lang).replace('{d}', fmtDate(trial.expiresAt));
+          setTimeout(() => {
+            uni.showModal({
+              title: t('profile.trialGrantedTitle', lang),
+              content: body,
+              showCancel: false,
+              confirmText: t('profile.trialGrantedOk', lang)
+            });
+          }, 200);
+        } else {
+          setTimeout(() => {
+            uni.showToast({ title: t('profile.loginSuccess', lang), icon: 'success' });
+          }, 160);
+        }
         // 同步是手动动作：登录后不再自动拉取云端，
         // 否则「刚补录的本地数据」会被云端旧快照覆盖。
         // 需要恢复时由用户在会员页点「从云端恢复」。
