@@ -317,8 +317,20 @@
           </view>
           <text v-if="restoreLeaveLine" class="restore-leave-line">{{ restoreLeaveLine }}</text>
 
+          <!-- 两条保证，一行一条，不挤成长句 -->
+          <view class="restore-notes">
+            <view class="restore-note-row">
+              <view class="restore-note-dot"></view>
+              <text class="restore-note-text">{{ i18n.profile.syncRestoreKeepFuture }}</text>
+            </view>
+            <view class="restore-note-row">
+              <view class="restore-note-dot"></view>
+              <text class="restore-note-text">{{ i18n.profile.syncRestoreUndoNote }}</text>
+            </view>
+          </view>
+
           <text class="restore-more" @click.stop="restoreDetail = !restoreDetail">
-            {{ restoreDetail ? i18n.profile.syncRestoreHideDetail : i18n.profile.syncRestoreShowDetail }}
+            {{ restoreDetail ? i18n.profile.syncRestoreHideDetail : i18n.profile.syncRestoreShowDetail + ' ›' }}
           </text>
 
           <view v-if="restoreDetail" class="restore-detail">
@@ -343,8 +355,6 @@
               </text>
             </view>
           </view>
-
-          <text class="upload-hint">{{ i18n.profile.syncRestoreNote }}</text>
         </scroll-view>
 
         <view class="upload-actions">
@@ -1560,13 +1570,40 @@ export default {
   margin-top: 6px;
 }
 
+/* 两条保证：一行一条，不挤成长句 */
+.restore-notes {
+  margin-top: 12px;
+}
+
+.restore-note-row {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 5px;
+}
+
+.restore-note-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #C9C0AE;
+  margin: 7px 8px 0 2px;
+  flex-shrink: 0;
+}
+
+.restore-note-text {
+  flex: 1;
+  font-size: 11px;
+  line-height: 17px;
+  color: #9AA1A8;
+}
+
 /* 明细折叠：默认收起，想核对的人自己展开 */
 .restore-more {
   display: block;
   text-align: center;
-  font-size: 11px;
-  color: #8A94A0;
-  padding: 14px 0 2px;
+  font-size: 11.5px;
+  color: #6B7480;
+  padding: 14px 0 4px;
 }
 
 .restore-detail {
