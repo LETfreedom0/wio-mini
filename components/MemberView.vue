@@ -143,16 +143,6 @@
           <text class="feat-foot">{{ i18n.profile.customLeaveCounted }}</text>
         </view>
 
-        <!-- ===== 更多会员功能 ===== -->
-        <view class="settings-card">
-          <view class="feat-head">
-            <view class="feat-text">
-              <text class="feat-title">{{ i18n.profile.benefitMore }}</text>
-            </view>
-            <text class="coming-soon">{{ i18n.profile.comingSoon }}</text>
-          </view>
-        </view>
-
         <view class="version-row" @click="onVersionTap"><text class="version-text">{{ versionLabel }}</text></view>
       </view>
     </scroll-view>
@@ -1181,13 +1171,6 @@ export default {
   color: #9AA1A8;
   line-height: 1.6;
   margin-top: 10px;
-}
-
-.coming-soon {
-  font-size: 11px;
-  font-weight: 500;
-  color: #C08A2D;
-  flex-shrink: 0;
 }
 
 /* ===== 同步卡 ===== */

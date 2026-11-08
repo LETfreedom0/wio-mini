@@ -1544,12 +1544,6 @@ export default {
   color: #0E6E62;
   font-weight: 500;
 }
-/* 「即将上线」金字（更多会员功能行） */
-.pro-coming-soon {
-  font-size: 11px;
-  color: #C08A2D;
-  font-weight: 500;
-}
 .pro-divider {
   height: 1px;
   background-color: #F1EDE5;

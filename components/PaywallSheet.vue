@@ -38,14 +38,6 @@
             <text class="benefit-sub">{{ i18n.profile.benefitLangSub }}</text>
           </view>
         </view>
-        <!-- 更多会员功能预告 -->
-        <view class="benefit-more-row">
-          <view class="benefit-info">
-            <text class="benefit-title">{{ i18n.profile.benefitMore }}</text>
-            <text class="benefit-sub">{{ i18n.profile.benefitMoreSub }}</text>
-          </view>
-          <text class="coming-soon">{{ i18n.profile.comingSoon }}</text>
-        </view>
       </view>
 
       <view class="plan-row">
@@ -72,6 +64,7 @@
         <text class="paywall-cta-text">{{ payPlan === 'year' ? i18n.profile.payCta : i18n.profile.payCtaMonth }}</text>
       </view>
       <text class="paywall-fine">{{ i18n.profile.payFine }}</text>
+      <text class="paywall-fine paywall-refund">{{ i18n.profile.payRefund }}</text>
     </view>
   </view>
 </template>
@@ -286,25 +279,6 @@ export default {
   line-height: 1;
 }
 
-/* 「更多会员功能」预告行：与权益行区分的弱化态 */
-.benefit-more-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 2px;
-  padding: 10px 12px;
-  background: #FFF9EE;
-  border-radius: 10px;
-}
-
-.coming-soon {
-  font-size: 10.5px;
-  color: #C08A2D;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
 .benefit-info {
   display: flex;
   flex-direction: column;
@@ -430,5 +404,10 @@ export default {
   color: #B5BBC1;
   text-align: center;
   line-height: 1.5;
+}
+
+/* 退款说明紧跟主说明，第二行不重复留白 */
+.paywall-refund {
+  margin-top: 2px;
 }
 </style>

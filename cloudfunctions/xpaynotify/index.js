@@ -42,8 +42,89 @@ function tag(xml, name) {
   return m ? m[1].trim() : ''
 }
 
+/** 多个候选标签名里取第一个非空值（各事件的字段命名大小写不统一） */
+function pick(xml, names) {
+  for (let i = 0; i < names.length; i++) {
+    const v = tag(xml, names[i])
+    if (v) return v
+  }
+  return ''
+}
+
+const cdata = (s) => String(s || '').replace(/]]>/g, ']]&gt;')
+
+/** iOS 退款问询应答：正文必须带 IosRefundQueryResponse，evidence 必填 */
+function replyIosRefund(resultCode, info, evidence) {
+  return '<xml><ErrCode>0</ErrCode><ErrMsg><![CDATA[success]]></ErrMsg>' +
+    '<IosRefundQueryResponse>' +
+    `<result_code>${resultCode}</result_code>` +
+    `<result_info><![CDATA[${cdata(info)}]]></result_info>` +
+    `<evidence><![CDATA[${cdata(evidence)}]]></evidence>` +
+    '</IosRefundQueryResponse></xml>'
+}
+
 async function handlePush(xml) {
   const event = tag(xml, 'Event')
+
+  // 退款结果推送。同样不信任推送内容（RetCode 也不采信），一律去平台查一次
+  // 真实状态——查单里 status=5/8 会顺手把这笔订单买的权益收回。
+  // 不处理这个事件的话，用户退款后会员会一直有效。
+  //
+  // 字段按官方推送结构取：MchOrderId 是「退款单对应支付单的商户单号」= 我们的
+  // outTradeNo；WxOrderId 是平台单号。这个事件里没有 OutTradeNo 字段。
+  if (event === 'xpay_refund_notify') {
+    const openid = pick(xml, ['OpenId', 'openid'])
+    const mchOrderId = pick(xml, ['MchOrderId', 'mch_order_id', 'OutTradeNo'])
+    const wxOrderId = pick(xml, ['WxOrderId', 'wx_order_id'])
+    if (!openid || (!mchOrderId && !wxOrderId)) return replyFail('missing openid or order id')
+
+    const r = await cloud.callFunction({
+      name: 'pay',
+      data: { action: 'verify', openid, outTradeNo: mchOrderId, wxOrderId }
+    })
+    const res = (r && r.result) || {}
+    // 查单成功即回 OK：无论最终是「退款完成」还是「退款失败、订单仍有效」，
+    // 状态都已落到库里，不需要平台再重试。
+    if (!res.ok) return replyFail(res.code || res.message || 'verify failed')
+    return REPLY_OK
+  }
+
+  // Apple 退款问询。开发者不能主动退 iOS 订单，用户只能去 App Store 申请，
+  // Apple 会在 3 秒内问询最多 3 次；超时一律按「不确定」交给 Apple 自己判。
+  // 策略：未发货 / 已过期 / 刚开通 → 放过；用了几天 → 拒绝并给出凭据。
+  // 任何异常都默认「放过」——为几块钱换一条差评不划算。
+  if (event === 'xpay_subscribe_ios_refund_query_notify') {
+    const orderRef = pick(xml, ['pay_order_id', 'PayOrderId', 'OrderId', 'MchOrderId', 'OutTradeNo'])
+    let code = 0
+    let evidence = '未查询到该订单的发货记录，建议退款'
+
+    if (orderRef) {
+      try {
+        const r = await cloud.callFunction({ name: 'pay', data: { action: 'refundinfo', orderRef } })
+        const info = (r && r.result) || {}
+        if (info.ok && info.found) {
+          if (info.refunded) {
+            code = 0
+            evidence = '该订单已在退款流程中，同意退款'
+          } else if (!info.delivered) {
+            code = 0
+            evidence = '该订单尚未发货，建议退款'
+          } else if (info.remainDays <= 0) {
+            code = 0
+            evidence = '会员权益已到期，建议退款'
+          } else if (info.elapsedDays <= 3) {
+            code = 0
+            evidence = `开通 ${info.elapsedDays} 天，剩余 ${info.remainDays} 天，同意退款`
+          } else {
+            code = 1
+            evidence = `会员已使用 ${info.elapsedDays} 天，剩余 ${info.remainDays} 天，虚拟权益已部分消耗`
+          }
+        }
+      } catch (e) { /* 查询失败时按默认「放过」应答 */ }
+    }
+    return replyIosRefund(code, code === 0 ? '建议退款' : '拒绝退款', evidence)
+  }
+
   if (event !== 'xpay_goods_deliver_notify') {
     // 其他事件类型直接放行，避免平台反复重试
     return REPLY_OK
