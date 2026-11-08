@@ -104,6 +104,10 @@ exports.main = async (event) => {
 
   try {
     const usersCol = db.collection('users')
+    // 入参来自客户端，先截断再落库：昵称与 fileID 都可能被塞进超长串，
+    // 一旦写进 users 表，后续每次登录拉回来的整包都会变大。
+    const nickname = String(event.nickname || '').slice(0, 40)
+    const avatarFileID = String(event.avatarFileID || '').slice(0, 512)
     let user = (await usersCol.where({ openid: OPENID }).limit(1).get()).data[0]
 
     // 建用户 / 更新资料
@@ -112,17 +116,17 @@ exports.main = async (event) => {
       const addRes = await usersCol.add({
         data: {
           openid: OPENID,
-          nickname: event.nickname || '',
-          avatarFileID: event.avatarFileID || '',
+          nickname,
+          avatarFileID,
           created_at: now,
           updated_at: now
         }
       })
-      user = { _id: addRes._id, openid: OPENID, nickname: event.nickname || '', avatarFileID: event.avatarFileID || '' }
-    } else if (event.nickname || event.avatarFileID) {
+      user = { _id: addRes._id, openid: OPENID, nickname, avatarFileID }
+    } else if (nickname || avatarFileID) {
       const patch = { updated_at: Date.now() }
-      if (event.nickname) patch.nickname = event.nickname
-      if (event.avatarFileID) patch.avatarFileID = event.avatarFileID
+      if (nickname) patch.nickname = nickname
+      if (avatarFileID) patch.avatarFileID = avatarFileID
       await usersCol.doc(user._id).update({ data: patch })
       user = { ...user, ...patch }
     }

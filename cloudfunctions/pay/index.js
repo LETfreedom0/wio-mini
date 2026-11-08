@@ -254,6 +254,11 @@ exports.main = async (event) => {
   // 部署自检：只回报配置是否齐全、凭证能否换取，绝不返回密钥本身。
   // 传 { action:'diag', code:'<wx.login 的 code>' } 可顺带验证 session_key。
   if (event && event.action === 'diag') {
+    // 只允许服务端 / 云开发控制台调试：小程序端调用时 getWXContext 一定带 OPENID。
+    // diag 会回报道具 ID、并触发 stable_token 拉取，不能被任意用户当免费探针刷。
+    if (cloud.getWXContext().OPENID) {
+      return { ok: false, code: 'forbidden', message: 'diag 仅限服务端调用' }
+    }
     const r = {
       appKey: !!APP_KEY,
       appSecret: !!APP_SECRET,

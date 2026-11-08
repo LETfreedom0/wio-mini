@@ -105,13 +105,72 @@ async function doRedeem(openid, rawCode) {
   if (doc.expires_at && doc.expires_at < now) {
     return { ok: false, code: 'code_expired', message: '兑换码已过期' }
   }
-  const maxUses = Number(doc.max_uses || 1)
+  // 一人一码一次：主键冲突即已领过
+  const lid = logId(openid, code)
+
+  // 先认人、再看码余量。
+  // 单人码被本人用完之后，余额检查会先命中并回「已被领完」——对用户来说是错的提示
+  //（他明明是自己用过的）。所以这里先查一眼自己的核销记录，语义优先。
+  try {
+    const mine = (await db.collection('redeem_logs').doc(lid).get()).data
+    if (mine) {
+      return {
+        ok: false,
+        code: 'code_used',
+        message: '这个兑换码你已经用过',
+        expiresAt: mine.expires_at || 0
+      }
+    }
+  } catch (e) {
+    // 没有记录：正常路径，继续往下走
+  }
+
+  // 0 表示不限次数（活动码）。这里不能用 `doc.max_uses || 1`——
+  // 0 是合法值，`0 || 1` 会把它悄悄变成「只能领一次」。
+  const maxUses = doc.max_uses == null ? 1 : Number(doc.max_uses)
   if (maxUses > 0 && Number(doc.used_count || 0) >= maxUses) {
     return { ok: false, code: 'code_exhausted', message: '兑换码已被领完' }
   }
 
-  // 一人一码一次：主键冲突即已领过
-  const lid = logId(openid, code)
+  const days = Math.max(1, Math.min(3650, Number(doc.days || 30)))
+
+  // ① 原子占名额。
+  // 旧写法「先查 used_count 是否 < max_uses，再写库」有竞态窗口：
+  // 两个人几乎同时核销同一个 max_uses=1 的码，两边都读到 0，于是都发权益，
+  // used_count 变成 2 —— 单次码被超发。改成带条件的原子自增，
+  // 只有把 used_count 停在仍有余量的那一次才算抢到名额。
+  let quotaTaken = false
+  try {
+    if (doc.used_count == null) {
+      // 手工插进库的码可能没有 used_count 字段，条件更新匹配不到它，先补 0
+      await db.collection('redeem_codes').doc(doc._id).update({ data: { used_count: 0 } })
+    }
+    if (maxUses > 0) {
+      const r = await db.collection('redeem_codes')
+        .where({ _id: doc._id, used_count: _.lt(maxUses) })
+        .update({ data: { used_count: _.inc(1), last_used_at: now } })
+      // 明确回 0 才是没抢到；拿不到统计信息时退回旧行为，宁可少拦也不误伤用户
+      const updated = r && r.stats && typeof r.stats.updated === 'number' ? r.stats.updated : null
+      if (updated === 0) {
+        return { ok: false, code: 'code_exhausted', message: '兑换码已被领完' }
+      }
+      quotaTaken = true
+    } else {
+      // max_uses=0 表示不限次数，不占额，只记录最近使用时间
+      await db.collection('redeem_codes').doc(doc._id).update({ data: { last_used_at: now } })
+    }
+  } catch (e) {
+    // 计数写失败不阻断核销：宁可多给一次，也不能让用户拿着有效码领不到
+  }
+
+  const rollbackQuota = async () => {
+    if (!quotaTaken) return
+    try {
+      await db.collection('redeem_codes').doc(doc._id).update({ data: { used_count: _.inc(-1) } })
+    } catch (e) { /* 回滚失败最多浪费一个名额 */ }
+  }
+
+  // ② 占人：主键唯一
   try {
     await db.collection('redeem_logs').add({
       data: {
@@ -131,6 +190,8 @@ async function doRedeem(openid, rawCode) {
       old = null
     }
     if (old) {
+      // 本人重复核销：把刚占的名额退回去，别白白吃掉一次
+      await rollbackQuota()
       return {
         ok: false,
         code: 'code_used',
@@ -138,17 +199,22 @@ async function doRedeem(openid, rawCode) {
         expiresAt: old.expires_at || 0
       }
     }
+    await rollbackQuota()
     throw e
   }
 
-  const days = Math.max(1, Math.min(3650, Number(doc.days || 30)))
-  const expiresAt = await grant(openid, days, code)
-
-  // 计数失败不影响权益（钱已经给了），只记录
+  // ③ 入账；失败要把名额与日志一起退掉，否则用户既没拿到权益又占了名额
+  let expiresAt
   try {
-    await db.collection('redeem_codes').doc(doc._id).update({
-      data: { used_count: _.inc(1), last_used_at: now }
-    })
+    expiresAt = await grant(openid, days, code)
+  } catch (e) {
+    await rollbackQuota()
+    try { await db.collection('redeem_logs').doc(lid).remove() } catch (e2) { /* 忽略 */ }
+    throw e
+  }
+
+  // ④ 回写日志（计数已在 ① 完成，这里不再 inc，避免重复计数）
+  try {
     await db.collection('redeem_logs').doc(lid).update({ data: { days, expires_at: expiresAt } })
   } catch (e) { /* 忽略 */ }
 
