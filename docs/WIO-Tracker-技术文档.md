@@ -40,7 +40,7 @@ wio-mini/
 │   ├── stats/index.vue        # 统计：月度/年度对比、图表
 │   ├── share/index.vue        # 分享卡生成：双卡面轮播、保存相册
 │   ├── legal/index.vue        # 用户协议 / 隐私政策（?type=）
-│   └── orders/index.vue       # 订单记录（微信「订单中心」登记的 path）
+│   └── orders/index.vue       # 会员与订单（会员详情 + 交易记录；微信「订单中心」登记的 path）
 ├── components/                # 组件层（8 个）
 │   ├── CustomTabBar.vue       # 自绘 3 格 tabBar
 │   ├── CustomHeader.vue       # 自定义导航栏（安全区适配）
