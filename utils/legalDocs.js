@@ -43,7 +43,9 @@ const agreementZh = {
       h: '三、你的数据',
       p: [
         '打卡记录与设置属于你。我们仅为提供服务而存储这些数据，不用于广告投放或用户画像，不向任何第三方出售或共享。',
-        '你可以在小程序内修改或删除记录。如需删除云端数据或注销账号，请通过本页底部的联系方式提出，我们会在 15 个工作日内处理。'
+        '你可以在小程序内修改或删除记录。如需删除云端数据或注销账号，请通过本页底部的联系方式提出，我们会在 15 个工作日内处理。',
+        '数据默认只保存在你的手机本地。更换手机、卸载或重装小程序、清理微信存储空间、恢复出厂设置、主动退出登录，都会清除本地数据，未上传到云端的内容将无法找回。请在换机、重装或清理前，先到「我的」页使用「上传到云端」。',
+        '因你自行进行上述操作，或因你所用设备的系统故障、丢失、损坏，导致尚未上传云端的数据丢失，我们不承担赔偿责任；法律强制规定不得免除的责任除外。'
       ]
     },
     {
@@ -57,7 +59,9 @@ const agreementZh = {
     {
       h: '五、服务变更与中断',
       p: [
-        '我们可能因功能升级、维护或不可抗力暂停服务，并尽量提前在页面内说明。因网络、微信平台或云服务故障造成的短时不可用，我们不承担赔偿责任，但会尽力恢复。'
+        '我们可能因功能升级、维护或不可抗力暂停服务，并尽量提前在页面内说明。因网络、微信平台或云服务故障造成的短时不可用，我们不承担赔偿责任，但会尽力恢复。',
+        '本服务由个人开发者独立维护，云端存储、流量与平台认证均产生持续成本。若未来因成本、平台政策或开发者个人原因无法继续运营，我们可能停止提供云端同步，甚至整体下线本小程序。届时会提前不少于 30 天在小程序内公告，并留出不少于 30 天的数据导出期，供你把需要的内容保存到本机或另存他处。',
+        '服务终止后云端数据将被删除，我们不再保留副本。因服务终止造成的数据丢失，我们不承担赔偿责任；如你已购买会员且服务期未满，就因我们终止服务而无法继续提供的部分，按剩余天数比例退还相应费用。'
       ]
     },
     {
@@ -110,7 +114,9 @@ const agreementEn = {
       h: '3. Your data',
       p: [
         'Your records and settings belong to you. We store them only to provide the service, never for advertising or profiling, and never sell or share them with third parties.',
-        'You can edit or delete records in the App. To delete cloud data or close your account, contact us using the email at the bottom of this page; we handle such requests within 15 business days.'
+        'You can edit or delete records in the App. To delete cloud data or close your account, contact us using the email at the bottom of this page; we handle such requests within 15 business days.',
+        'Your data is stored on your device by default. Switching to a new phone, uninstalling or reinstalling the App, clearing WeChat storage, factory resetting the device, or signing out all erase local data, and anything not uploaded to the cloud cannot be recovered. Before switching phones, reinstalling or clearing storage, use "Upload to cloud" on the Profile page.',
+        'We are not liable for the loss of data that was not yet uploaded to the cloud where the loss results from you carrying out the actions above, or from a fault, loss or damage of your device, except to the extent liability cannot be excluded by law.'
       ]
     },
     {
@@ -124,7 +130,9 @@ const agreementEn = {
     {
       h: '5. Changes and interruptions',
       p: [
-        'We may suspend the service for upgrades, maintenance or reasons beyond our control, and will try to give notice in the App beforehand. We are not liable for short outages caused by network, WeChat platform or cloud service failures, but we will work to restore service.'
+        'We may suspend the service for upgrades, maintenance or reasons beyond our control, and will try to give notice in the App beforehand. We are not liable for short outages caused by network, WeChat platform or cloud service failures, but we will work to restore service.',
+        'The App is maintained by an individual developer, and cloud storage, traffic and platform verification carry ongoing costs. If we can no longer keep it running because of cost, platform policy or the developer\u2019s personal circumstances, we may stop providing cloud sync or take the App offline entirely. In that case we will post a notice in the App at least 30 days in advance and leave a data export window of at least 30 days so you can save what you need on your own device or elsewhere.',
+        'When the service ends, cloud data is deleted and we keep no copy. We are not liable for data loss caused by the termination; if you have purchased a membership that has not yet expired, the unused portion is refunded on a pro-rata basis for the days remaining.'
       ]
     },
     {
