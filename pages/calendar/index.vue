@@ -97,7 +97,7 @@
                 :style="customBarStyle(day)"
               ></view>
               <view v-if="getOvertimeDisplay(day)" class="overtime-badge">{{ getOvertimeDisplay(day) }}</view>
-              <text v-if="getHolidayName(day)" class="holiday-text" :class="{'text-work': isHolidayWork(day), 'english': settings.language === 'en-US'}">{{ getHolidayDisplayName(day) }}</text>
+              <text v-if="showHolidayLabel(day)" class="holiday-text" :class="{'english': settings.language === 'en-US'}">{{ getHolidayDisplayName(day) }}</text>
               <view v-if="isHolidayWork(day)" class="work-badge">{{ i18n.calendar.workBadge }}</view>
             </view>
           </view>
@@ -1253,6 +1253,12 @@ export default {
       }
       return name;
     },
+    // 节日名只在「真的休息」的日子显示：
+    // 补班日、法定放假日上标了覆盖（这天上班）都只留公共假期底色 + 「班」徽章，
+    // 免得把「要上班的一天」写成假期名，看着像放假。
+    showHolidayLabel(day) {
+      return !!this.getHolidayName(day) && !this.isHolidayWork(day);
+    },
     isHolidayWork(day) {
       const info = this.getHolidayInfo(day);
       // 法定放假日上的显式标记 = 用户覆盖（这天按工作日统计），同样挂「班」徽章
@@ -1282,7 +1288,9 @@ export default {
           cls = 'status-custom';
         } else {
           const holiday = this.getHolidayInfo(day);
-          if (holiday && holiday.isOffDay) {
+          // 假期安排的每一格都套公共假期底色（含补班日）：
+          // 休假日 = 粉底 + 节日名，补班日 = 粉底 + 右上角「班」徽章，不写节日名
+          if (holiday) {
             cls = 'status-public';
           }
         }
@@ -1717,10 +1725,6 @@ export default {
   white-space: nowrap;
 }
 
-.holiday-text.text-work {
-  color: #333;
-}
-
 /* English holiday text optimization */
 .holiday-text.english {
   font-size: 7px;
@@ -1733,8 +1737,8 @@ export default {
   top: 0;
   right: 0;
   font-size: 8px;
-  background-color: #f5f5f5;
-  color: #666;
+  background-color: #FFFFFF;
+  color: #B71C1C;
   padding: 1px 2px;
   border-radius: 0 4px 0 4px;
   line-height: 1;

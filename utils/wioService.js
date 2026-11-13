@@ -27,10 +27,10 @@ const DEFAULT_SETTINGS = {
   commuteMinutes: 90,
   // 分享卡卡面样式：'calendar'（日历格）| 'receipt'（打卡小票）
   cardStyle: 'calendar',
-  // 调休配置规则 (Key: 节日名称, Value: boolean 是否调休)
-  // 默认只有春节调休。
-  // 已被「假期安排」逐日差量(settings.holidayPlan)取代 UI 入口，仅为老数据兼容保留读取：
-  // 补班日(isOffDay:false)未进差量时仍按此规则判定是否计入工作日。
+  // 调休配置规则 (Key: 节日名称, Value: boolean 是否算工作日)
+  // 已被「假期安排」逐日差量(settings.holidayPlan)取代 UI 入口，仅为老数据兼容保留：
+  // 补班日(isOffDay:false)默认算工作日（与 UI 灰=上班一致），
+  // 只有显式写在 false 的老配置才按休息处理。
   compOffRules: {
       '春节': true
   },
@@ -1323,22 +1323,13 @@ export default {
             return false;
         }
 
-        // isOffDay: false -> 调休上班
-        // 获取调休配置
-        const settings = this.getSettings();
-        const rules = settings.compOffRules || {};
-
-        // 检查该节日的调休配置
-        // 如果 rules 中有该节日配置，则使用配置值
-        // 如果 rules 中没有，默认策略：春节为 true，其他为 false (保持兼容性)
-        // 但我们在 DEFAULT_SETTINGS 里已经初始化了 '春节': true
-        // 对于其他未配置的节日，undefined 视为 false
-
-        if (rules[holiday.name]) {
-            return true;
-        } else {
-            return false;
-        }
+        // isOffDay: false -> 调休补班日
+        // 「假期安排」UI 里灰格 = 上班/补班 → 统计上默认就算工作日，
+        // 否则用户看到灰格却没进分母，会当成统计 bug。
+        // 老「调休补班」开关手动关掉的节日（rules 显式 false）仍按休息处理，
+        // 作为老数据兼容；要改就点红那一天（差量 'off'），绕过这条老规则。
+        const rules = this.getSettings().compOffRules || {};
+        return rules[holiday.name] !== false;
     }
 
     // 默认: 周一至周五是工作日

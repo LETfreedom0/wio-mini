@@ -55,14 +55,14 @@ const monthWorkdays = (y, m) => {
   return n
 }
 
-// ---------- 1) 无差量 = 现状完全不变 ----------
+// ---------- 1) 无差量 = 与 UI 的「灰=上班」一致 ----------
 {
   reset()
   const s = svc.getMonthStats(2026, 10)
-  ok(s.workingDays === 17, '无差量时 10 月分母仍是 17（22 工作日 − 放假日落工作日的 5 天）', s.workingDays)
+  ok(s.workingDays === 18, '无差量时 10 月分母 18（22 工作日 − 5 放假日 + 10-10 补班）', s.workingDays)
   ok(svc.isOfficialWorkingDay(new Date('2026-10-06T00:00:00')) === false, '10-6 国务院放假 → 非工作日')
-  ok(svc.isOfficialWorkingDay(new Date('2026-10-10T00:00:00')) === false, '10-10 补班日但国庆未启用调休 → 非工作日（老口径）')
-  ok(svc.isOfficialWorkingDay(new Date('2026-02-14T00:00:00')) === true, '春节补班日默认启用调休 → 工作日（老口径）')
+  ok(svc.isOfficialWorkingDay(new Date('2026-10-10T00:00:00')) === true, '10-10 国庆补班日 → 工作日（UI 灰格=上班）')
+  ok(svc.isOfficialWorkingDay(new Date('2026-02-14T00:00:00')) === true, '春节补班日 → 工作日')
   ok(Object.keys(getPlan()).length === 0, '默认差量为空')
 }
 
@@ -71,7 +71,7 @@ const monthWorkdays = (y, m) => {
   reset()
   setPlan({ '2026-10-06': 'work', '2026-10-07': 'work' })
   const s = svc.getMonthStats(2026, 10)
-  ok(s.workingDays === 19, '差量生效：10-6/7 改上班，分母 17→19', s.workingDays)
+  ok(s.workingDays === 20, '差量生效：10-6/7 改上班，分母 18→20', s.workingDays)
   ok(svc.isOfficialWorkingDay(new Date('2026-10-06T00:00:00')) === true, 'isOfficialWorkingDay 认差量：10-6 是工作日')
   const h = svc.getPublicHoliday('2026-10-06')
   ok(h && h.isOffDay === false && h.name === '国庆节', 'getPublicHoliday 裁决后 isOffDay=false、保留 name', h)
@@ -82,9 +82,9 @@ const monthWorkdays = (y, m) => {
   svc.saveEntry('2026-10-06', 'company')
   const s2 = svc.getMonthStats(2026, 10)
   ok(s2.companyDays === 1, '10-6 出勤计公司天数（工作日口径，无需覆盖标记）', s2.companyDays)
-  ok(s2.workingDays === 19, '分母不变', s2.workingDays)
+  ok(s2.workingDays === 20, '分母不变', s2.workingDays)
   const r = svc.getMonthlyReport(2026, 10)
-  ok(r.rate === 5, '分享卡率按新分母：1/19 → 5%', r.rate)
+  ok(r.rate === 5, '分享卡率按新分母：1/20 → 5%', r.rate)
 }
 
 // ---------- 3) 补班日改休：差量 'off' 覆盖 compOffRules ----------
@@ -97,9 +97,15 @@ const monthWorkdays = (y, m) => {
     { baseFeb, now: monthWorkdays(2026, 2) })
   ok(svc.isOfficialWorkingDay(new Date('2026-02-14T00:00:00')) === false, '2026-02-14 不再是工作日')
 
-  // 而国庆的补班日标 'work'：本来 rules 未启用、标 work 后计入
-  setPlan({ '2026-10-10': 'work' })
-  ok(svc.isOfficialWorkingDay(new Date('2026-10-10T00:00:00')) === true, '10-10 标上班 → 工作日（差量优先于未启用的 rules）')
+  // 国庆补班日：默认就是工作日（UI 灰格），标 off 才是真差量
+  setPlan({ '2026-10-10': 'off' })
+  ok(svc.isOfficialWorkingDay(new Date('2026-10-10T00:00:00')) === false, '10-10 标 off → 休息')
+  setPlan({})
+  ok(svc.isOfficialWorkingDay(new Date('2026-10-10T00:00:00')) === true, '10-10 回默认 → 工作日')
+  // 老配置显式关掉某节日（旧「调休补班」开关）仍按休息处理
+  store['wio_settings'] = JSON.stringify({ compOffRules: { 国庆节: false } })
+  ok(svc.isOfficialWorkingDay(new Date('2026-10-10T00:00:00')) === false,
+    '老数据 compOffRules 显式 false 仍生效（兼容旧开关）')
 }
 
 // ---------- 4) getNextHoliday 认差量 ----------
@@ -166,12 +172,12 @@ const monthWorkdays = (y, m) => {
   setPlan({ '2026-10-06': 'work' })           // 差量：10-6 是工作日
   svc.saveEntry('2026-10-07', 'vacation')      // 方案甲：10-7（国务院休）标年假 → 覆盖生效
   const s = svc.getMonthStats(2026, 10)
-  ok(s.workingDays === 19, '差量 +1（10-6）与覆盖 +1（10-7）互不干扰 → 19', s.workingDays)
+  ok(s.workingDays === 20, '差量 +1（10-6）与覆盖 +1（10-7）互不干扰 → 20', s.workingDays)
   ok(s.vacationDays === 1, '10-7 年假照常计入', s.vacationDays)
   // 差量已把 10-6 变成工作日：上面的 vacation 标记若落在 10-6 就只是普通工作日请假
   svc.saveEntry('2026-10-06', 'vacation')
   const s2 = svc.getMonthStats(2026, 10)
-  ok(s2.workingDays === 19, '10-6 已是工作日：标年假走正常口径，分母不变', s2.workingDays)
+  ok(s2.workingDays === 20, '10-6 已是工作日：标年假走正常口径，分母不变', s2.workingDays)
   ok(s2.vacationDays === 2, '两天年假都计入', s2.vacationDays)
 }
 

@@ -40,38 +40,38 @@ const ok = (cond, msg, extra) => {
 const reset = () => { for (const k of Object.keys(store)) delete store[k] }
 
 // ---------- 1) 主场景：2026 国庆，公司休 1~5、上班 6/7 ----------
-// 官方：休 1~7、补班 9-20 / 10-10；compOffRules 国庆默认关 → 两个补班日都是普通周末
+// 官方：休 1~7、补班 9-20 / 10-10；补班日默认算工作日（UI 灰格=上班）
 {
   reset()
   svc.saveEntry('2026-10-06', 'vacation')                          // 覆盖：整天天假
   svc.saveEntry('2026-10-07', { am: 'company', pm: 'vacation' })   // 覆盖：半天出勤半天假
   svc.saveEntry('2026-10-14', 'company')                           // 普通工作日出勤
   svc.saveEntry('2026-10-17', 'vacation')                          // 周六标假 → 不计数
-  svc.saveEntry('2026-10-10', 'vacation')                          // 官方补班日但开关关 → 不计数
+  svc.saveEntry('2026-10-10', 'vacation')                          // 官方补班日（工作日）标假 → 照常扣额度
 
   const s = svc.getMonthStats(2026, 10)
-  // 基础工作日：10 月 22 个工作日 − 放假日落工作日的 5 天（1/2/5/6/7）= 17，+ 覆盖 2 天
-  ok(s.workingDays === 19, '分母 = 基础 17 + 覆盖 2 = 19', s.workingDays)
+  // 基础工作日：22 个工作日 − 放假日落工作日的 5 天（1/2/5/6/7）+ 10-10 补班 = 18，+ 覆盖 2 天
+  ok(s.workingDays === 20, '分母 = 基础 18 + 覆盖 2 = 20', s.workingDays)
   ok(s.companyDays === 1.5, '公司天数 = 10-14 整天 + 10-7 半天 = 1.5', s.companyDays)
-  ok(s.vacationDays === 1.5, '年假计入 10-6 整天 + 10-7 半天 = 1.5', s.vacationDays)
-  ok(s.deductibleLeave === 1.5, '分母扣减与年假一致', s.deductibleLeave)
-  ok(s.weekendLeaves === 2, '周六(10-17)与未启用补班的 10-10 仍落 weekendLeaves', s.weekendLeaves)
-  ok(svc.getYearStats(2026).vacationDaysUsed === 1.5, '年度已用年额与月统计同口径',
+  ok(s.vacationDays === 2.5, '年假计入 10-6 整天 + 10-7 半天 + 10-10 = 2.5', s.vacationDays)
+  ok(s.deductibleLeave === 2.5, '分母扣减与年假一致', s.deductibleLeave)
+  ok(s.weekendLeaves === 1, '周六(10-17)落 weekendLeaves', s.weekendLeaves)
+  ok(svc.getYearStats(2026).vacationDaysUsed === 2.5, '年度已用年额与月统计同口径',
     svc.getYearStats(2026).vacationDaysUsed)
 }
 
-// ---------- 2) 无标记的假期 = 老口径完全不变 ----------
+// ---------- 2) 无标记的假期 = 纯国务院安排口径 ----------
 {
   reset()
   const s = svc.getMonthStats(2026, 10)
-  ok(s.workingDays === 17, '没有任何标记时 10 月分母仍是 17', s.workingDays)
+  ok(s.workingDays === 18, '没有任何标记时 10 月分母 18（含 10-10 补班）', s.workingDays)
   ok(s.vacationDays === 0, '不会凭空多出假期', s.vacationDays)
 
   // 清除覆盖标记后恢复假日口径
   svc.saveEntry('2026-10-06', 'vacation')
   svc.saveEntry('2026-10-06', null)
   const s2 = svc.getMonthStats(2026, 10)
-  ok(s2.workingDays === 17, '清掉标记立即恢复假日口径（覆盖可逆）', s2.workingDays)
+  ok(s2.workingDays === 18, '清掉标记立即恢复假日口径（覆盖可逆）', s2.workingDays)
 }
 
 // ---------- 3) isOffDayOverride 纯函数边界 ----------
@@ -105,7 +105,7 @@ const reset = () => { for (const k of Object.keys(store)) delete store[k] }
   svc.saveEntry('2026-10-06', 'vacation')
 
   const s = svc.getMonthStats(2026, 10)
-  ok(s.workingDays === 17, 'customMarks 与残留标记都不触发覆盖，分母不变', s.workingDays)
+  ok(s.workingDays === 18, 'customMarks 与残留标记都不触发覆盖，分母不变', s.workingDays)
   ok(s.weekendLeaves === 1, '10-6 落 weekendLeaves（区间假整天占用优先）', s.weekendLeaves)
   ok(s.customLeaveDays === 0, '区间假只盖放假日，一个工作日都不扣', s.customLeaveDays)
 
@@ -125,7 +125,7 @@ const reset = () => { for (const k of Object.keys(store)) delete store[k] }
   })
   svc.saveEntry('2026-10-06', { am: 'company', pm: 'custom:cl_day' })
   const s2 = svc.getMonthStats(2026, 10)
-  ok(s2.workingDays === 18, '自定义段标记同样触发覆盖，分母 +1', s2.workingDays)
+  ok(s2.workingDays === 19, '自定义段标记同样触发覆盖，分母 +1', s2.workingDays)
   ok(s2.companyDays === 0.5, '上午出勤计 0.5', s2.companyDays)
   ok(s2.customLeaveDays === 0.5, '下午自定义假计 0.5', s2.customLeaveDays)
   const u = svc.getCustomLeaveUsage('cl_day')
@@ -138,10 +138,10 @@ const reset = () => { for (const k of Object.keys(store)) delete store[k] }
   svc.saveEntry('2026-10-06', 'company')
   svc.saveEntry('2026-10-07', 'company')
   const s = svc.getMonthStats(2026, 10)
-  ok(s.workingDays === 19, '两天都覆盖，分母 17→19', s.workingDays)
+  ok(s.workingDays === 20, '两天都覆盖，分母 18→20', s.workingDays)
   ok(s.companyDays === 2, '出勤计入公司天数', s.companyDays)
   const r = svc.getMonthlyReport(2026, 10)
-  ok(r.rate === 11, '分享卡 / 首页率卡按新分母算：2/19 → 11%', r.rate)
+  ok(r.rate === 10, '分享卡 / 首页率卡按新分母算：2/20 → 10%', r.rate)
 }
 
 console.log(`\nholiday-override: ${pass} passed, ${fail} failed`)
