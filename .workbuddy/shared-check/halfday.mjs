@@ -14,14 +14,13 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { execSync } from 'child_process'
 
-// 回归对比的基准写死为「半天功能上线前的最后一个提交」，不随 HEAD 漂移。
-// 本地副本缺失时自动从 git 取，保证脚本换台机器也能跑。
-const BASE_COMMIT = 'a4a29cc'
+// 回归对比的基准：本次改动前的最后一个提交。
+// 每次运行都重新生成——历史教训：曾经用 existsSync 守卫，oldFile 停在
+// a4a29cc 没再刷新，之后统计口径的每次刻意演进都被误报成回归（25 条假失败）。
+const BASE_COMMIT = 'bd5f5f7'
 const oldFile = fileURLToPath(new URL('./utils/wioServiceOld.js', import.meta.url))
 const rootDir = fileURLToPath(new URL('../../', import.meta.url))
-if (!fs.existsSync(oldFile)) {
-  fs.writeFileSync(oldFile, execSync(`git show ${BASE_COMMIT}:utils/wioService.js`, { cwd: rootDir }))
-}
+fs.writeFileSync(oldFile, execSync(`git show ${BASE_COMMIT}:utils/wioService.js`, { cwd: rootDir }))
 
 const store = {}
 globalThis.uni = {
@@ -178,11 +177,12 @@ eq('half：年度年假 2 天', S.default.getYearStats(2026).vacationDaysUsed, 2
 const r1 = S.computeMonthlyReport(s1, 40)
 eq('half：率 13%（2.5 / (21−2)）', r1.rate, 13)
 
-// 会员闸门：开关存了 'full'，但非会员读取要降级
+// 开关对所有人生效：5967f9f 起半天计法改为逐日确认（halfFullDays），
+// 全局开关降为普通设置，不再是 PRO 权益——非会员同样读得到 full
 store.wio_settings = JSON.stringify({ targetPercentage: 40, halfDayAttendance: 'full' })
 delete store.wio_auth
-eq('非会员读取降级为 half', S.default.getHalfDayAttendanceMode(), 'half')
-eq('降级后仍按半天算（公司 2.5）', S.default.getMonthStats(2026, 11).companyDays, 2.5)
+eq('非会员读取 full（开关已不是 PRO 权益）', S.default.getHalfDayAttendanceMode(), 'full')
+eq('非会员同样按整天算（公司 4）', S.default.getMonthStats(2026, 11).companyDays, 4)
 
 // mock 一个有效会员 → 开关生效，走完整统计链路
 store.wio_auth = JSON.stringify({
@@ -203,8 +203,8 @@ store.wio_auth = JSON.stringify({
   user: { openid: 'test-openid' },
   subscription: { plan: 'month', expiresAt: Date.now() - 86400000 }
 })
-eq('过期后口径回落 half', S.default.getHalfDayAttendanceMode(), 'half')
-eq('过期后半天数据仍在（公司 2.5）', S.default.getMonthStats(2026, 11).companyDays, 2.5)
+eq('过期后口径不变（开关非权益）', S.default.getHalfDayAttendanceMode(), 'full')
+eq('过期后整天口径照常（公司 4）', S.default.getMonthStats(2026, 11).companyDays, 4)
 delete store.wio_auth
 
 // ---------- C4. 写入闸门（会员 / 假期额度） ----------
@@ -277,11 +277,11 @@ console.log('E. 设置回写保护（非会员保存其它设置时不得抹掉 
 store.wio_settings = JSON.stringify({ targetPercentage: 40, halfDayAttendance: 'full' })
 store.wio_auth = ''
 const degraded = S.default.getSettings()
-eq('E1 非会员读取降级为 half', degraded.halfDayAttendance, 'half')
+eq('E1 非会员读取不降级（开关非权益）', degraded.halfDayAttendance, 'full')
 S.default.saveSettings(Object.assign({}, degraded, { targetPercentage: 45 }))
 eq('E2 存储里仍保留 full', JSON.parse(store.wio_settings).halfDayAttendance, 'full')
 eq('E3 目标比例确实写入', JSON.parse(store.wio_settings).targetPercentage, 45)
-eq('E4 重新开通后读回 full', S.default.getHalfDayAttendanceMode(), 'half') // 仍非会员，读的是降级值
+eq('E4 非会员读回 full（不降级）', S.default.getHalfDayAttendanceMode(), 'full')
 store.wio_auth = JSON.stringify({ user: { openid: 'o' }, subscription: { plan: 'month', expiresAt: Date.now() + 86400000 } })
 eq('E5 会员态读回 full', S.default.getHalfDayAttendanceMode(), 'full')
 delete store.wio_auth

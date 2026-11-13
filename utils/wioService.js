@@ -51,7 +51,8 @@ const DEFAULT_SETTINGS = {
 
 const HALF = 0.5;
 /** 计入分母扣减的假期状态 */
-const DAY_LEAVE_KEYS = ['vacation', 'birthday', 'sick', 'unpaid', 'comp_off', 'exclude_wio'];
+// 导出供日历页复用：非工作日上的这些标记不占额度、不进统计（weekendLeaves 口径）
+export const DAY_LEAVE_KEYS = ['vacation', 'birthday', 'sick', 'unpaid', 'comp_off', 'exclude_wio'];
 
 // 按天型自定义假在 entries 里的写法：'custom:<leaveId>'
 // 这样它就能像年假/病假一样参与上下午两段（上午公司 + 下午育儿假），
@@ -150,6 +151,28 @@ export function evaluateDayParts(raw, opts) {
     out.deductible = out.leaveTotal;
   }
   return out;
+}
+
+/**
+ * 法定放假日上的显式标记 = 用户覆盖：「你们公司这天上班，以我标的为准」。
+ *
+ * 背景：不跟国务院安排的公司（如国庆只放 1~5 号、6/7 号上班）在这天标年假/出勤，
+ * 旧口径把它们全扔进 weekendLeaves——日历说「你休了」、统计说「没这回事」。
+ * 现在只要这天是法定放假日（holiday.isOffDay === true）且 entries 里有显式标记，
+ * 该日即按工作日统计：标假期 → 扣额度；标出勤 → 计公司天数、进分母。
+ *
+ * 边界（调用方负责）：
+ * - 普通周末不在覆盖之列，维持 weekendLeaves 口径不变；
+ * - 区间型自定义假整天占用优先，覆盖它的日子不触发；
+ * - 按天自定义标记（customMarks）不触发，维持原口径。
+ *
+ * @param {object|null} holiday getPublicHoliday() 的返回
+ * @param {string|object|null} rawEntry 该日 entries 原始值（老的单状态写法也算）
+ */
+export function isOffDayOverride(holiday, rawEntry) {
+  if (!holiday || holiday.isOffDay !== true) return false;
+  const p = parseDayParts(rawEntry);
+  return !!(p.am || p.pm);
 }
 
 /** 保留 1 位小数：0.5 的累加是精确的，这里只防未来引入 1/3 类权重时出现 0.30000000000000004 */
@@ -761,8 +784,10 @@ export default {
       if (!segs.length) return;
       taken[d] = true;
       if (!inPeriod(d)) return;
-      // 非工作日不计额度：和 getYearStats 同一口径，周末标假只作展示
-      if (!this.isOfficialWorkingDay(new Date(d + 'T00:00:00'))) return;
+      // 非工作日不计额度：和 getYearStats 同一口径，周末标假只作展示；
+      // 法定放假日上的显式标记视为覆盖（isOffDayOverride），照常计额度
+      if (!this.isOfficialWorkingDay(new Date(d + 'T00:00:00'))
+        && !isOffDayOverride(this.getPublicHoliday(d), entries[d])) return;
       segs.forEach(s => {
         if (customIdOf(s) === leaveId) used += HALF;
       });
@@ -1234,10 +1259,20 @@ export default {
       //    该回公司的天数一天都不会少。
       const rangeLeave = customLeavesAll.find(l => this._rangeHits(l, dateStr));
 
-      // 周末 / 法定节假日：不论标了什么（公司、居家、假期）都不进 WIO 口径，
-      // 只有加班（OT）单独统计。这里绝不把标记过的周末「拉回分母」——
-      // 那样周末随手补个居家就会把分母 +1、比率被拉低，和「周末不算 WIO」矛盾。
-      // 调休上班日由 isOfficialWorkingDay 判为工作日，照常计入。
+      // 覆盖标记（放假日按工作日算）：区间假整天占用优先，不触发
+      const canOverride = !rangeLeave;
+
+      // 周末：不论标了什么（公司、居家、假期）都不进 WIO 口径，只有加班（OT）单独统计。
+      // 这里绝不把标记过的周末「拉回分母」——那样周末随手补个居家就会把分母 +1、
+      // 比率被拉低，和「周末不算 WIO」矛盾。
+      // 法定放假日不同：上面标了显式状态 = 用户声明「公司这天上班」，以标记为准
+      // （isOffDayOverride）——标假期扣额度、标出勤计公司天数。调休上班日由
+      // isOfficialWorkingDay 判为工作日，照常计入。
+      if (canOverride && !isWorkingDay
+        && isOffDayOverride(this.getPublicHoliday(dateStr), rawEntry)) {
+        isWorkingDay = true;
+      }
+
       const ev = rangeLeave ? null : evaluateDayParts(rawEntry, {
         halfDayAsFull: typeof halfFullMap[dateStr] === 'boolean' ? halfFullMap[dateStr] : halfDefaultFull,
         isWorkingDay
@@ -1349,8 +1384,11 @@ export default {
     Object.keys(entries).forEach(date => {
       if (!date.startsWith(prefix)) return;
       // 周末 / 法定假日标的假不消耗额度：那天本来就不上班，
-      // 记成「已用年假」只会让配额虚高，与统计口径（非工作日只落 weekendLeaves）也矛盾
-      if (!this.isOfficialWorkingDay(new Date(date + 'T00:00:00'))) return;
+      // 记成「已用年假」只会让配额虚高，与统计口径（非工作日只落 weekendLeaves）也矛盾。
+      // 例外：法定放假日上的显式标记 = 用户覆盖，这天按工作日算（与 getMonthStats 同口径）。
+      const isWD = this.isOfficialWorkingDay(new Date(date + 'T00:00:00'))
+        || isOffDayOverride(this.getPublicHoliday(date), entries[date]);
+      if (!isWD) return;
       const ev = evaluateDayParts(entries[date], { halfDayAsFull: false, isWorkingDay: true });
       if (ev.leave.vacation) stats.vacation += ev.leave.vacation;
       if (ev.leave.birthday) stats.birthday += ev.leave.birthday;

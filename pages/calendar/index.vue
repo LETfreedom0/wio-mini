@@ -223,7 +223,7 @@
 <script>
 import CustomTabBar from '@/components/CustomTabBar.vue'
 import PaywallSheet from '@/components/PaywallSheet.vue'
-import wioService, { isSplitDay, parseDayParts, customIdOf, computeMonthlyReport } from '@/utils/wioService.js'
+import wioService, { isSplitDay, parseDayParts, customIdOf, computeMonthlyReport, isOffDayOverride, DAY_LEAVE_KEYS } from '@/utils/wioService.js'
 import { isProUser } from '@/utils/pro.js'
 import { locales, t, getMonthYearName } from '@/utils/locales.js'
 import { getTopSafeArea } from '@/utils/safeArea.js'
@@ -1255,38 +1255,56 @@ export default {
     },
     isHolidayWork(day) {
       const info = this.getHolidayInfo(day);
+      // 法定放假日上的显式标记 = 用户覆盖（这天按工作日统计），同样挂「班」徽章
+      if (info && info.isOffDay) {
+        const dateStr = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        return isOffDayOverride(info, this.entries[dateStr]);
+      }
       return info ? !info.isOffDay : false;
     },
     getDayClass(day) {
       const dateStr = `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const status = this.entries[dateStr];
-      
-      if (status === 'company') return 'company-office';
-      if (status === 'home') return 'home-office';
-      if (status === 'vacation') return 'status-vacation';
-      if (status === 'birthday') return 'status-birthday';
-      if (status === 'comp_off') return 'status-comp-off';
-      if (status === 'sick') return 'status-sick';
-      if (status === 'unpaid') return 'status-unpaid';
-      if (status === 'public') return 'status-public';
-      if (status === 'exclude_wio') return 'status-exclude-wio';
-      
-      if (!status) {
+      let cls = '';
+
+      if (status === 'company') cls = 'company-office';
+      else if (status === 'home') cls = 'home-office';
+      else if (status === 'vacation') cls = 'status-vacation';
+      else if (status === 'birthday') cls = 'status-birthday';
+      else if (status === 'comp_off') cls = 'status-comp-off';
+      else if (status === 'sick') cls = 'status-sick';
+      else if (status === 'unpaid') cls = 'status-unpaid';
+      else if (status === 'public') cls = 'status-public';
+      else if (status === 'exclude_wio') cls = 'status-exclude-wio';
+      else if (!status) {
         // 自定义假期区间：优先于法定节假日底色显示
         if (this.getCustomLeaveInfo(day)) {
-          return 'status-custom';
+          cls = 'status-custom';
+        } else {
+          const holiday = this.getHolidayInfo(day);
+          if (holiday && holiday.isOffDay) {
+            cls = 'status-public';
+          }
         }
-        const holiday = this.getHolidayInfo(day);
-        if (holiday && holiday.isOffDay) {
-          return 'status-public';
-        }
-      }
-      
-      const dayOfWeek = new Date(this.currentYear, this.currentMonth - 1, day).getDay();
-      if ((dayOfWeek === 0 || dayOfWeek === 6) && !status) {
       }
 
-      return '';
+      // 周末上的假期标记：不占额度、不进统计（weekendLeaves 口径），压淡显示，
+      // 否则用户标了 2 天年假、分享卡里却是 0，会当成统计 bug。
+      // 法定放假日不同：标记即覆盖（isOffDayOverride），这天按工作日统计，
+      // 显示为正常强度 + 右上角「班」徽章（isHolidayWork 已含此判定）。
+      // 自定义区间假维持原口径（整天占用不触发覆盖），在非工作日照样压淡。
+      const isEntryLeaveMark = DAY_LEAVE_KEYS.indexOf(status) !== -1;
+      if (cls && isEntryLeaveMark
+        && !wioService.isOfficialWorkingDay(new Date(dateStr + 'T00:00:00'))
+        && !isOffDayOverride(this.getHolidayInfo(day), status)) {
+        cls += ' mark-off';
+      }
+      if (cls === 'status-custom'
+        && !wioService.isOfficialWorkingDay(new Date(dateStr + 'T00:00:00'))) {
+        cls += ' mark-off';
+      }
+
+      return cls;
     },
     // 自定义假期：取该日命中的假期（用于格子着色与图例）
     getCustomLeaveInfo(day) {
@@ -2071,6 +2089,9 @@ export default {
 .status-unpaid { background-color: #F5F5F5; color: #616161; border: 1px dashed #9E9E9E; }
 .status-public { background-color: #FFCDD2; color: #B71C1C; }
 .status-exclude-wio { background-color: #ECEFF1; color: #607D8B; border: 1px dashed #90A4AE; }
+/* 周末上不计数（weekendLeaves 口径）的标记：压淡，提示「这天不进统计」。
+   法定放假日上的标记不压淡——标记即覆盖，那天按工作日算（isOffDayOverride） */
+.mark-off { opacity: 0.45; }
 
 .birthday-reminder-card {
   display: flex;
