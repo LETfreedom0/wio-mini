@@ -39,3 +39,7 @@ supabase/.temp/
 .workbuddy/shared-check/*.png
 .workbuddy/shared-check/*.svg
 .workbuddy/share-card/
+
+# 断言脚本运行时临时产物
+.workbuddy/shared-check/.*-bundle.mjs
+.workbuddy/shared-check/.*-entry.js
