@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WIO · 假期安排 UI 设计稿（横向日历标记版）</title>
+<style>
+  :root{
+    --teal:#0E6E62; --teal-soft:#E7F1EF;
+    --gold:#C08A2D; --gold-soft:#FFFDF8;
+    --red:#D6453C; --red-soft:#FBEAE8;
+    --ink:#15181C; --ink-2:#3A4149; --ink-3:#6B7379; --ink-4:#8A94A0; --ink-5:#A3A9B0;
+    --line:#EFF1F3; --chip:#F4F5F6;
+    --card-r:18px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:#E9ECEF;
+    min-height:100vh;
+    display:flex; flex-wrap:wrap; gap:56px; justify-content:center; align-items:flex-start;
+    padding:56px 40px 80px;
+  }
+  .stage{display:flex; flex-direction:column; align-items:center; gap:18px;}
+  .stage-title{font-size:15px; font-weight:600; color:var(--ink-2); letter-spacing:.5px;}
+  .stage-title .n{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; border-radius:50%; background:var(--teal); color:#fff;
+    font-size:12px; margin-right:8px; vertical-align:-4px;
+  }
+  .stage-note{
+    max-width:375px; font-size:12.5px; line-height:1.7; color:var(--ink-4);
+    background:#fff; border-radius:12px; padding:12px 16px;
+  }
+  .stage-note b{color:var(--teal); font-weight:600;}
+
+  /* ===== 手机框 ===== */
+  .phone{
+    width:375px; height:720px; background:#F6F7F9; border-radius:44px;
+    box-shadow:0 24px 60px rgba(15,35,40,.18), 0 0 0 10px #1B1D21;
+    overflow:hidden; position:relative; flex-shrink:0;
+  }
+  .page{position:absolute; inset:0; padding:52px 16px 0; overflow:hidden;}
+  .page-title{font-size:22px; font-weight:700; color:var(--ink); margin:4px 4px 16px;}
+
+  /* ===== 设置卡（对齐 settings-card）===== */
+  .card{
+    background:#fff; border-radius:var(--card-r); padding:16px;
+    box-shadow:0 2px 10px rgba(15,35,40,.05); margin-bottom:14px;
+  }
+  .card-head{display:flex; align-items:center; justify-content:space-between;}
+  .card-title{font-size:14.5px; font-weight:600; color:var(--ink);}
+  .info-btn{
+    width:16px; height:16px; border-radius:50%; border:1.5px solid #C3C9CE;
+    display:flex; align-items:center; justify-content:center;
+    font-size:10px; font-style:italic; color:#C3C9CE; font-weight:700;
+  }
+  .card-sub{font-size:11.5px; color:var(--ink-5); margin-top:4px; line-height:1.6;}
+
+  /* 节日 chips */
+  .chip-row{display:flex; flex-wrap:wrap; gap:7px; margin-top:13px;}
+  .chip{
+    height:32px; padding:0 13px; display:inline-flex; align-items:center; gap:5px;
+    background:var(--chip); border-radius:9px; font-size:12.5px; font-weight:500;
+    color:var(--ink-5); position:relative;
+  }
+  .chip.on{background:var(--teal-soft); color:var(--teal); font-weight:600;}
+  .chip .dot{width:5px; height:5px; border-radius:50%; background:var(--gold); flex-shrink:0;}
+  .chip.on .dot{background:var(--teal);}
+  .chip.ghost .dot{background:var(--gold);}
+
+  /* 上下文卡（虚化示意） */
+  .context-card{opacity:.45; filter:saturate(.7);}
+  .ctx-row{display:flex; justify-content:space-between; align-items:center; margin-top:12px;}
+  .ctx-label{font-size:13px; color:var(--ink-2);}
+  .ctx-val{font-size:12.5px; color:var(--ink-4);}
+
+  /* ===== 展开态：卡片内的横向日历带 ===== */
+  .expand{
+    margin-top:14px; padding-top:14px; border-top:1px solid #F6F7F9;
+  }
+  .expand-head{display:flex; align-items:baseline; justify-content:space-between;}
+  .expand-title{font-size:13px; font-weight:600; color:var(--ink-2);}
+  .expand-reset{font-size:11px; color:var(--ink-5);}
+  .expand-reset b{color:var(--teal); font-weight:600;}
+
+  /* 横向日历带 */
+  .cal-strip{
+    display:flex; gap:6px; margin-top:12px; overflow:hidden;
+    padding:2px;
+  }
+  .day{
+    flex:0 0 auto; width:42px; border-radius:11px; padding:6px 0 7px;
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    background:var(--chip);
+  }
+  .day .m{font-size:9px; color:var(--ink-5); line-height:1;}
+  .day .d{font-size:15px; font-weight:600; color:var(--ink-2); line-height:1.15;}
+  .day .w{font-size:9px; color:var(--ink-5); line-height:1;}
+  /* 标红 = 休假 */
+  .day.red{background:var(--red); box-shadow:0 2px 6px rgba(214,69,60,.28);}
+  .day.red .m,.day.red .d,.day.red .w{color:#fff;}
+  .day.red .w{opacity:.85;}
+  /* 与国务院默认不同 → 角标 */
+  .day{position:relative;}
+  .day.diff::after{
+    content:''; position:absolute; top:4px; right:4px; width:5px; height:5px;
+    border-radius:50%; background:var(--gold); border:1.5px solid #fff;
+  }
+  .day.diff.red::after{border-color:var(--red);}
+
+  .legend{display:flex; gap:14px; margin-top:12px; align-items:center;}
+  .lg{display:flex; align-items:center; gap:5px; font-size:10.5px; color:var(--ink-5);}
+  .lg i{width:10px; height:10px; border-radius:3px; display:inline-block;}
+
+  /* 展开动画提示位（卡内高度变化用 transition） */
+  .expand{animation:fadein .18s ease-out;}
+  @keyframes fadein{from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:none;}}
+</style>
+</head>
+<body>
+
+<!-- ============ 屏 1：卡片内直接展开横向日历 ============ -->
+<div class="stage">
+  <div class="phone">
+    <div class="page">
+      <div class="page-title">我的</div>
+
+      <div class="card context-card">
+        <div class="card-head">
+          <span class="card-title">生日假</span>
+          <span class="info-btn">i</span>
+        </div>
+        <div class="ctx-row"><span class="ctx-label">生日月份</span><span class="ctx-val">6 月 · 已开启</span></div>
+      </div>
+
+      <!-- ★ 假期安排卡：chip 点开 → 卡片内直接展开横向日历带 -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">假期安排</span>
+          <span class="info-btn">i</span>
+        </div>
+
+        <div class="chip-row">
+          <span class="chip">元旦</span>
+          <span class="chip">春节</span>
+          <span class="chip">清明节</span>
+          <span class="chip">劳动节</span>
+          <span class="chip">端午节</span>
+          <span class="chip ghost"><span class="dot"></span>中秋节</span>
+          <span class="chip on"><span class="dot"></span>国庆节</span>
+        </div>
+
+        <!-- 选中「国庆节」后在卡内展开 -->
+        <div class="expand">
+          <div class="expand-head">
+            <span class="expand-title">国庆节 <span style="color:var(--ink-5);font-weight:400;">· 2026</span></span>
+            <span class="expand-reset">已调整 4 天 · <b>恢复默认</b></span>
+          </div>
+
+          <div class="cal-strip">
+            <div class="day red diff"><span class="m">9月</span><span class="d">20</span><span class="w">周日</span></div>
+            <div class="day red"><span class="m">10月</span><span class="d">1</span><span class="w">周四</span></div>
+            <div class="day red"><span class="m">10月</span><span class="d">2</span><span class="w">周五</span></div>
+            <div class="day red"><span class="m">10月</span><span class="d">3</span><span class="w">周六</span></div>
+            <div class="day red"><span class="m">10月</span><span class="d">4</span><span class="w">周日</span></div>
+            <div class="day red"><span class="m">10月</span><span class="d">5</span><span class="w">周一</span></div>
+            <div class="day diff"><span class="m">10月</span><span class="d">6</span><span class="w">周二</span></div>
+            <div class="day diff"><span class="m">10月</span><span class="d">7</span><span class="w">周三</span></div>
+            <div class="day red diff"><span class="m">10月</span><span class="d">10</span><span class="w">周六</span></div>
+          </div>
+
+          <div class="legend">
+            <span class="lg"><i style="background:var(--red);"></i>休假</span>
+            <span class="lg"><i style="background:var(--chip);border:1px solid var(--line);"></i>上班 / 补班</span>
+            <span class="lg"><i style="background:var(--gold);border-radius:50%;width:8px;height:8px;"></i>与国务院安排不同</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card context-card">
+        <div class="card-head">
+          <span class="card-title">自定义假期</span>
+          <span class="info-btn">i</span>
+        </div>
+        <div class="ctx-row"><span class="ctx-label">年假</span><span class="ctx-val">5 天</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="stage-title"><span class="n">1</span>chip 点开，卡内直接展开横向日历带</div>
+  <div class="stage-note">
+    不弹层、不切页：点节日 chip，日历带就在卡内展开。<b>标红 = 休假</b>，点一下切换休/班；初始按国务院安排预填红。<br>
+    <b>金色小角标</b>只出现在与国务院安排不同的天上，底部一行小图例说明。没有弹窗、没有确认步骤。
+  </div>
+</div>
+
+<!-- ============ 屏 2：默认状态（未调整的节日） ============ -->
+<div class="stage">
+  <div class="phone">
+    <div class="page">
+      <div class="page-title">我的</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">假期安排</span>
+          <span class="info-btn">i</span>
+        </div>
+
+        <div class="chip-row">
+          <span class="chip">元旦</span>
+          <span class="chip">春节</span>
+          <span class="chip">清明节</span>
+          <span class="chip">劳动节</span>
+          <span class="chip">端午节</span>
+          <span class="chip ghost"><span class="dot"></span>中秋节</span>
+          <span class="chip on"><span class="dot"></span>国庆节</span>
+        </div>
+
+        <!-- 默认状态：未动过的节日，全按国务院安排，无角标 -->
+        <div class="expand">
+          <div class="expand-head">
+            <span class="expand-title">中秋节 <span style="color:var(--ink-5);font-weight:400;">· 2026</span></span>
+            <span class="expand-reset">按国务院安排</span>
+          </div>
+          <div class="cal-strip">
+            <div class="day"><span class="m">9月</span><span class="d">25</span><span class="w">周五</span></div>
+            <div class="day red"><span class="m">9月</span><span class="d">26</span><span class="w">周六</span></div>
+            <div class="day red"><span class="m">9月</span><span class="d">27</span><span class="w">周日</span></div>
+            <div class="day red"><span class="m">10月</span><span class="d">1</span><span class="w">周四</span></div>
+            <div class="day red"><span class="m">10月</span><span class="d">2</span><span class="w">周五</span></div>
+            <div class="day red"><span class="m">10月</span><span class="d">3</span><span class="w">周六</span></div>
+            <div class="day red"><span class="m">10月</span><span class="d">4</span><span class="w">周日</span></div>
+          </div>
+          <div class="legend">
+            <span class="lg"><i style="background:var(--red);"></i>休假</span>
+            <span class="lg"><i style="background:var(--chip);border:1px solid var(--line);"></i>上班 / 补班</span>
+            <span style="margin-left:auto;font-size:10.5px;color:var(--ink-5);">点日期切换 休 / 班</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card context-card">
+        <div class="card-head">
+          <span class="card-title">自定义假期</span>
+          <span class="info-btn">i</span>
+        </div>
+        <div class="ctx-row"><span class="ctx-label">年假</span><span class="ctx-val">5 天</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="stage-title"><span class="n">2</span>未调整的节日：默认全按国务院安排</div>
+  <div class="stage-note">
+    没动过的节日<b>没有金角标</b>、右上角显示「按国务院安排」——一眼知道哪些是默认值。<br>
+    节日多时日历带<b>横向滚动</b>（春节 11 天也能放下）；chip 上的金点与日历角标同一含义，卡外也能看出动过哪些节日。
+  </div>
+</div>
+
+</body>
+</html>

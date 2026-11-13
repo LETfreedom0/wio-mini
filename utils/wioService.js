@@ -28,10 +28,16 @@ const DEFAULT_SETTINGS = {
   // 分享卡卡面样式：'calendar'（日历格）| 'receipt'（打卡小票）
   cardStyle: 'calendar',
   // 调休配置规则 (Key: 节日名称, Value: boolean 是否调休)
-  // 默认只有春节调休
+  // 默认只有春节调休。
+  // 已被「假期安排」逐日差量(settings.holidayPlan)取代 UI 入口，仅为老数据兼容保留读取：
+  // 补班日(isOffDay:false)未进差量时仍按此规则判定是否计入工作日。
   compOffRules: {
       '春节': true
-  }
+  },
+  // 假期安排差量 (Key: 'YYYY-MM-DD', Value: 'off' | 'work')。
+  // 只存与国务院安排不同的天：差量不存在即按 holidays.js 原始安排计算，
+  // 国务院数据逐年更新也不会跟用户配置打架；随 settings 云同步天然带上。
+  holidayPlan: {}
 };
 
 // ============================================================
@@ -294,6 +300,10 @@ export default {
         // 半天出勤计法已改为「标记当时逐日确认」（settings.halfFullDays），
         // 不再作为 PRO 权益：这里只保留老字段的归一，避免脏值读出来
         if (s.halfDayAttendance !== 'full') s.halfDayAttendance = 'half';
+        // 假期安排差量：脏值（数组/字符串/null）一律归一成空对象
+        if (!s.holidayPlan || typeof s.holidayPlan !== 'object' || Array.isArray(s.holidayPlan)) {
+          s.holidayPlan = {};
+        }
         return s;
       }
     } catch (e) {
@@ -1112,13 +1122,26 @@ export default {
 
   /**
    * 获取指定日期的公共假期信息
+   *
+   * 唯一裁决点：先查国务院原始安排，再看用户假期安排差量(settings.holidayPlan)。
+   * 差量命中时返回 {...raw, isOffDay: 有效值}——所有消费方（isOfficialWorkingDay、
+   * 日历上色、isOffDayOverride、统计三处口径）拿到的都是裁决后的 isOffDay，
+   * 不需要各自再查差量。
+   *
    * @param {string} dateStr - YYYY-MM-DD
    * @returns {object|null} - { name, isOffDay, ... }
    */
   getPublicHoliday(dateStr) {
     const days = this._allHolidayDays();
     if (!days.length) return null;
-    return days.find(d => d.date === dateStr) || null;
+    const raw = days.find(d => d.date === dateStr);
+    if (!raw) return null;
+    const plan = this.getSettings().holidayPlan || {};
+    const o = plan[dateStr];
+    if (o === 'off' || o === 'work') {
+      return { ...raw, isOffDay: o === 'off', overridden: true };
+    }
+    return raw;
   },
 
   /**
@@ -1132,8 +1155,14 @@ export default {
     if (!days.length) return null;
     const from = String(fromStr || this.getTodayDateStr() || '');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) return null;
+    // 首页倒计时也要认用户的假期安排：公司改成上班的法定假不算「假期」
+    const plan = this.getSettings().holidayPlan || {};
     const offs = days
-      .filter(d => d && d.isOffDay && d.date >= from)
+      .filter(d => {
+        if (!d || d.date < from) return false;
+        const o = plan[d.date];
+        return (o === 'off' || o === 'work') ? o === 'off' : !!d.isOffDay;
+      })
       .sort((a, b) => (a.date < b.date ? -1 : 1));
     if (!offs.length) return null;
     const first = offs[0];
@@ -1165,6 +1194,109 @@ export default {
       return Array.from(holidayMap.values());
   },
 
+  // ============================================================
+  // 假期安排（逐日差量）
+  //
+  // UI：我的页「假期安排」卡——点节日 chip 在卡内展开横向日历带，
+  // 标红=休、灰=上班/补班，点一下切换，默认按国务院安排预填。
+  // 数据：settings.holidayPlan 只存差量（回到默认值的日期立即删除），
+  // 裁决统一走 getPublicHoliday()，统计/日历/分享卡自动同口径。
+  // ============================================================
+
+  /** 国务院原始日是否为休息日（不看差量） */
+  _rawIsOffDay(raw) {
+    return !!(raw && raw.isOffDay);
+  },
+
+  /** 差量条目是否真的与国务院默认不同（回到默认的条目不算「已调整」） */
+  _planDiffers(plan, raw) {
+    const o = plan && plan[raw.date];
+    if (o !== 'off' && o !== 'work') return false;
+    return (o === 'off') !== this._rawIsOffDay(raw);
+  },
+
+  /**
+   * 某节日的逐日条带（横向日历带数据源）
+   * @param {string} name - 节日名（如 '国庆节'，原始中文名，UI 层再做多语言映射）
+   * @param {number} [year] - 缺省取当前年份（2026/2027 同名节日只展示一年，
+   *                          跨年配置不丢——差量按日期存，换年自动是新的一年）
+   * @returns {Array<{date,month,day,wd,weekday,isOff,changed}>}
+   *   isOff = 裁决后的有效状态（含差量）；changed = 与国务院默认不同
+   */
+  getHolidayPlanDays(name, year) {
+    const y = Number(year) || new Date().getFullYear();
+    const days = this._allHolidayDays()
+      .filter(d => d && d.name === name && d.date.slice(0, 4) === String(y))
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+    const plan = this.getSettings().holidayPlan || {};
+    return days.map(raw => {
+      const o = plan[raw.date];
+      const overridden = o === 'off' || o === 'work';
+      const d = new Date(raw.date + 'T00:00:00');
+      return {
+        date: raw.date,
+        month: Number(raw.date.slice(5, 7)),
+        day: Number(raw.date.slice(8, 10)),
+        wd: d.getDay(),
+        weekday: '日一二三四五六'[d.getDay()],
+        isOff: overridden ? o === 'off' : this._rawIsOffDay(raw),
+        changed: this._planDiffers(plan, raw)
+      };
+    });
+  },
+
+  /**
+   * 切换某天的休/班：当前有效状态取反；结果与国务院默认一致时删除差量条目
+   * @param {string} dateStr - YYYY-MM-DD
+   * @returns {'off'|'work'|null} 切换后的有效状态（非法定安排日返回 null）
+   */
+  toggleHolidayPlanDate(dateStr) {
+    const raw = this._allHolidayDays().find(d => d && d.date === dateStr);
+    if (!raw) return null;
+    const s = this.getSettings();
+    const plan = { ...(s.holidayPlan || {}) };
+    const o = plan[dateStr];
+    const curOff = (o === 'off' || o === 'work') ? o === 'off' : this._rawIsOffDay(raw);
+    const next = curOff ? 'work' : 'off';
+    // 回到默认值就不留差量：国务院数据更新后差量不会把旧配置钉死
+    if ((next === 'off') === this._rawIsOffDay(raw)) {
+      delete plan[dateStr];
+    } else {
+      plan[dateStr] = next;
+    }
+    this.saveSettings({ ...s, holidayPlan: plan });
+    return (next === 'off') === this._rawIsOffDay(raw) ? null : next;
+  },
+
+  /**
+   * 重置假期安排：传节日名只清该节日的差量，不传清全部
+   * @param {string} [name] - 节日名
+   */
+  resetHolidayPlan(name) {
+    const s = this.getSettings();
+    const plan = { ...(s.holidayPlan || {}) };
+    if (name) {
+      this._allHolidayDays()
+        .filter(d => d && d.name === name)
+        .forEach(d => { delete plan[d.date]; });
+    } else {
+      Object.keys(plan).forEach(k => { delete plan[k]; });
+    }
+    this.saveSettings({ ...s, holidayPlan: plan });
+  },
+
+  /**
+   * 某节日「已调整」天数（与国务院默认不同的天）——chip 金点与右上角文案用
+   * @param {string} name - 节日名
+   * @returns {number}
+   */
+  getHolidayPlanChangedCount(name) {
+    const plan = this.getSettings().holidayPlan || {};
+    return this._allHolidayDays()
+      .filter(d => d && d.name === name && this._planDiffers(plan, d))
+      .length;
+  },
+
   /**
    * 判断某天是否为法定工作日
    * @param {Date} date - Date object
@@ -1177,25 +1309,31 @@ export default {
     const dateStr = `${y}-${m}-${d}`;
 
     const holiday = this.getPublicHoliday(dateStr);
-    
+
     // 如果在假期安排中
     if (holiday) {
+        // 用户差量明确改过的日子：差量就是终审，不再走 compOffRules
+        // （否则差量改的「上班日」会被未启用的 rules 拦回「休息」）
+        if (holiday.overridden) {
+            return !holiday.isOffDay;
+        }
+
         // isOffDay: true -> 休息 (不是工作日)
         if (holiday.isOffDay) {
             return false;
         }
-        
+
         // isOffDay: false -> 调休上班
         // 获取调休配置
         const settings = this.getSettings();
         const rules = settings.compOffRules || {};
-        
+
         // 检查该节日的调休配置
         // 如果 rules 中有该节日配置，则使用配置值
         // 如果 rules 中没有，默认策略：春节为 true，其他为 false (保持兼容性)
         // 但我们在 DEFAULT_SETTINGS 里已经初始化了 '春节': true
         // 对于其他未配置的节日，undefined 视为 false
-        
+
         if (rules[holiday.name]) {
             return true;
         } else {

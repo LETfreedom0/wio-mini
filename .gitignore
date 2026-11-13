@@ -43,3 +43,9 @@ supabase/.temp/
 # 断言脚本运行时临时产物
 .workbuddy/shared-check/.*-bundle.mjs
 .workbuddy/shared-check/.*-entry.js
+
+# 断言渲染产物（render.mjs 生成在项目根，不入库）
+/calendar-*.png
+/calendar-*.svg
+/receipt-*.png
+/receipt-*.svg

@@ -155,11 +155,11 @@
         </view>
       </view>
 
-      <!-- 调休补班 -->
+      <!-- 假期安排：点节日 chip 在卡内展开横向日历带，标红=休、灰=上班/补班，默认国务院安排 -->
       <view class="settings-card">
         <view class="card-header-row">
-          <text class="card-title">{{ i18n.profile.compOffSettings }}</text>
-          <view class="info-btn" @click="showCompOffInfo">
+          <text class="card-title">{{ i18n.profile.holidayPlanTitle }}</text>
+          <view class="info-btn" @click="showHolidayPlanInfo">
             <text class="info-icon">i</text>
           </view>
         </view>
@@ -170,13 +170,60 @@
               class="holiday-chip"
               v-for="item in holidayList"
               :key="item.name"
-              :class="{ active: getCompOffStatus(item.name), disabled: !item.hasCompOff }"
-              @click="toggleCompOff(item)"
+              :class="{ active: planHoliday === item.name }"
+              @click="selectPlanHoliday(item)"
             >
+              <view v-if="planMarks[item.name] > 0" class="chip-dot"></view>
               <text class="holiday-chip-text">{{ getHolidayName(item) }}</text>
             </view>
           </view>
         </scroll-view>
+
+        <!-- 横向日历带：该节日的全部法定安排日（含补班日） -->
+        <view v-if="planHoliday && planStrip.length" class="plan-strip">
+          <view class="plan-strip-head">
+            <text class="plan-strip-title">
+              {{ getHolidayName({ name: planHoliday }) }}
+              <text class="plan-strip-year">{{ planYear }}</text>
+            </text>
+            <text class="plan-strip-reset" @click="resetPlanHoliday">
+              {{ planChanged > 0 ? i18n.profile.holidayPlanResetBtn : i18n.profile.holidayPlanDefaultTag }}
+            </text>
+          </view>
+
+          <scroll-view class="plan-days-scroll" scroll-x="true" show-scrollbar="false">
+            <view class="plan-days">
+              <view
+                v-for="d in planStrip"
+                :key="d.date"
+                class="plan-day"
+                :class="{ 'is-off': d.isOff, 'is-diff': d.changed }"
+                @click="togglePlanDay(d)"
+              >
+                <text class="pd-month">{{ d.month }}{{ i18n.profile.holidayPlanMonthUnit }}</text>
+                <text class="pd-date">{{ d.day }}</text>
+                <text class="pd-week">{{ weekdayLabel(d.wd) }}</text>
+                <view v-if="d.changed" class="pd-diff-dot"></view>
+              </view>
+            </view>
+          </scroll-view>
+
+          <view class="plan-legend">
+            <view class="legend-item">
+              <view class="legend-box legend-off"></view>
+              <text class="legend-text">{{ i18n.profile.holidayLegendOff }}</text>
+            </view>
+            <view class="legend-item">
+              <view class="legend-box legend-work"></view>
+              <text class="legend-text">{{ i18n.profile.holidayLegendWork }}</text>
+            </view>
+            <view class="legend-item">
+              <view class="legend-dot"></view>
+              <text class="legend-text">{{ i18n.profile.holidayLegendDiff }}</text>
+            </view>
+            <text v-if="planChanged > 0" class="legend-changed">{{ i18n.profile.holidayPlanAdjusted.replace('{n}', planChanged) }}</text>
+          </view>
+        </view>
 
         <view v-if="holidayList.length === 0" class="empty-hint">
             <text>{{ i18n.profile.noHoliday }}</text>
@@ -196,14 +243,14 @@
 
     </scroll-view>
 
-    <!-- ===== 补班规则 ⓘ 弹窗 ===== -->
+    <!-- ===== 假期安排 ⓘ 弹窗 ===== -->
     <view v-if="showRuleSheet" class="modal-mask" @click="closeInfoSheet">
       <view class="modal-card" @click.stop>
         <view class="modal-icon rule-icon">
           <text class="modal-icon-text">i</text>
         </view>
-        <text class="modal-title">{{ i18n.profile.compOffSheetTitle }}</text>
-        <text class="modal-body">{{ i18n.profile.compOffSheetBody }}</text>
+        <text class="modal-title">{{ i18n.profile.holidayPlanSheetTitle }}</text>
+        <text class="modal-body">{{ i18n.profile.holidayPlanSheetBody }}</text>
         <view class="modal-btn" @click="closeInfoSheet">
           <text class="modal-btn-text">{{ i18n.profile.gotIt }}</text>
         </view>
@@ -343,6 +390,12 @@ export default {
       },
       holidayList: [], // 完整节日列表
       showRuleSheet: false,
+      // 假期安排：当前展开的节日（原始中文名）+ 日历带数据 + 已调整天数
+      planHoliday: '',
+      planStrip: [],
+      planChanged: 0,
+      planYear: new Date().getFullYear(),
+      planMarks: {}, // 节日名 → 已调整天数（chip 金点）
       showBirthdaySheet: false,
       // ===== 自定义假期 =====
       customLeaves: [],
@@ -464,6 +517,7 @@ export default {
   mounted() {
     this.loadSettings();
     this.holidayList = wioService.getHolidayInfoList();
+    this.refreshPlanMarks();
     this.session = getAuth();
     this.bindSync();
     // 组件内的 onShow 不会被触发，语言切换靠全局广播兜住
@@ -544,27 +598,66 @@ export default {
     isQuotaFull(used, total) {
       return (used || 0) > 0 && (used || 0) >= (total || 0);
     },
-    getCompOffStatus(name) {
-        return !!this.settings.compOffRules[name];
-    },
     getHolidayName(item) {
       if (this.settings.language === 'en-US') {
         return holidayNameMap[item.name] || item.name;
       }
       return item.name;
     },
-    toggleCompOff(item) {
-        if (!item.hasCompOff) {
-            // 没有补班的节日点不动：给一句提示，避免用户以为卡了
-            uni.showToast({ title: this.i18n.profile.noCompOff, icon: 'none' });
-            return;
-        }
-        haptic('light');
-        const name = item.name;
-        const current = this.getCompOffStatus(name);
-        this.settings.compOffRules[name] = !current;
-        haptic('light');
-        this.save();
+    // ===== 假期安排 =====
+    // 星期短标签：中英各一份，wd 为 Date.getDay() 索引
+    weekdayLabel(wd) {
+      if (this.settings.language === 'en-US') {
+        return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][wd] || '';
+      }
+      return '日一二三四五六'[wd] || '';
+    },
+    refreshPlanMarks() {
+      const marks = {};
+      this.holidayList.forEach(item => {
+        const n = wioService.getHolidayPlanChangedCount(item.name);
+        if (n > 0) marks[item.name] = n;
+      });
+      this.planMarks = marks;
+    },
+    selectPlanHoliday(item) {
+      haptic('light');
+      // 再点一次收起日历带
+      if (this.planHoliday === item.name) {
+        this.planHoliday = '';
+        this.planStrip = [];
+        this.planChanged = 0;
+        return;
+      }
+      this.planHoliday = item.name;
+      this.refreshPlanStrip();
+    },
+    refreshPlanStrip() {
+      if (!this.planHoliday) return;
+      this.planStrip = wioService.getHolidayPlanDays(this.planHoliday);
+      this.planChanged = wioService.getHolidayPlanChangedCount(this.planHoliday);
+      const first = this.planStrip[0];
+      if (first) this.planYear = Number(first.date.slice(0, 4));
+    },
+    togglePlanDay(d) {
+      haptic('light');
+      wioService.toggleHolidayPlanDate(d.date);
+      // 重新读 settings，保证 planMarks / 后续读取都用最新差量
+      this.settings = wioService.getSettings();
+      this.refreshPlanStrip();
+      this.refreshPlanMarks();
+    },
+    resetPlanHoliday() {
+      haptic('light');
+      wioService.resetHolidayPlan(this.planHoliday);
+      this.settings = wioService.getSettings();
+      this.refreshPlanStrip();
+      this.refreshPlanMarks();
+      uni.showToast({ title: t('profile.saved', this.settings.language), icon: 'none' });
+    },
+    showHolidayPlanInfo() {
+      haptic('light');
+      this.showRuleSheet = true;
     },
     setLanguage(lang) {
       // 多语言为 PRO 专属权益：非 PRO 点击英文选项直接拉起付费墙
@@ -1343,6 +1436,185 @@ export default {
 
 .holiday-chip.active .holiday-chip-text {
   color: #0E6E62;
+  font-weight: 500;
+}
+
+/* ===== 假期安排：chip 金点 + 横向日历带 ===== */
+.chip-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #C08A2D;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.plan-strip {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #F6F7F9;
+}
+
+.plan-strip-head {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.plan-strip-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #3A4149;
+}
+
+.plan-strip-year {
+  font-size: 11px;
+  font-weight: 400;
+  color: #A3A9B0;
+  margin-left: 4px;
+}
+
+.plan-strip-reset {
+  font-size: 11px;
+  color: #A3A9B0;
+}
+
+.plan-strip-reset:active {
+  opacity: 0.6;
+}
+
+.plan-days-scroll {
+  width: 100%;
+  white-space: nowrap;
+  margin-top: 11px;
+}
+
+.plan-days-scroll ::-webkit-scrollbar,
+.plan-days-scroll ::v-deep ::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.plan-days {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  padding: 2px;
+}
+
+.plan-day {
+  flex: 0 0 auto;
+  width: 42px;
+  border-radius: 11px;
+  padding: 6px 0 7px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #F4F5F6;
+  position: relative;
+  transition: background 0.15s ease;
+}
+
+.plan-day:active {
+  transform: scale(0.94);
+}
+
+.pd-month {
+  font-size: 9px;
+  color: #A3A9B0;
+  line-height: 1.4;
+}
+
+.pd-date {
+  font-size: 15px;
+  font-weight: 600;
+  color: #3A4149;
+  line-height: 1.3;
+}
+
+.pd-week {
+  font-size: 9px;
+  color: #A3A9B0;
+  line-height: 1.4;
+}
+
+/* 标红 = 休假 */
+.plan-day.is-off {
+  background: #D6453C;
+  box-shadow: 0 2px 6px rgba(214, 69, 60, 0.28);
+}
+
+.plan-day.is-off .pd-month,
+.plan-day.is-off .pd-date,
+.plan-day.is-off .pd-week {
+  color: #FFFFFF;
+}
+
+.plan-day.is-off .pd-week {
+  opacity: 0.85;
+}
+
+/* 与国务院默认不同 → 金色角标 */
+.pd-diff-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #C08A2D;
+  border: 1.5px solid #FFFFFF;
+}
+
+.plan-legend {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  margin-top: 11px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-box {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.legend-off {
+  background: #D6453C;
+}
+
+.legend-work {
+  background: #F4F5F6;
+  border: 1px solid #EFF1F3;
+}
+
+.legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #C08A2D;
+}
+
+.legend-text {
+  font-size: 10.5px;
+  color: #A3A9B0;
+}
+
+.legend-changed {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: #C08A2D;
   font-weight: 500;
 }
 
