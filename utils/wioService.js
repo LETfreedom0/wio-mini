@@ -35,8 +35,8 @@ const DEFAULT_SETTINGS = {
       '春节': true
   },
   // 假期安排差量 (Key: 'YYYY-MM-DD', Value: 'off' | 'work')。
-  // 只存与国务院安排不同的天：差量不存在即按 holidays.js 原始安排计算，
-  // 国务院数据逐年更新也不会跟用户配置打架；随 settings 云同步天然带上。
+  // 只存与官方安排不同的天：差量不存在即按 holidays.js 原始安排计算，
+  // 官方数据逐年更新也不会跟用户配置打架；随 settings 云同步天然带上。
   holidayPlan: {}
 };
 
@@ -162,7 +162,7 @@ export function evaluateDayParts(raw, opts) {
 /**
  * 法定放假日上的显式标记 = 用户覆盖：「你们公司这天上班，以我标的为准」。
  *
- * 背景：不跟国务院安排的公司（如国庆只放 1~5 号、6/7 号上班）在这天标年假/出勤，
+ * 背景：不跟官方安排的公司（如国庆只放 1~5 号、6/7 号上班）在这天标年假/出勤，
  * 旧口径把它们全扔进 weekendLeaves——日历说「你休了」、统计说「没这回事」。
  * 现在只要这天是法定放假日（holiday.isOffDay === true）且 entries 里有显式标记，
  * 该日即按工作日统计：标假期 → 扣额度；标出勤 → 计公司天数、进分母。
@@ -1123,7 +1123,7 @@ export default {
   /**
    * 获取指定日期的公共假期信息
    *
-   * 唯一裁决点：先查国务院原始安排，再看用户假期安排差量(settings.holidayPlan)。
+   * 唯一裁决点：先查官方原始安排，再看用户假期安排差量(settings.holidayPlan)。
    * 差量命中时返回 {...raw, isOffDay: 有效值}——所有消费方（isOfficialWorkingDay、
    * 日历上色、isOffDayOverride、统计三处口径）拿到的都是裁决后的 isOffDay，
    * 不需要各自再查差量。
@@ -1139,7 +1139,7 @@ export default {
     const plan = this.getSettings().holidayPlan || {};
     const o = plan[dateStr];
     if (o === 'off' || o === 'work') {
-      // rawIsOffDay = 国务院原始安排（补班日改休/放假日改班时，UI 靠它决定是否写节日名）
+      // rawIsOffDay = 官方原始安排（补班日改休/放假日改班时，UI 靠它决定是否写节日名）
       return { ...raw, isOffDay: o === 'off', overridden: true, rawIsOffDay: raw.isOffDay };
     }
     return raw;
@@ -1217,17 +1217,17 @@ export default {
   // 假期安排（逐日差量）
   //
   // UI：我的页「假期安排」卡——点节日 chip 在卡内展开横向日历带，
-  // 标红=休、灰=上班/补班，点一下切换，默认按国务院安排预填。
+  // 标红=休、灰=上班/补班，点一下切换，默认按官方安排预填。
   // 数据：settings.holidayPlan 只存差量（回到默认值的日期立即删除），
   // 裁决统一走 getPublicHoliday()，统计/日历/分享卡自动同口径。
   // ============================================================
 
-  /** 国务院原始日是否为休息日（不看差量） */
+  /** 官方原始日是否为休息日（不看差量） */
   _rawIsOffDay(raw) {
     return !!(raw && raw.isOffDay);
   },
 
-  /** 差量条目是否真的与国务院默认不同（回到默认的条目不算「已调整」） */
+  /** 差量条目是否真的与官方默认不同（回到默认的条目不算「已调整」） */
   _planDiffers(plan, raw) {
     const o = plan && plan[raw.date];
     if (o !== 'off' && o !== 'work') return false;
@@ -1240,8 +1240,8 @@ export default {
    * @param {number} [year] - 缺省取当前年份（2026/2027 同名节日只展示一年，
    *                          跨年配置不丢——差量按日期存，换年自动是新的一年）
    * @returns {Array<{date,month,day,wd,weekday,isOff,changed,makeup}>}
-   *   isOff = 裁决后的有效状态（含差量）；changed = 与国务院默认不同
-   *   makeup = 国务院原始安排里是补班日（UI 挂「补」角标）
+   *   isOff = 裁决后的有效状态（含差量）；changed = 与官方默认不同
+   *   makeup = 官方原始安排里是补班日（UI 挂「补」角标）
    */
   getHolidayPlanDays(name, year) {
     const y = Number(year) || new Date().getFullYear();
@@ -1267,7 +1267,7 @@ export default {
   },
 
   /**
-   * 切换某天的休/班：当前有效状态取反；结果与国务院默认一致时删除差量条目
+   * 切换某天的休/班：当前有效状态取反；结果与官方默认一致时删除差量条目
    * @param {string} dateStr - YYYY-MM-DD
    * @returns {'off'|'work'|null} 切换后的有效状态（非法定安排日返回 null）
    */
@@ -1279,7 +1279,7 @@ export default {
     const o = plan[dateStr];
     const curOff = (o === 'off' || o === 'work') ? o === 'off' : this._rawIsOffDay(raw);
     const next = curOff ? 'work' : 'off';
-    // 回到默认值就不留差量：国务院数据更新后差量不会把旧配置钉死
+    // 回到默认值就不留差量：官方数据更新后差量不会把旧配置钉死
     if ((next === 'off') === this._rawIsOffDay(raw)) {
       delete plan[dateStr];
     } else {
@@ -1311,7 +1311,7 @@ export default {
   },
 
   /**
-   * 某节日「已调整」天数（与国务院默认不同的天）——chip 金点与右上角文案用
+   * 某节日「已调整」天数（与官方默认不同的天）——chip 金点与右上角文案用
    * @param {string} name - 节日名
    * @param {number} [year] - 缺省当前年份
    * @returns {number}

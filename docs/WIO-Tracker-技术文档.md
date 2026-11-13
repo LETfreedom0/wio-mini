@@ -301,8 +301,8 @@ where({ _id, used_count: _.lt(maxUses) }).update({ data: { used_count: _.inc(1) 
 
 | 概念 | 存在哪 | 谁说了算 |
 | --- | --- | --- |
-| 国务院原始安排 | `holidays.js` / `holidays2026.js` / `holidays2027.js`，`{date, name, isOffDay}` | 代码内置，逐年补 |
-| 公司实际安排 | `settings.holidayPlan = { 'YYYY-MM-DD': 'off' \| 'work' }`，**只存与国务院不同的天** | 用户「我的 → 公共假期安排」逐日点选（可按年切换） |
+| 官方原始安排 | `holidays.js` / `holidays2026.js` / `holidays2027.js`，`{date, name, isOffDay}` | 代码内置，逐年补 |
+| 公司实际安排 | `settings.holidayPlan = { 'YYYY-MM-DD': 'off' \| 'work' }`，**只存与官方不同的天** | 用户「我的 → 公共假期安排」逐日点选（可按年切换） |
 | 某天的临时标记 | `entries[date]` | 日历上手标 |
 
 **裁决只有一个入口**：`getPublicHoliday(dateStr)` 先查原始安排、再套差量，命中时返回 `{ ...raw, isOffDay: 生效值, overridden: true }`。所有消费方（`isOfficialWorkingDay`、日历上色、月/年统计、首页倒计时）都拿裁决后的 `isOffDay`，**不要自己查 `holidayPlan`**。
@@ -313,13 +313,13 @@ where({ _id, used_count: _.lt(maxUses) }).update({ data: { used_count: _.inc(1) 
 - **补班日（`isOffDay: false`）** → **默认算工作日**，与「假期安排」灰格 = 上班一致。`compOffRules` 只剩老数据兼容：显式 `false` 的节日才按休息处理
 - **差量优先于一切**：命中 `holiday.overridden` 即终审，不再走 `compOffRules`
 
-**为什么只存差量**：国务院安排逐年更新，存全量会被旧配置钉死；存差量换年自动跟新，点回默认值即删条目。
+**为什么只存差量**：官方安排逐年更新，存全量会被旧配置钉死；存差量换年自动跟新，点回默认值即删条目。
 
 **逐日编辑器（我的页「公共假期安排」）**：
 
 - 年份切换：`getHolidayYears()` 取内置数据覆盖的年份，默认今年；`getHolidayInfoList(year)` / `getHolidayPlanDays(name, year)` / `getHolidayPlanChangedCount(name, year)` / `resetHolidayPlan(name, year)` **全部带年份**，跨年配置互不影响
 - 条带每条带 `makeup`（原始安排是补班日）与 `isOff`（裁决后是否休）：`makeup && !isOff` 时**第三行「星期」直接换成「补」**（角标会压住日期，占一行更好认；红=休、金=改过，所以「补」用中性深灰），改成休就恢复显示星期
-- 卡头副行 `.plan-hint-row`：左边说这张卡影响什么（月/年统计与分享卡），右边说这一年改过几天（0 天显示「按国务院安排」）；年份 pill 右上角小金点 = 那年改过，不用点开就知道
+- 卡头副行 `.plan-hint-row`：左边说这张卡影响什么（月/年统计与分享卡），右边说这一年改过几天（0 天显示「按官方安排」）；年份 pill 右上角小金点 = 那年改过，不用点开就知道
 - 数据进云：`holidayPlan` 是**配置不是事实**，不进 `DATE_MAPS`（不按今天裁剪，否则明年的安排永远同步不上去）；合并走 `mergeKeyed` 按日期三向，差异清单报一条「公共假期安排」
 
 **两个必踩的坑**：
@@ -327,7 +327,7 @@ where({ _id, used_count: _.lt(maxUses) }).update({ data: { used_count: _.inc(1) 
 1. `isOfficialWorkingDay` 里差量改成的「上班日」会掉进 `compOffRules` 分支被拦回——必须先判 `holiday.overridden`
 2. 条带 / 已调整天数 / 重置都必须按年份过滤，否则 2026 / 2027 同名节日混进同一条日历带、重置还会连带清掉另一年
 
-**日历渲染**：`getDayClass` 只按**裁决后的 `isOffDay`** 分流——休 = 公共假期粉底，上班 = `holiday-work` 灰底；节日名只在**国务院原始放假日**上写（`showHolidayLabel` 看 `rawIsOffDay`），补班日（哪怕在安排里改成休）不写名字，要上班的只挂右上角「班」徽章。
+**日历渲染**：`getDayClass` 只按**裁决后的 `isOffDay`** 分流——休 = 公共假期粉底，上班 = `holiday-work` 灰底；节日名只在**官方原始放假日**上写（`showHolidayLabel` 看 `rawIsOffDay`），补班日（哪怕在安排里改成休）不写名字，要上班的只挂右上角「班」徽章。
 
 ### 5.9 Canvas 分享卡
 

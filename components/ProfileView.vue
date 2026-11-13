@@ -155,7 +155,7 @@
         </view>
       </view>
 
-      <!-- 公共假期安排：点节日 chip 在卡内展开横向日历带，标红=休、灰=上班/补班，默认国务院安排 -->
+      <!-- 公共假期安排：点节日 chip 在卡内展开横向日历带，标红=休、灰=上班/补班，默认官方安排 -->
       <view class="settings-card">
         <view class="card-header-row">
           <text class="card-title">{{ i18n.profile.holidayPlanTitle }}</text>
@@ -469,7 +469,7 @@ export default {
     planHasMakeup() {
       return this.planStrip.some(d => d.makeup && !d.isOff);
     },
-    // 当前年份一共改过几天（0 = 完全按国务院安排）
+    // 当前年份一共改过几天（0 = 完全按官方安排）
     yearAdjusted() {
       return this.yearMarks[this.planYear] || 0;
     },
@@ -1723,7 +1723,7 @@ export default {
   opacity: 0.85;
 }
 
-/* 与国务院默认不同 → 金色角标 */
+/* 与官方默认不同 → 金色角标 */
 .pd-diff-dot {
   position: absolute;
   top: 4px;
@@ -1736,7 +1736,7 @@ export default {
 }
 
 /* 补班日：第三行「星期」换成「补」（深灰、加粗、拉开字距），
-   不占角标位置、不压日期；红=休假、金=与国务院不同，这里用中性色避开两种语义 */
+   不占角标位置、不压日期；红=休假、金=与官方不同，这里用中性色避开两种语义 */
 .pd-week.is-makeup {
   font-size: 8.5px;
   font-weight: 700;

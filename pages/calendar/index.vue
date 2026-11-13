@@ -1253,7 +1253,7 @@ export default {
       }
       return name;
     },
-    // 节日名只在「国务院原始安排的放假日」上显示：
+    // 节日名只在「官方原始安排的放假日」上显示：
     // 补班日（哪怕在假期安排里改成了休）、法定放假日上标了覆盖（这天上班）都不写节日名，
     // 补班日改休只给公共假期底色——它本来不是节日，写上「国庆节」反而误导。
     showHolidayLabel(day) {
@@ -1293,7 +1293,7 @@ export default {
           const holiday = this.getHolidayInfo(day);
           // 裁决后的 isOffDay 才决定颜色：
           //   休 = 公共假期粉底 + 节日名
-          //   上班（国务院补班日、或被「假期安排」改成上班的法定假）= 灰底 + 「班」徽章
+          //   上班（官方补班日、或被「假期安排」改成上班的法定假）= 灰底 + 「班」徽章
           // 这里若一律套假期色，10-6/10-7 这种「公司照常上班」的日子会被误读成放假。
           if (holiday) {
             cls = holiday.isOffDay ? 'status-public' : 'holiday-work';
@@ -2098,7 +2098,7 @@ export default {
 .status-sick { background-color: #E1BEE7; color: #4A148C; }
 .status-unpaid { background-color: #F5F5F5; color: #616161; border: 1px dashed #9E9E9E; }
 .status-public { background-color: #FFCDD2; color: #B71C1C; }
-/* 假期安排里「要上班」的日子：国务院补班日、被改成上班的法定假。
+/* 假期安排里「要上班」的日子：官方补班日、被改成上班的法定假。
    灰底 + 灰字 + 右上角「班」徽章 —— 只是「这天是假期安排的一部分」，不是放假。
    不带虚线边，与 status-exclude-wio（不计入 WIO）区分开。 */
 .holiday-work { background-color: #EAEAEA; color: #616161; }
