@@ -1253,11 +1253,14 @@ export default {
       }
       return name;
     },
-    // 节日名只在「真的休息」的日子显示：
-    // 补班日、法定放假日上标了覆盖（这天上班）都只留公共假期底色 + 「班」徽章，
-    // 免得把「要上班的一天」写成假期名，看着像放假。
+    // 节日名只在「国务院原始安排的放假日」上显示：
+    // 补班日（哪怕在假期安排里改成了休）、法定放假日上标了覆盖（这天上班）都不写节日名，
+    // 补班日改休只给公共假期底色——它本来不是节日，写上「国庆节」反而误导。
     showHolidayLabel(day) {
-      return !!this.getHolidayName(day) && !this.isHolidayWork(day);
+      const info = this.getHolidayInfo(day);
+      if (!info || !info.name || this.isHolidayWork(day)) return false;
+      // 无差量时没有 rawIsOffDay 字段，原始即裁决值
+      return info.rawIsOffDay !== false;
     },
     isHolidayWork(day) {
       const info = this.getHolidayInfo(day);

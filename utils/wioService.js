@@ -1139,7 +1139,8 @@ export default {
     const plan = this.getSettings().holidayPlan || {};
     const o = plan[dateStr];
     if (o === 'off' || o === 'work') {
-      return { ...raw, isOffDay: o === 'off', overridden: true };
+      // rawIsOffDay = 国务院原始安排（补班日改休/放假日改班时，UI 靠它决定是否写节日名）
+      return { ...raw, isOffDay: o === 'off', overridden: true, rawIsOffDay: raw.isOffDay };
     }
     return raw;
   },
