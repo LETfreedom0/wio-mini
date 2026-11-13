@@ -82,7 +82,7 @@ wio-mini/
 | ------- | -------------------------------------------------- |
 | **首页**  | 本周打卡（公司/居家/休假一键标记）、月度达标率环、年进度、每日一句                 |
 | **日历**  | 月视图着色、单日/区间标记、半天（上午/下午）、自定义假（区间型与按天型）、法定节假日与调休自动识别 |
-| **我的**  | 微信登录（头像昵称）、月度目标、年假/病假额度、生日假、假期安排（逐日休/班）、语言切换、版本号          |
+| **我的**  | 微信登录（头像昵称）、月度目标、年假/病假额度、生日假、公共假期安排（逐日休/班、按年切换）、语言切换、版本号          |
 | **会员**  | PRO 权益展示、云同步（上传/恢复）、付费墙（月卡/年卡）、兑换码（隐藏入口）           |
 | **统计**  | 月度/年度出勤构成、居家天数、节约通勤时间                              |
 | **分享卡** | 750×1000 战绩卡，日历风 / 小票风双卡面左右滑动，带小程序码，保存相册           |
@@ -127,7 +127,7 @@ wio-mini/
 | 半天出勤        | 依 `halfFullDays` 开关：0.5 或 1 天 | 标记时当场确认    |
 | 半天居家 / 半天假期 | 恒定 0.5 天                      | 保证开关只影响达标率 |
 | 法定放假日（`isOffDay:true`） | 否                     | 上面标了显式状态 = 公司这天上班，按工作日算（`isOffDayOverride`） |
-| 调休补班日（`isOffDay:false`） | 是（默认）               | 与「假期安排」灰格=上班一致；老配置显式 `false` 才按休息 |
+| 调休补班日（`isOffDay:false`） | 是（默认）               | 与「公共假期安排」灰格=上班一致；老配置显式 `false` 才按休息 |
 
 |                                                                                 |      |                                                                           |
 | ------------------------------------------------------------------------------- | ---- | ------------------------------------------------------------------------- |
@@ -135,7 +135,7 @@ wio-mini/
 
 ### 3.3 设置项（`wio_settings`）
 
-`username`、`targetPercentage`(40)、`vacationDays`(20)、`sickDays`(12)、`language`('zh-CN')、`birthdayEnabled/birthdayMonth`、`halfDayAttendance`('half')、`halfFullDays{}`、`commuteMinutes`(90)、`cardStyle`('calendar')、`holidayPlan{}`（假期安排差量）、`compOffRules{春节:true}`（仅老数据兼容）、`customLeaves[]`、`customMarks{}`。
+`username`、`targetPercentage`(40)、`vacationDays`(20)、`sickDays`(12)、`language`('zh-CN')、`birthdayEnabled/birthdayMonth`、`halfDayAttendance`('half')、`halfFullDays{}`、`commuteMinutes`(90)、`cardStyle`('calendar')、`holidayPlan{}`（公共假期安排差量，按日期键，随 settings 云同步）、`compOffRules{春节:true}`（仅老数据兼容）、`customLeaves[]`、`customMarks{}`。
 
 ### 3.4 云端集合（8 张）
 
@@ -302,7 +302,7 @@ where({ _id, used_count: _.lt(maxUses) }).update({ data: { used_count: _.inc(1) 
 | 概念 | 存在哪 | 谁说了算 |
 | --- | --- | --- |
 | 国务院原始安排 | `holidays.js` / `holidays2026.js` / `holidays2027.js`，`{date, name, isOffDay}` | 代码内置，逐年补 |
-| 公司实际安排 | `settings.holidayPlan = { 'YYYY-MM-DD': 'off' \| 'work' }`，**只存与国务院不同的天** | 用户「我的 → 假期安排」逐日点选 |
+| 公司实际安排 | `settings.holidayPlan = { 'YYYY-MM-DD': 'off' \| 'work' }`，**只存与国务院不同的天** | 用户「我的 → 公共假期安排」逐日点选（可按年切换） |
 | 某天的临时标记 | `entries[date]` | 日历上手标 |
 
 **裁决只有一个入口**：`getPublicHoliday(dateStr)` 先查原始安排、再套差量，命中时返回 `{ ...raw, isOffDay: 生效值, overridden: true }`。所有消费方（`isOfficialWorkingDay`、日历上色、月/年统计、首页倒计时）都拿裁决后的 `isOffDay`，**不要自己查 `holidayPlan`**。
@@ -315,12 +315,18 @@ where({ _id, used_count: _.lt(maxUses) }).update({ data: { used_count: _.inc(1) 
 
 **为什么只存差量**：国务院安排逐年更新，存全量会被旧配置钉死；存差量换年自动跟新，点回默认值即删条目。
 
+**逐日编辑器（我的页「公共假期安排」）**：
+
+- 年份切换：`getHolidayYears()` 取内置数据覆盖的年份，默认今年；`getHolidayInfoList(year)` / `getHolidayPlanDays(name, year)` / `getHolidayPlanChangedCount(name, year)` / `resetHolidayPlan(name, year)` **全部带年份**，跨年配置互不影响
+- 条带每条带 `makeup`（原始安排是补班日）与 `isOff`（裁决后是否休）：`makeup && !isOff` 才在右上角挂「补」，改成休就不挂
+- 数据进云：`holidayPlan` 是**配置不是事实**，不进 `DATE_MAPS`（不按今天裁剪，否则明年的安排永远同步不上去）；合并走 `mergeKeyed` 按日期三向，差异清单报一条「公共假期安排」
+
 **两个必踩的坑**：
 
 1. `isOfficialWorkingDay` 里差量改成的「上班日」会掉进 `compOffRules` 分支被拦回——必须先判 `holiday.overridden`
-2. `getHolidayPlanDays(name)` 必须按年份过滤，否则 2026 / 2027 同名节日混进同一条日历带
+2. 条带 / 已调整天数 / 重置都必须按年份过滤，否则 2026 / 2027 同名节日混进同一条日历带、重置还会连带清掉另一年
 
-**日历渲染**：假期安排的每一格都套公共假期底色（含补班日）；节日名只在真休假的日子显示（`showHolidayLabel` = 有节日名 && 当天不上班），补班日只留底色 + 右上角「班」徽章。
+**日历渲染**：`getDayClass` 只按**裁决后的 `isOffDay`** 分流——休 = 公共假期粉底，上班 = `holiday-work` 灰底；节日名只在**国务院原始放假日**上写（`showHolidayLabel` 看 `rawIsOffDay`），补班日（哪怕在安排里改成休）不写名字，要上班的只挂右上角「班」徽章。
 
 ### 5.9 Canvas 分享卡
 
@@ -340,13 +346,13 @@ where({ _id, used_count: _.lt(maxUses) }).update({ data: { used_count: _.inc(1) 
 
 | 脚本 | 覆盖 |
 |---|---|
-| `sync-flow.mjs`（145） | 三向合并、日期边界、删除传播、冲突 |
+| `sync-flow.mjs`（154） | 三向合并、日期边界、删除传播、冲突 |
 | `customleave.mjs`（133） | 自定义假区间/按天、半天、额度扣减 |
 | `palette.mjs`（280）/ `palette-vm.mjs`（97） | 色板取值与视图模型 |
 | `halfday.mjs`（98） | 半天口径迁移对比（基线每次从 git 重新生成） |
 | `compat.mjs`（53） | v1 → v2 升级兼容：旧实现写、新代码读 |
 | `stats-chart.mjs`（51） | 统计口径与图表数据 |
-| `holiday-plan.mjs`（46） | 假期安排差量、补班日口径、条带、重置 |
+| `holiday-plan.mjs`（64） | 公共假期安排差量、补班日口径与「补」标识、按年条带/重置 |
 | `wio-consistency.mjs`（43） | 数据层与视图层口径一致 |
 | `redeem.mjs`（30） | 核销、并发抢码、名额回滚、不限次 |
 | `refund.mjs`（28）/ `refundnotify.mjs`（20） | 退款与退款推送 |

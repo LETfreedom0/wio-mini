@@ -155,10 +155,21 @@
         </view>
       </view>
 
-      <!-- 假期安排：点节日 chip 在卡内展开横向日历带，标红=休、灰=上班/补班，默认国务院安排 -->
+      <!-- 公共假期安排：点节日 chip 在卡内展开横向日历带，标红=休、灰=上班/补班，默认国务院安排 -->
       <view class="settings-card">
         <view class="card-header-row">
           <text class="card-title">{{ i18n.profile.holidayPlanTitle }}</text>
+          <view class="year-switch">
+            <view
+              v-for="y in planYearList"
+              :key="y"
+              class="year-pill"
+              :class="{ active: planYear === y }"
+              @click="setPlanYear(y)"
+            >
+              <text class="year-pill-text">{{ y }}</text>
+            </view>
+          </view>
           <view class="info-btn" @click="showHolidayPlanInfo">
             <text class="info-icon">i</text>
           </view>
@@ -203,6 +214,10 @@
                 <text class="pd-month">{{ d.month }}{{ i18n.profile.holidayPlanMonthUnit }}</text>
                 <text class="pd-date">{{ d.day }}</text>
                 <text class="pd-week">{{ weekdayLabel(d.wd) }}</text>
+                <!-- 补班日（国务院原始安排里要上班）：右上角「补」，改成休就不挂了 -->
+                <view v-if="d.makeup && !d.isOff" class="pd-makeup-badge">
+                  <text class="pd-makeup-text">{{ i18n.profile.holidayMakeupBadge }}</text>
+                </view>
                 <view v-if="d.changed" class="pd-diff-dot"></view>
               </view>
             </view>
@@ -216,6 +231,10 @@
             <view class="legend-item">
               <view class="legend-box legend-work"></view>
               <text class="legend-text">{{ i18n.profile.holidayLegendWork }}</text>
+            </view>
+            <view v-if="planHasMakeup" class="legend-item">
+              <view class="legend-badge">{{ i18n.profile.holidayMakeupBadge }}</view>
+              <text class="legend-text">{{ i18n.profile.holidayLegendMakeup }}</text>
             </view>
             <view class="legend-item">
               <view class="legend-dot"></view>
@@ -388,14 +407,15 @@ export default {
         sickDaysUsed: 0,
         totalOvertime: 0
       },
-      holidayList: [], // 完整节日列表
+      holidayList: [], // 当前年份的节日列表
       showRuleSheet: false,
-      // 假期安排：当前展开的节日（原始中文名）+ 日历带数据 + 已调整天数
+      // 公共假期安排：当前年份 + 展开的节日（原始中文名）+ 日历带数据 + 已调整天数
       planHoliday: '',
       planStrip: [],
       planChanged: 0,
       planYear: new Date().getFullYear(),
-      planMarks: {}, // 节日名 → 已调整天数（chip 金点）
+      planYearList: [], // 内置数据覆盖的年份
+      planMarks: {}, // 节日名 → 该年已调整天数（chip 金点）
       showBirthdaySheet: false,
       // ===== 自定义假期 =====
       customLeaves: [],
@@ -434,6 +454,10 @@ export default {
   computed: {
     i18n() {
       return locales[this.settings.language] || locales['zh-CN'];
+    },
+    // 当前假期里是否有「要上班的补班日」——有才显示图例里的「补」
+    planHasMakeup() {
+      return this.planStrip.some(d => d.makeup && !d.isOff);
     },
     versionLabel() {
       return APP_VERSION_LABEL;
@@ -516,8 +540,7 @@ export default {
   },
   mounted() {
     this.loadSettings();
-    this.holidayList = wioService.getHolidayInfoList();
-    this.refreshPlanMarks();
+    this.initPlanYear();
     this.session = getAuth();
     this.bindSync();
     // 组件内的 onShow 不会被触发，语言切换靠全局广播兜住
@@ -604,7 +627,7 @@ export default {
       }
       return item.name;
     },
-    // ===== 假期安排 =====
+    // ===== 公共假期安排 =====
     // 星期短标签：中英各一份，wd 为 Date.getDay() 索引
     weekdayLabel(wd) {
       if (this.settings.language === 'en-US') {
@@ -612,10 +635,42 @@ export default {
       }
       return '日一二三四五六'[wd] || '';
     },
+    // 年份：默认今年；内置数据没有今年时取最后一年
+    initPlanYear() {
+      this.planYearList = wioService.getHolidayYears();
+      if (!this.planYearList.length) {
+        this.holidayList = [];
+        this.planMarks = {};
+        return;
+      }
+      const cur = new Date().getFullYear();
+      this.planYear = this.planYearList.indexOf(cur) >= 0
+        ? cur
+        : this.planYearList[this.planYearList.length - 1];
+      this.loadHolidayList();
+    },
+    loadHolidayList() {
+      this.holidayList = wioService.getHolidayInfoList(this.planYear);
+      this.refreshPlanMarks();
+    },
+    setPlanYear(y) {
+      if (this.planYear === y) return;
+      haptic('light');
+      this.planYear = y;
+      this.loadHolidayList();
+      // 换年后展开的节日还在（春节这种年年有）就保持展开，否则收起
+      if (this.planHoliday && this.holidayList.some(i => i.name === this.planHoliday)) {
+        this.refreshPlanStrip();
+      } else {
+        this.planHoliday = '';
+        this.planStrip = [];
+        this.planChanged = 0;
+      }
+    },
     refreshPlanMarks() {
       const marks = {};
       this.holidayList.forEach(item => {
-        const n = wioService.getHolidayPlanChangedCount(item.name);
+        const n = wioService.getHolidayPlanChangedCount(item.name, this.planYear);
         if (n > 0) marks[item.name] = n;
       });
       this.planMarks = marks;
@@ -634,10 +689,8 @@ export default {
     },
     refreshPlanStrip() {
       if (!this.planHoliday) return;
-      this.planStrip = wioService.getHolidayPlanDays(this.planHoliday);
-      this.planChanged = wioService.getHolidayPlanChangedCount(this.planHoliday);
-      const first = this.planStrip[0];
-      if (first) this.planYear = Number(first.date.slice(0, 4));
+      this.planStrip = wioService.getHolidayPlanDays(this.planHoliday, this.planYear);
+      this.planChanged = wioService.getHolidayPlanChangedCount(this.planHoliday, this.planYear);
     },
     togglePlanDay(d) {
       haptic('light');
@@ -649,7 +702,7 @@ export default {
     },
     resetPlanHoliday() {
       haptic('light');
-      wioService.resetHolidayPlan(this.planHoliday);
+      wioService.resetHolidayPlan(this.planHoliday, this.planYear);
       this.settings = wioService.getSettings();
       this.refreshPlanStrip();
       this.refreshPlanMarks();
@@ -1449,6 +1502,42 @@ export default {
   flex-shrink: 0;
 }
 
+/* 年度切换：内置数据覆盖的年份，默认今年 */
+.year-switch {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.year-pill {
+  padding: 2px 7px;
+  border-radius: 9px;
+  background: #F4F5F6;
+  transition: background 0.15s ease;
+}
+
+.year-pill-text {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #8A9098;
+}
+
+.year-pill.active {
+  background: rgba(14, 110, 98, 0.1);
+}
+
+.year-pill.active .year-pill-text {
+  color: #0E6E62;
+  font-weight: 600;
+}
+
+.year-pill:active {
+  opacity: 0.7;
+}
+
 .plan-strip {
   margin-top: 14px;
   padding-top: 12px;
@@ -1566,6 +1655,35 @@ export default {
   border-radius: 50%;
   background: #C08A2D;
   border: 1.5px solid #FFFFFF;
+}
+
+/* 补班日 → 右上角「补」（改成休就不挂） */
+.pd-makeup-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.pd-makeup-text {
+  font-size: 8px;
+  line-height: 1.5;
+  color: #C0392B;
+  font-weight: 600;
+}
+
+.legend-badge {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: #FFFFFF;
+  border: 1px solid #EFF1F3;
+  font-size: 8px;
+  line-height: 1.5;
+  color: #C0392B;
+  font-weight: 600;
 }
 
 .plan-legend {

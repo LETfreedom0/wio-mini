@@ -1175,8 +1175,14 @@ export default {
    * 获取所有节日信息列表
    * @returns {Array<{name: string, hasCompOff: boolean}>}
    */
-  getHolidayInfoList() {
-      const days = this._allHolidayDays();
+  /**
+   * 某年的节日列表（chip 数据源）
+   * @param {number} [year] - 缺省当前年份
+   * @returns {Array<{name, hasCompOff}>}
+   */
+  getHolidayInfoList(year) {
+      const y = Number(year) || new Date().getFullYear();
+      const days = this._allHolidayDays().filter(d => d && d.date.slice(0, 4) === String(y));
       if (!days.length) return [];
 
       const holidayMap = new Map();
@@ -1193,6 +1199,18 @@ export default {
       });
       
       return Array.from(holidayMap.values());
+  },
+
+  /**
+   * 内置节假日数据覆盖的年份（升序），供「假期安排」年度切换使用
+   * @returns {number[]}
+   */
+  getHolidayYears() {
+    const years = new Set();
+    this._allHolidayDays().forEach(d => {
+      if (d && d.date) years.add(Number(d.date.slice(0, 4)));
+    });
+    return Array.from(years).filter(y => y > 0).sort((a, b) => a - b);
   },
 
   // ============================================================
@@ -1221,8 +1239,9 @@ export default {
    * @param {string} name - 节日名（如 '国庆节'，原始中文名，UI 层再做多语言映射）
    * @param {number} [year] - 缺省取当前年份（2026/2027 同名节日只展示一年，
    *                          跨年配置不丢——差量按日期存，换年自动是新的一年）
-   * @returns {Array<{date,month,day,wd,weekday,isOff,changed}>}
+   * @returns {Array<{date,month,day,wd,weekday,isOff,changed,makeup}>}
    *   isOff = 裁决后的有效状态（含差量）；changed = 与国务院默认不同
+   *   makeup = 国务院原始安排里是补班日（UI 挂「补」角标）
    */
   getHolidayPlanDays(name, year) {
     const y = Number(year) || new Date().getFullYear();
@@ -1241,7 +1260,8 @@ export default {
         wd: d.getDay(),
         weekday: '日一二三四五六'[d.getDay()],
         isOff: overridden ? o === 'off' : this._rawIsOffDay(raw),
-        changed: this._planDiffers(plan, raw)
+        changed: this._planDiffers(plan, raw),
+        makeup: !this._rawIsOffDay(raw)
       };
     });
   },
@@ -1272,16 +1292,20 @@ export default {
   /**
    * 重置假期安排：传节日名只清该节日的差量，不传清全部
    * @param {string} [name] - 节日名
+   * @param {number} [year] - 只清这一年的差量（缺省清该节日所有年份）
    */
-  resetHolidayPlan(name) {
+  resetHolidayPlan(name, year) {
     const s = this.getSettings();
     const plan = { ...(s.holidayPlan || {}) };
+    const y = Number(year) || null;
     if (name) {
       this._allHolidayDays()
-        .filter(d => d && d.name === name)
+        .filter(d => d && d.name === name && (!y || d.date.slice(0, 4) === String(y)))
         .forEach(d => { delete plan[d.date]; });
     } else {
-      Object.keys(plan).forEach(k => { delete plan[k]; });
+      Object.keys(plan).forEach(k => {
+        if (!y || k.slice(0, 4) === String(y)) delete plan[k];
+      });
     }
     this.saveSettings({ ...s, holidayPlan: plan });
   },
@@ -1289,12 +1313,14 @@ export default {
   /**
    * 某节日「已调整」天数（与国务院默认不同的天）——chip 金点与右上角文案用
    * @param {string} name - 节日名
+   * @param {number} [year] - 缺省当前年份
    * @returns {number}
    */
-  getHolidayPlanChangedCount(name) {
+  getHolidayPlanChangedCount(name, year) {
+    const y = Number(year) || new Date().getFullYear();
     const plan = this.getSettings().holidayPlan || {};
     return this._allHolidayDays()
-      .filter(d => d && d.name === name && this._planDiffers(plan, d))
+      .filter(d => d && d.name === name && d.date.slice(0, 4) === String(y) && this._planDiffers(plan, d))
       .length;
   },
 

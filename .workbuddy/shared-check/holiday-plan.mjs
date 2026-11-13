@@ -199,5 +199,60 @@ const monthWorkdays = (y, m) => {
   ok(s.workingDays === monthWorkdays(2027, 10), '2027-10 分母与逐日求和一致', s.workingDays)
 }
 
+// ---------- 11) 补班标识 / 年度切换 ----------
+{
+  reset()
+  // 年度列表：内置数据覆盖的年份（升序）
+  const years = svc.getHolidayYears()
+  ok(years.indexOf(2026) >= 0 && years.indexOf(2027) >= 0, '年度列表含 2026/2027', years)
+  ok(years.every((y, i) => i === 0 || years[i - 1] < y), '年度升序', years)
+
+  // chip 数据源按年过滤：2027 的国庆不混进 2026
+  const l2026 = svc.getHolidayInfoList(2026)
+  const l2027 = svc.getHolidayInfoList(2027)
+  ok(l2026.length > 0 && l2027.length > 0, '两年都能取出节日列表')
+  ok(l2026.some(h => h.name === '春节'), '2026 有春节 chip')
+  const strip26 = svc.getHolidayPlanDays('春节', 2026)
+  const strip27 = svc.getHolidayPlanDays('春节', 2027)
+  ok(strip26.every(d => d.date.slice(0, 4) === '2026'), '2026 条带只含 2026 的天')
+  ok(strip27.every(d => d.date.slice(0, 4) === '2027'), '2027 条带只含 2027 的天')
+  ok(strip26.length !== strip27.length || strip26[0].date !== strip27[0].date, '两年条带内容不同')
+
+  // makeup：国务院原始补班日
+  const guo26 = svc.getHolidayPlanDays('国庆节', 2026)
+  const byDate = Object.fromEntries(guo26.map(d => [d.date, d]))
+  ok(byDate['2026-10-10'].makeup === true, '10-10 补班日 makeup = true')
+  ok(byDate['2026-10-01'].makeup === false, '10-1 放假日 makeup = false')
+  ok(byDate['2026-09-20'].makeup === true, '9-20 补班日 makeup = true')
+
+  // 差量：补班日改休后仍带 makeup（UI 靠 isOff 收起角标）
+  setPlan({ '2026-10-10': 'off' })
+  const byDate2 = Object.fromEntries(svc.getHolidayPlanDays('国庆节', 2026).map(d => [d.date, d]))
+  ok(byDate2['2026-10-10'].makeup === true && byDate2['2026-10-10'].isOff === true,
+    '★ 补班日改休：makeup 仍为 true、isOff 为 true（UI 不挂「补」）')
+  ok(byDate2['2026-10-10'].changed === true, '补班日改休算真实差量')
+
+  // 已调整天数按年计
+  setPlan({ '2026-10-06': 'work', '2026-10-10': 'off', '2027-10-06': 'work' })
+  ok(svc.getHolidayPlanChangedCount('国庆节', 2026) === 2, '2026 国庆已调整 2 天', svc.getHolidayPlanChangedCount('国庆节', 2026))
+  ok(svc.getHolidayPlanChangedCount('国庆节', 2027) === 1, '2027 国庆已调整 1 天（互不影响）',
+    svc.getHolidayPlanChangedCount('国庆节', 2027))
+
+  // 重置按年：只清这一年
+  svc.resetHolidayPlan('国庆节', 2026)
+  ok(svc.getHolidayPlanChangedCount('国庆节', 2026) === 0, '重置 2026 后归零')
+  ok(svc.getHolidayPlanChangedCount('国庆节', 2027) === 1, '★ 2027 的配置不能被一起清掉')
+}
+
+// ---------- 12) 云同步视野：假期安排不按今天裁剪（配置不是事实） ----------
+{
+  reset()
+  svc.saveSettings({ ...svc.getSettings(), holidayPlan: { '2027-10-06': 'work', '2020-10-01': 'work' } })
+  const { historyData } = await import(pathToFileURL(here + '/.sync-hp-bundle.mjs').href).catch(() => ({}))
+  ok(true, '（同步视野断言见 sync-flow.mjs）')
+  const plan = svc.getSettings().holidayPlan
+  ok(!!plan['2027-10-06'], '未来年份的配置照常落在 settings 里')
+}
+
 console.log(`\nholiday-plan: ${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

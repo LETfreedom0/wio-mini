@@ -74,6 +74,9 @@ function snapshotData() {
 /** 三个按日期键的 settings 容器（customLeaves 是区间配置，不在此列） */
 const DATE_MAPS = ['customMarks', 'halfFullDays', 'touchedAt']
 
+// holidayPlan 也是按日期键，但它是**配置不是事实**：2027 年的假期安排现在就要能存、
+// 能同步，所以不进 DATE_MAPS（不按今天裁剪），合并时按日期三向。
+
 function todayStr() {
   const d = new Date()
   const p = n => String(n).padStart(2, '0')
@@ -388,7 +391,8 @@ function diffPlan(base, local, cloud) {
   const CONTAINER = [
     ['halfFullDays', 'syncSetHalfFull'],
     ['customMarks', 'syncSetMarks'],
-    ['compOffRules', 'syncSetCompOff']
+    ['compOffRules', 'syncSetCompOff'],
+    ['holidayPlan', 'syncSetHolidayPlan']
   ]
   CONTAINER.forEach(pair => {
     const k = pair[0]
@@ -540,7 +544,7 @@ export function mergeForUpload(base, local, cloud, cloudWins) {
     return outMap
   }
 
-  ;['halfFullDays', 'compOffRules', 'customMarks', 'touchedAt'].forEach(k => {
+  ;['halfFullDays', 'compOffRules', 'customMarks', 'touchedAt', 'holidayPlan'].forEach(k => {
     settings[k] = mergeKeyed(ss[k], ls[k], cs[k])
   })
 

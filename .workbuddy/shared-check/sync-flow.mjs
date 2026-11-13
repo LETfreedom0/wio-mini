@@ -648,6 +648,47 @@ await scenario('H6 英文界面下明细也是英文', async ({ env, cloud, s })
   ok(!!marry && /d\/yr/.test(marry.local), '★ 自定义假期的额度写法要英文化')
 })
 
+
+await scenario('H7 公共假期安排：按日期三向合并，未来年份照样上传', async ({ env, cloud, s }) => {
+  env.write('wio_sync_base', {
+    __v: 1,
+    settings: { language: 'zh-CN', holidayPlan: { '2026-10-06': 'work', '2027-10-06': 'work' } },
+    entries: {}, overtime: {}
+  })
+  // 本机删掉了 2027-10-06 的差量，云端还多一条 2027-10-07
+  env.write('wio_settings', { language: 'zh-CN', holidayPlan: { '2026-10-06': 'work' } })
+  cloud.seed(snap({}, {
+    settings: {
+      language: 'zh-CN',
+      holidayPlan: { '2026-10-06': 'work', '2027-10-06': 'work', '2027-10-07': 'work' }
+    }
+  }), 46)
+
+  const r = await s.prepareUpload()
+  const detail = r.plan.settingsDetail.find(x => x.label === '公共假期安排')
+  ok(!!detail, '★ 差异清单要有「公共假期安排」一条')
+  const up = await s.uploadMerge(r.plan)
+  ok(up.ok, '上传成功')
+  const plan = cloud.peek().data.settings.holidayPlan
+  ok(!!plan['2026-10-06'], '本机保留的天要上传')
+  ok(!plan['2027-10-06'], '★ 本机删掉的差量不能从云端复活')
+  ok(!!plan['2027-10-07'], '★ 云端独有的天要收下')
+  ok(plan['2027-10-07'] === 'work', '云端独有天保持原值（不被覆盖成 off）')
+})
+
+await scenario('H8 公共假期安排：未来年份不按「今天」裁剪', async ({ env, cloud, s }) => {
+  // 2027 的配置全部在未来，若被当成日期事实裁掉就永远同步不上去
+  env.write('wio_settings', { language: 'zh-CN', holidayPlan: { '2027-10-06': 'work', '2027-10-07': 'work' } })
+  cloud.seed(snap({}), 47)
+  const r = await s.prepareUpload()
+  const up = await s.uploadMerge(r.plan)
+  ok(up.ok, '上传成功')
+  const plan = cloud.peek().data.settings.holidayPlan
+  ok(!!plan['2027-10-06'] && !!plan['2027-10-07'], '★ 明年的假期安排要能上云')
+  const local = env.read('wio_settings')
+  ok(local.holidayPlan && local.holidayPlan['2027-10-06'] === 'work', '本机配置不能被上传流程抹掉')
+})
+
 // ---------- F. 摘要 ----------
 
 await scenario('F1 摘要只读缓存', async ({ env, cloud, s }) => {
