@@ -1288,10 +1288,12 @@ export default {
           cls = 'status-custom';
         } else {
           const holiday = this.getHolidayInfo(day);
-          // 假期安排的每一格都套公共假期底色（含补班日）：
-          // 休假日 = 粉底 + 节日名，补班日 = 粉底 + 右上角「班」徽章，不写节日名
+          // 裁决后的 isOffDay 才决定颜色：
+          //   休 = 公共假期粉底 + 节日名
+          //   上班（国务院补班日、或被「假期安排」改成上班的法定假）= 灰底 + 「班」徽章
+          // 这里若一律套假期色，10-6/10-7 这种「公司照常上班」的日子会被误读成放假。
           if (holiday) {
-            cls = 'status-public';
+            cls = holiday.isOffDay ? 'status-public' : 'holiday-work';
           }
         }
       }
@@ -1787,7 +1789,7 @@ export default {
 }
 
 /* 无标记的今天：留蓝框蓝字，只是不再铺蓝底（蓝底才是盖住标记色的元凶） */
-.today-highlight:not(.company-office):not(.home-office):not(.status-vacation):not(.status-birthday):not(.status-comp-off):not(.status-sick):not(.status-unpaid):not(.status-public):not(.status-exclude-wio):not(.status-custom) {
+.today-highlight:not(.company-office):not(.home-office):not(.status-vacation):not(.status-birthday):not(.status-comp-off):not(.status-sick):not(.status-unpaid):not(.status-public):not(.holiday-work):not(.status-exclude-wio):not(.status-custom) {
   color: #1976D2;
   border: 2px solid #1976D2;
   border-radius: 12px;
@@ -1802,6 +1804,7 @@ export default {
 .today-highlight.status-sick,
 .today-highlight.status-unpaid,
 .today-highlight.status-public,
+.today-highlight.holiday-work,
 .today-highlight.status-exclude-wio,
 .today-highlight.status-custom {
   border: 3px solid #1976D2;
@@ -2092,6 +2095,10 @@ export default {
 .status-sick { background-color: #E1BEE7; color: #4A148C; }
 .status-unpaid { background-color: #F5F5F5; color: #616161; border: 1px dashed #9E9E9E; }
 .status-public { background-color: #FFCDD2; color: #B71C1C; }
+/* 假期安排里「要上班」的日子：国务院补班日、被改成上班的法定假。
+   灰底 + 灰字 + 右上角「班」徽章 —— 只是「这天是假期安排的一部分」，不是放假。
+   不带虚线边，与 status-exclude-wio（不计入 WIO）区分开。 */
+.holiday-work { background-color: #EAEAEA; color: #616161; }
 .status-exclude-wio { background-color: #ECEFF1; color: #607D8B; border: 1px dashed #90A4AE; }
 /* 周末上不计数（weekendLeaves 口径）的标记：压淡，提示「这天不进统计」。
    法定放假日上的标记不压淡——标记即覆盖，那天按工作日算（isOffDayOverride） */
