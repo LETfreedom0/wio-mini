@@ -168,11 +168,22 @@
               @click="setPlanYear(y)"
             >
               <text class="year-pill-text">{{ y }}</text>
+              <view v-if="yearMarks[y] > 0" class="year-dot"></view>
             </view>
           </view>
           <view class="info-btn" @click="showHolidayPlanInfo">
             <text class="info-icon">i</text>
           </view>
+        </view>
+
+        <!-- 不点开也知道这是什么：左边说它影响什么，右边说这一年改没改过 -->
+        <view class="plan-hint-row">
+          <text class="plan-hint">{{ i18n.profile.holidayPlanHint }}</text>
+          <text class="plan-state" :class="{ 'is-custom': yearAdjusted > 0 }">
+            {{ yearAdjusted > 0
+              ? i18n.profile.holidayPlanAdjusted.replace('{n}', yearAdjusted)
+              : i18n.profile.holidayPlanDefaultTag }}
+          </text>
         </view>
 
         <scroll-view class="holiday-scroll" scroll-x="true" show-scrollbar="false">
@@ -197,9 +208,10 @@
               {{ getHolidayName({ name: planHoliday }) }}
               <text class="plan-strip-year">{{ planYear }}</text>
             </text>
-            <text class="plan-strip-reset" @click="resetPlanHoliday">
-              {{ planChanged > 0 ? i18n.profile.holidayPlanResetBtn : i18n.profile.holidayPlanDefaultTag }}
+            <text v-if="planChanged > 0" class="plan-strip-reset" @click="resetPlanHoliday">
+              {{ i18n.profile.holidayPlanResetWithCount.replace('{n}', planChanged) }}
             </text>
+            <text v-else class="plan-strip-ok">{{ i18n.profile.holidayPlanDefaultTag }}</text>
           </view>
 
           <scroll-view class="plan-days-scroll" scroll-x="true" show-scrollbar="false">
@@ -213,11 +225,9 @@
               >
                 <text class="pd-month">{{ d.month }}{{ i18n.profile.holidayPlanMonthUnit }}</text>
                 <text class="pd-date">{{ d.day }}</text>
-                <text class="pd-week">{{ weekdayLabel(d.wd) }}</text>
-                <!-- 补班日（国务院原始安排里要上班）：右上角「补」，改成休就不挂了 -->
-                <view v-if="d.makeup && !d.isOff" class="pd-makeup-badge">
-                  <text class="pd-makeup-text">{{ i18n.profile.holidayMakeupBadge }}</text>
-                </view>
+                <!-- 第三行：平时是星期；补班日（原始安排要上班、且没改成休）换成「补」——
+                     角标会压住日期，换成这一行既不挡字，也比小角标好认 -->
+                <text class="pd-week" :class="{ 'is-makeup': d.makeup && !d.isOff }">{{ d.makeup && !d.isOff ? i18n.profile.holidayMakeupBadge : weekdayLabel(d.wd) }}</text>
                 <view v-if="d.changed" class="pd-diff-dot"></view>
               </view>
             </view>
@@ -233,14 +243,13 @@
               <text class="legend-text">{{ i18n.profile.holidayLegendWork }}</text>
             </view>
             <view v-if="planHasMakeup" class="legend-item">
-              <view class="legend-badge">{{ i18n.profile.holidayMakeupBadge }}</view>
+              <text class="legend-makeup">{{ i18n.profile.holidayMakeupBadge }}</text>
               <text class="legend-text">{{ i18n.profile.holidayLegendMakeup }}</text>
             </view>
             <view class="legend-item">
               <view class="legend-dot"></view>
               <text class="legend-text">{{ i18n.profile.holidayLegendDiff }}</text>
             </view>
-            <text v-if="planChanged > 0" class="legend-changed">{{ i18n.profile.holidayPlanAdjusted.replace('{n}', planChanged) }}</text>
           </view>
         </view>
 
@@ -416,6 +425,7 @@ export default {
       planYear: new Date().getFullYear(),
       planYearList: [], // 内置数据覆盖的年份
       planMarks: {}, // 节日名 → 该年已调整天数（chip 金点）
+      yearMarks: {}, // 年份 → 该年已调整天数（年份 pill 金点 + 卡头状态）
       showBirthdaySheet: false,
       // ===== 自定义假期 =====
       customLeaves: [],
@@ -458,6 +468,10 @@ export default {
     // 当前假期里是否有「要上班的补班日」——有才显示图例里的「补」
     planHasMakeup() {
       return this.planStrip.some(d => d.makeup && !d.isOff);
+    },
+    // 当前年份一共改过几天（0 = 完全按国务院安排）
+    yearAdjusted() {
+      return this.yearMarks[this.planYear] || 0;
     },
     versionLabel() {
       return APP_VERSION_LABEL;
@@ -641,6 +655,7 @@ export default {
       if (!this.planYearList.length) {
         this.holidayList = [];
         this.planMarks = {};
+        this.yearMarks = {};
         return;
       }
       const cur = new Date().getFullYear();
@@ -669,11 +684,21 @@ export default {
     },
     refreshPlanMarks() {
       const marks = {};
-      this.holidayList.forEach(item => {
-        const n = wioService.getHolidayPlanChangedCount(item.name, this.planYear);
-        if (n > 0) marks[item.name] = n;
+      const years = {};
+      // 每个年份单独统计（金点要能标出「另一年也改过」），当前年同时生成节日级 marks
+      this.planYearList.forEach(y => {
+        let total = 0;
+        wioService.getHolidayInfoList(y).forEach(item => {
+          const n = wioService.getHolidayPlanChangedCount(item.name, y);
+          if (n > 0) {
+            total += n;
+            if (y === this.planYear) marks[item.name] = n;
+          }
+        });
+        years[y] = total;
       });
       this.planMarks = marks;
+      this.yearMarks = years;
     },
     selectPlanHoliday(item) {
       haptic('light');
@@ -1502,26 +1527,32 @@ export default {
   flex-shrink: 0;
 }
 
-/* 年度切换：内置数据覆盖的年份，默认今年 */
+/* 年度切换：内置数据覆盖的年份，默认今年。
+   高度压到 18px、圆角收到 6px，比原来的胶囊更像一个小控件，不抢标题 */
 .year-switch {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   margin-left: auto;
   margin-right: 8px;
 }
 
 .year-pill {
-  padding: 2px 7px;
-  border-radius: 9px;
+  position: relative;
+  height: 18px;
+  padding: 0 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
   background: #F4F5F6;
   transition: background 0.15s ease;
 }
 
 .year-pill-text {
-  font-size: 10.5px;
-  line-height: 1.5;
+  font-size: 10px;
+  line-height: 1;
   color: #8A9098;
 }
 
@@ -1536,6 +1567,46 @@ export default {
 
 .year-pill:active {
   opacity: 0.7;
+}
+
+/* 这一年改过 → 年份右上角一个小金点（另一年改过也能一眼看到） */
+.year-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #C08A2D;
+}
+
+/* 卡头副行：左边「影响什么」，右边「这一年改没改」 */
+.plan-hint-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 5px;
+}
+
+.plan-hint {
+  flex: 1;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: #9AA1A8;
+}
+
+.plan-state {
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: #A3A9B0;
+}
+
+.plan-state.is-custom {
+  color: #C08A2D;
+  font-weight: 500;
 }
 
 .plan-strip {
@@ -1566,11 +1637,18 @@ export default {
 
 .plan-strip-reset {
   font-size: 11px;
-  color: #A3A9B0;
+  color: #C08A2D;
+  font-weight: 500;
 }
 
 .plan-strip-reset:active {
   opacity: 0.6;
+}
+
+/* 没改过的节日：只做静态提示，不给「恢复默认」的假按钮 */
+.plan-strip-ok {
+  font-size: 10.5px;
+  color: #B9BFC5;
 }
 
 .plan-days-scroll {
@@ -1657,33 +1735,21 @@ export default {
   border: 1.5px solid #FFFFFF;
 }
 
-/* 补班日 → 右上角「补」（改成休就不挂） */
-.pd-makeup-badge {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  padding: 0 3px;
-  border-radius: 4px;
-  background: #FFFFFF;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+/* 补班日：第三行「星期」换成「补」（深灰、加粗、拉开字距），
+   不占角标位置、不压日期；红=休假、金=与国务院不同，这里用中性色避开两种语义 */
+.pd-week.is-makeup {
+  font-size: 8.5px;
+  font-weight: 700;
+  color: #5A6672;
+  letter-spacing: 0.5px;
 }
 
-.pd-makeup-text {
-  font-size: 8px;
-  line-height: 1.5;
-  color: #C0392B;
-  font-weight: 600;
-}
-
-.legend-badge {
-  padding: 0 3px;
-  border-radius: 3px;
-  background: #FFFFFF;
-  border: 1px solid #EFF1F3;
-  font-size: 8px;
-  line-height: 1.5;
-  color: #C0392B;
-  font-weight: 600;
+.legend-makeup {
+  font-size: 9px;
+  font-weight: 700;
+  color: #5A6672;
+  letter-spacing: 0.5px;
+  line-height: 1.4;
 }
 
 .plan-legend {
@@ -1727,13 +1793,6 @@ export default {
 .legend-text {
   font-size: 10.5px;
   color: #A3A9B0;
-}
-
-.legend-changed {
-  margin-left: auto;
-  font-size: 10.5px;
-  color: #C08A2D;
-  font-weight: 500;
 }
 
 .empty-hint {

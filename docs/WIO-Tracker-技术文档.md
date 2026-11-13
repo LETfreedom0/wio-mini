@@ -318,7 +318,8 @@ where({ _id, used_count: _.lt(maxUses) }).update({ data: { used_count: _.inc(1) 
 **逐日编辑器（我的页「公共假期安排」）**：
 
 - 年份切换：`getHolidayYears()` 取内置数据覆盖的年份，默认今年；`getHolidayInfoList(year)` / `getHolidayPlanDays(name, year)` / `getHolidayPlanChangedCount(name, year)` / `resetHolidayPlan(name, year)` **全部带年份**，跨年配置互不影响
-- 条带每条带 `makeup`（原始安排是补班日）与 `isOff`（裁决后是否休）：`makeup && !isOff` 才在右上角挂「补」，改成休就不挂
+- 条带每条带 `makeup`（原始安排是补班日）与 `isOff`（裁决后是否休）：`makeup && !isOff` 时**第三行「星期」直接换成「补」**（角标会压住日期，占一行更好认；红=休、金=改过，所以「补」用中性深灰），改成休就恢复显示星期
+- 卡头副行 `.plan-hint-row`：左边说这张卡影响什么（月/年统计与分享卡），右边说这一年改过几天（0 天显示「按国务院安排」）；年份 pill 右上角小金点 = 那年改过，不用点开就知道
 - 数据进云：`holidayPlan` 是**配置不是事实**，不进 `DATE_MAPS`（不按今天裁剪，否则明年的安排永远同步不上去）；合并走 `mergeKeyed` 按日期三向，差异清单报一条「公共假期安排」
 
 **两个必踩的坑**：
