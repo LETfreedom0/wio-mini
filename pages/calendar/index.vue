@@ -1333,7 +1333,9 @@ export default {
       if (mark) {
         return { background: this.hexToRgba(mark.leave.color, 0.16), color: mark.leave.color };
       }
-      const cl = (this.customLeaves || []).find(l => l.mode !== 'day' && dateStr >= l.start && dateStr <= l.end);
+      // 区间型：与 rangeLeaveForDate / getCustomLeaveForDate 同口径
+      //（勾了「跳过周末与公共假日」的区间，周末与公休不上色）
+      const cl = this.rangeLeaveForDate(dateStr);
       if (!cl) return null;
       return { background: this.hexToRgba(cl.color, 0.16), color: cl.color };
     },
