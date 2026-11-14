@@ -82,7 +82,7 @@
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
 import { purchase } from '@/utils/pay.js'
-import { login, isLogin, claimAdTrial } from '@/utils/auth.js'
+import { isLogin, claimAdTrial } from '@/utils/auth.js'
 import { isProUser } from '@/utils/pro.js'
 import { showRewardedAd } from '@/utils/ads.js'
 import { openAgreement } from '@/utils/legal.js'
@@ -159,16 +159,18 @@ export default {
       if (this.adBusy || this.paying) return
       const lang = this.settings.language
       haptic('light')
+      // 发放要落到 openid 名下：未登录先去「我的」页登录，
+      // 不做静默代登录——身份是付费/权益的前提，要让用户知情
+      if (!isLogin()) {
+        this.$emit('close')
+        uni.showToast({ title: t('profile.adTrialNeedLogin', lang), icon: 'none', duration: 2200 })
+        setTimeout(() => {
+          uni.switchTab({ url: '/pages/profile/index' })
+        }, 1200)
+        return
+      }
       this.adBusy = true
       try {
-        // 发放需要 openid：未登录先就地登录（失败按未登录提示，不再往下走）
-        if (!isLogin()) {
-          try {
-            await login({})
-          } catch (e) {
-            throw { code: 'need_login' }
-          }
-        }
         try {
           await showRewardedAd()
         } catch (e) {
