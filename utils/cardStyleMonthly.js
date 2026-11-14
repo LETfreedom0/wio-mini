@@ -55,7 +55,7 @@ export const LAYOUT_SETTLE = {
   rule: { y: 430 },
   rows: { x1: X, x2: X + W, top: 460, h: 92, labelSize: 33, valueSize: 40, unitSize: 28 },
   foot: { x: X, cy: 850, size: 30 },
-  qr: { x: X + W - 108, y: 796, size: 108, r: 18 }
+  qr: { x: X + W - 108, y: 796, size: 108, pad: 8 }
 }
 
 export function drawSettleCard(ctx, m, qrImage) {
@@ -124,7 +124,7 @@ export const LAYOUT_SEAL = {
   hero: { cx: 375, top: 462, size: 166, maxW: 580, pctRatio: 0.4 },
   heroLabel: { cx: 375, cy: 672, size: 30, tracking: 14 },
   gap: { cx: 375, cy: 778, size: 27 },
-  qr: { x: 327, y: 814, size: 96, r: 14 },
+  qr: { x: 327, y: 814, size: 96, pad: 10 },
   hint: { cx: 375, cy: 950, size: 25 }
 }
 
@@ -168,8 +168,7 @@ export function drawSealCard(ctx, m, qrImage) {
     color: '#E8C987'
   })
 
-  // 白托 + 码：绿底直接画码会缺静区
-  fillRoundRect(ctx, L.qr.x - 10, L.qr.y - 10, L.qr.size + 20, L.qr.size + 20, L.qr.r + 6, '#FDFCF8')
+  // 圆托 + 圆码：绿底直接画码会缺静区；方托会露出直角，托与码同为圆形
   drawQr(ctx, qrImage, L.qr, m.qrPlaceholder || 'WIO')
 
   drawText(ctx, S.scan, { x: 75, y: L.hint.cy - 16, w: 600, h: 32, size: L.hint.size, align: 'center' }, {
@@ -188,7 +187,7 @@ export const LAYOUT_FOOTPRINT = {
   heroLabel: { x: X, cy: 334, size: 26, tracking: 12 },
   grid: { top: 378, cell: 66, gap: 10, r: 16, cols: 7 },
   legend: { size: 27, swatch: 18 },
-  qr: { size: 96, r: 18 }
+  qr: { size: 96, pad: 6 }
 }
 
 export function drawFootprintCard(ctx, m, qrImage) {

@@ -217,7 +217,39 @@ export function drawTrackingText(ctx, str, x, cy, opts = {}) {
   return total
 }
 
+// 二维码 + 底板。小程序码（getUnlimited）本体是圆形，所以默认走 shape:'circle'：
+//   白托是一枚比码大一圈的圆盘（pad = 静区），描边也是圆 —— 方框会在线条码外露出一圈生硬的直角。
+// 占位块（码拿不到时）同样画圆，版面不塌。
 export function drawQr(ctx, qrImage, box, placeholderText) {
+  const circle = box.shape !== 'rect'
+  const pad = box.pad || 0
+  const cx = box.x + box.size / 2
+  const cy = box.y + box.size / 2
+  const r = box.size / 2 + pad
+  if (circle) {
+    if (qrImage) {
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.clip()
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillRect(cx - r, cy - r, r * 2, r * 2)
+      ctx.drawImage(qrImage, box.x, box.y, box.size, box.size)
+      ctx.restore()
+    } else {
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.fillStyle = PALETTE.qrBg
+      ctx.fill()
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = '#C9C5B6'
+      setFont(ctx, Math.round(box.size * 0.22), 600)
+      ctx.fillText(placeholderText, cx, cy)
+    }
+    strokeCircle(ctx, cx, cy, r, PALETTE.line, 1)
+    return
+  }
   if (qrImage) {
     ctx.save()
     roundRect(ctx, box.x, box.y, box.size, box.size, box.r)
