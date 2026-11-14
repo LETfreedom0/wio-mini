@@ -54,7 +54,7 @@ const agreementZh = {
         'WIO PRO 为一次性付费订阅：月卡 30 天，年卡 366 天，到期不自动续费，需要你主动再次购买。价格以下单页面展示为准。',
         '会员权益以「会员」页列出的功能为准，可能随版本更新调整；你已购买的有效期内权益不受影响。',
         '本服务销售的是虚拟商品，一经开通不支持退款。iOS 端的交易款项由 Apple 收取与结算，相关退款规则由 Apple 制定，我们无权代为处理。',
-        '会员收费用于覆盖云存储、平台认证与日常维护等运营成本；本小程序不接入广告，也不通过你的数据盈利。'
+        '会员收费与广告收入用于覆盖云存储、平台认证与日常维护等运营成本。'
       ]
     },
     {
@@ -127,7 +127,7 @@ const agreementEn = {
         'WIO PRO is a one-time paid subscription: 30 days for the monthly plan and 366 days for the yearly plan. It does not renew automatically; you need to purchase again yourself. Prices are those shown on the purchase screen.',
         'The benefits are those listed on the Membership page and may change with app updates; benefits you have already paid for remain valid until they expire.',
         'The App sells digital goods. Once activated, purchases are non-refundable. For purchases made on iOS, the payment is collected and settled by Apple; relevant refund policies are set by Apple, and we are not able to process refunds on your behalf.',
-        'Membership fees exist to cover the operating costs of cloud storage, platform verification and day-to-day maintenance. The App contains no advertising and does not profit from your data.'
+        'Membership fees and ad revenue exist to cover the operating costs of cloud storage, platform verification and day-to-day maintenance.'
       ]
     },
     {
@@ -169,7 +169,7 @@ const agreementEn = {
 const privacyZh = {
   title: '隐私政策',
   updatedLabel: '更新日期：',
-  intro: '本说明介绍 WIO Tracker 如何处理你的个人信息。我们只收集运行所必需的最少信息，不做广告投放，不接入第三方统计或用户画像 SDK。',
+  intro: '本说明介绍 WIO Tracker 如何处理你的个人信息。我们只收集运行所必需的最少信息，不将你的数据用于广告投放，不接入第三方统计或用户画像 SDK。',
   sections: [
     {
       h: '一、我们收集什么',
@@ -198,7 +198,8 @@ const privacyZh = {
       h: '四、第三方',
       p: [
         '微信支付（虚拟支付）：你购买会员时，微信会处理支付所需的信息，适用微信自身的隐私政策。',
-        '除此之外，我们不与任何第三方共享你的个人信息，也未接入广告、统计分析或社交登录类 SDK。'
+        '微信广告：本小程序可能展示由微信广告服务提供的广告。广告的展示与效果衡量所涉及的信息处理，适用微信自身的隐私政策。',
+        '除此之外，我们不与任何第三方共享你的个人信息，也未接入统计分析或社交登录类 SDK。'
       ]
     },
     {
@@ -239,7 +240,7 @@ const privacyZh = {
 const privacyEn = {
   title: 'Privacy Policy',
   updatedLabel: 'Last updated: ',
-  intro: 'This policy explains how WIO Tracker handles your personal information. We collect only the minimum needed to run the App, show no ads, and integrate no third-party analytics or profiling SDKs.',
+  intro: 'This policy explains how WIO Tracker handles your personal information. We collect only the minimum needed to run the App, do not use your data for advertising, and integrate no third-party analytics or profiling SDKs.',
   sections: [
     {
       h: '1. What we collect',
@@ -268,7 +269,8 @@ const privacyEn = {
       h: '4. Third parties',
       p: [
         'WeChat Pay (virtual payment): when you buy a membership, WeChat processes the payment information under its own privacy policy.',
-        'Otherwise we share no personal information with third parties, and the App contains no advertising, analytics or social-login SDKs.'
+        'WeChat Ads: the App may display ads served by WeChat\u2019s advertising service. Information processing involved in ad display and performance measurement is subject to WeChat\u2019s own privacy policy.',
+        'Otherwise we share no personal information with third parties, and the App integrates no analytics or social-login SDKs.'
       ]
     },
     {
