@@ -63,6 +63,10 @@
       <view class="paywall-cta" @click="onPayTap">
         <text class="paywall-cta-text">{{ payPlan === 'year' ? i18n.profile.payCta : i18n.profile.payCtaMonth }}</text>
       </view>
+      <!-- 看广告换 3 天体验：只给还没有 PRO 的人看，给犹豫的人一个零摩擦入口 -->
+      <view v-if="!isPro" class="paywall-ad-cta" @click="onAdTrialTap">
+        <text class="paywall-ad-text">▶ {{ i18n.profile.adTrialCta }}</text>
+      </view>
       <text class="paywall-fine">{{ i18n.profile.payFine }}</text>
       <text class="paywall-fine paywall-refund">{{ refundNote }}</text>
       <!-- 交易前的协议告知：付费产品必须能在下单这一步读到条款 -->
@@ -78,6 +82,9 @@
 import wioService from '@/utils/wioService.js'
 import { locales, t } from '@/utils/locales.js'
 import { purchase } from '@/utils/pay.js'
+import { login, isLogin, claimAdTrial } from '@/utils/auth.js'
+import { isProUser } from '@/utils/pro.js'
+import { showRewardedAd } from '@/utils/ads.js'
 import { openAgreement } from '@/utils/legal.js'
 import { tap as haptic } from '@/utils/haptic.js'
 
@@ -101,12 +108,16 @@ export default {
       settings: { language: 'zh-CN' },
       payPlan: 'year',
       paying: false,
+      adBusy: false,
       isIos
     }
   },
   computed: {
     i18n() {
       return locales[this.settings.language] || locales['zh-CN']
+    },
+    isPro() {
+      return isProUser()
     },
     unitMonth() {
       return this.settings.language === 'en-US' ? 'mo' : '月'
@@ -138,6 +149,56 @@ export default {
     onLegalTap() {
       haptic('light')
       openAgreement()
+    },
+    /**
+     * 看激励视频领 3 天 PRO。
+     * 前端只把「完整看完视频」当触发条件；限额/防刷全在 pay 云函数，
+     * 服务端拒绝时按 code 出对应的人话提示。
+     */
+    async onAdTrialTap() {
+      if (this.adBusy || this.paying) return
+      const lang = this.settings.language
+      haptic('light')
+      this.adBusy = true
+      try {
+        // 发放需要 openid：未登录先就地登录（失败按未登录提示，不再往下走）
+        if (!isLogin()) {
+          try {
+            await login({})
+          } catch (e) {
+            throw { code: 'need_login' }
+          }
+        }
+        try {
+          await showRewardedAd()
+        } catch (e) {
+          throw { code: (e && e.code) === 'aborted' ? 'ad_aborted' : 'ad_no_fill' }
+        }
+        uni.showLoading({ title: t('profile.adTrialConfirming', lang), mask: true })
+        try {
+          await claimAdTrial()
+        } finally {
+          uni.hideLoading()
+        }
+        this.$emit('upgraded')
+        this.$emit('close')
+        uni.showToast({
+          title: t('profile.adTrialDone', lang),
+          icon: 'success',
+          duration: 2500
+        })
+      } catch (e) {
+        const code = (e && e.code) || ''
+        let msg = t('profile.adTrialFailed', lang)
+        if (code === 'ad_aborted') msg = t('profile.adTrialAborted', lang)
+        else if (code === 'ad_no_fill') msg = t('profile.adTrialNoFill', lang)
+        else if (code === 'limit_reached') msg = t('profile.adTrialLimit', lang)
+        else if (code === 'has_pro') msg = t('profile.adTrialHasPro', lang)
+        else if (code === 'need_login') msg = t('profile.payNotLogin', lang)
+        uni.showToast({ title: msg, icon: 'none', duration: 2500 })
+      } finally {
+        this.adBusy = false
+      }
     },
     async startPurchase() {
       if (this.paying) return
@@ -405,6 +466,27 @@ export default {
 
 .paywall-cta:active {
   opacity: 0.9;
+}
+
+/* 看广告换体验：轻量次按钮，不能和金色主 CTA 抢视觉 */
+.paywall-ad-cta {
+  margin-top: 10px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(14, 110, 98, 0.07);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.paywall-ad-cta:active {
+  opacity: 0.7;
+}
+
+.paywall-ad-text {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #0E6E62;
 }
 
 .paywall-cta-text {

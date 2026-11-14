@@ -6,6 +6,7 @@
 //                → 拼 signData → 算 paySig（AppKey）/ signature（session_key）
 // action=query   兜底查单：调 POST /xpay/query_order，status=2 视为已支付并补发货
 // action=refund  发起退款（仅服务端/控制台）：POST /xpay/refund_order，异步，靠查单收敛
+// action=adReward 看激励视频换 3 天 PRO 体验：服务端限额发放（终身 3 次）
 //
 // 退款与权益：查单发现 status=5/8（已退款/退款完成）时，把该订单对应的
 // subscription 置为 revoked —— 不收回就是「钱退了、会员照用」。
@@ -65,6 +66,11 @@ const DAY_MS = 24 * 3600 * 1000
 // 订单页只展示「还可能有下文」的未支付单：超过这个时长的视为已放弃，
 // 与 paysweep 的过期窗口保持一致
 const ORDER_PENDING_TTL_MS = 24 * 3600 * 1000
+
+// 看激励视频换 PRO 体验：单次天数 + 终身次数上限。
+// 防刷不靠客户端 isEnded（可伪造），靠这里的终身计数 + 服务端发放。
+const AD_PLAN_DAYS = 3
+const AD_MAX_GRANTS = 3
 
 // ---------------- 基础工具 ----------------
 
@@ -655,6 +661,49 @@ exports.main = async (event) => {
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, limit)
       return { ok: true, orders: list }
+    }
+
+    // ---------- 看广告换 PRO 体验 ----------
+    // 入口在客户端只对「无有效会员」的人可见；这里再兜一道：
+    // 已有有效订阅直接拒绝，防的是绕过 UI 直接调云函数。
+    // 终身上限按 plan:'ad' 的历史行数计（不看 status，撤销过的也占额）。
+    if (event.action === 'adReward') {
+      const now = Date.now()
+      const active = (await db.collection('subscriptions')
+        .where({ openid: OPENID, status: 'active', expires_at: db.command.gt(now) })
+        .orderBy('expires_at', 'desc').limit(1).get()).data[0]
+      if (active) {
+        return { ok: false, code: 'has_pro', message: '已拥有有效会员，无需体验' }
+      }
+      const used = (await db.collection('subscriptions')
+        .where({ openid: OPENID, plan: 'ad' }).count()).total || 0
+      if (used >= AD_MAX_GRANTS) {
+        return { ok: false, code: 'limit_reached', message: '体验次数已用完', used }
+      }
+      // 订阅表上 wx_transaction_id 有唯一索引（历史遗留），空值只许一条，
+      // 所以每次发放都要造一个独一无二的键，和 deliver / redeem 的写法对齐
+      const key = 'ad-' + OPENID + '-' + now
+      const expiresAt = now + AD_PLAN_DAYS * DAY_MS
+      await db.collection('subscriptions').add({
+        data: {
+          openid: OPENID,
+          plan: 'ad',
+          status: 'active',
+          wx_order_id: key,
+          wx_transaction_id: key,
+          out_trade_no: key,
+          source: 'ad',
+          started_at: now,
+          expires_at: expiresAt
+        }
+      })
+      return {
+        ok: true,
+        plan: 'ad',
+        days: AD_PLAN_DAYS,
+        expiresAt,
+        remaining: AD_MAX_GRANTS - used - 1
+      }
     }
 
     return { ok: false, code: 'bad_action', message: '未知 action' }

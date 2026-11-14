@@ -166,6 +166,22 @@ export async function redeemCode(code) {
 }
 
 /**
+ * 看完激励视频后领 3 天 PRO 体验（服务端发放，终身 3 次）
+ * 前端只负责「看完视频」这个触发条件，限额与防刷全在 pay 云函数。
+ * @returns {Promise<{days:number, expiresAt:number, remaining:number}>}
+ * @throws {{code:string}} has_pro / limit_reached / need_login / cloud_unavailable
+ */
+export async function claimAdTrial() {
+  if (!isCloudAvailable()) throw { code: 'cloud_unavailable', message: '云开发仅支持微信小程序端' }
+  if (!isLogin()) throw { code: 'need_login', message: '请先登录' }
+
+  const res = await callCloud('pay', { action: 'adReward' })
+  // 服务端已入账，把本地会话里的订阅镜像对齐一次（并广播 wio:pro-changed）
+  await refreshSubscription()
+  return res
+}
+
+/**
  * 上传头像到云存储，返回 fileID（cloud://）
  * fileID 可直接用于 <image :src>，跨设备可用
  * @param {string} tempFilePath chooseAvatar 返回的临时路径

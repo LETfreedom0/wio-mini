@@ -46,6 +46,10 @@
           <view v-else class="upgrade-cta" @click.stop="openPaywall">
             <text class="upgrade-text">{{ i18n.profile.upgradeProCta }}</text>
           </view>
+          <!-- 未开通：看广告换体验的轻入口，点开付费墙（广告按钮统一在墙内） -->
+          <view v-if="!isPro" class="ad-trial-link" @click.stop="openPaywall">
+            <text class="ad-trial-link-text">{{ i18n.profile.adTrialEntry }}</text>
+          </view>
         </view>
 
         <!-- ===== 云端同步（手动：两个方向分开，永不自动覆盖） ===== -->
@@ -1192,6 +1196,22 @@ export default {
 
 .upgrade-cta:active {
   opacity: 0.9;
+}
+
+.ad-trial-link {
+  margin-top: 8px;
+  display: flex;
+  justify-content: center;
+  padding: 2px 0;
+}
+
+.ad-trial-link:active {
+  opacity: 0.6;
+}
+
+.ad-trial-link-text {
+  font-size: 11.5px;
+  color: #8A9098;
 }
 
 .upgrade-text {
