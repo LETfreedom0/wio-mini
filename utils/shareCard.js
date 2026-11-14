@@ -117,8 +117,8 @@ export function buildShareModel(lang, year, month) {
     settleTargetText: r.achieved
       ? S.settleTargetOver.replace('{t}', r.target).replace('{n}', r.over)
       : S.settleTarget.replace('{t}', r.target).replace('{n}', r.gapDays),
-    // 足迹版：1 号落在哪个星期列（周一 = 0），以及每天的格子类型
-    gridLead: (new Date(y, m - 1, 1).getDay() + 6) % 7,
+    // 足迹版：1 号落在哪个星期列（周日 = 0，与日历页表头「日一二三四五六」同一口径）
+    gridLead: new Date(y, m - 1, 1).getDay(),
     grid: buildMonthGrid(y, m),
     settle: {
       year: `${y} / ${String(m).padStart(2, '0')}`,
