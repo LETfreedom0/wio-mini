@@ -376,13 +376,15 @@ export default {
 }
 
 .preview-img {
-  width: 570rpx;
+  /* swiper 单卡槽宽 570rpx（750 - 左右各 90 margin），图宽收 40rpx，
+     相邻卡之间就有 20px 的呼吸缝，不再首尾相贴 */
+  width: 530rpx;
   border-radius: 14px;
   box-shadow: 0 12px 32px rgba(20, 40, 36, 0.14);
 }
 
 .preview-state {
-  width: 570rpx;
+  width: 530rpx;
   /* 与卡片同为 3:4，加载时不跳动 */
   aspect-ratio: 3 / 4;
   border-radius: 14px;

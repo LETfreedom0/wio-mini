@@ -26,7 +26,7 @@ const DEFAULT_SETTINGS = {
   // 每天往返通勤分钟数（用于年度统计「节约通勤」换算）
   commuteMinutes: 90,
   // 分享卡卡面样式：'calendar'（日历格）| 'receipt'（打卡小票）
-  cardStyle: 'settle',
+  cardStyle: 'calendar',
   // 调休配置规则 (Key: 节日名称, Value: boolean 是否算工作日)
   // 已被「假期安排」逐日差量(settings.holidayPlan)取代 UI 入口，仅为老数据兼容保留：
   // 补班日(isOffDay:false)默认算工作日（与 UI 灰=上班一致），

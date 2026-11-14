@@ -23,15 +23,17 @@ export { CARD_W, CARD_H, PALETTE }
 export { segmentWidths } from './cardPaint.js'
 export { LAYOUT_CALENDAR, LAYOUT_RECEIPT, LAYOUT_SETTLE, LAYOUT_SEAL, LAYOUT_FOOTPRINT }
 
-/** 默认样式：新用户先看到结算单，它信息最全、最像一张“战绩” */
-export const DEFAULT_STYLE = 'settle'
+/** 默认样式：跟随第一张卡（日历卡），与 swiper 顺序一致，打开即看到第一张 */
+export const DEFAULT_STYLE = 'calendar'
 
 export const STYLES = [
+  // 老卡在前：用户已经见过这两张，滑动时第一眼是自己的熟悉卡面
+  { key: 'calendar', draw: drawCalendarCard, layout: LAYOUT_CALENDAR },
+  { key: 'receipt', draw: drawReceiptCard, layout: LAYOUT_RECEIPT },
+  // 月度结算三版在后
   { key: 'settle', draw: drawSettleCard, layout: LAYOUT_SETTLE },
   { key: 'seal', draw: drawSealCard, layout: LAYOUT_SEAL },
-  { key: 'footprint', draw: drawFootprintCard, layout: LAYOUT_FOOTPRINT },
-  { key: 'calendar', draw: drawCalendarCard, layout: LAYOUT_CALENDAR },
-  { key: 'receipt', draw: drawReceiptCard, layout: LAYOUT_RECEIPT }
+  { key: 'footprint', draw: drawFootprintCard, layout: LAYOUT_FOOTPRINT }
 ]
 
 /** 样式顺序表：滑动切换按这个顺序循环，新增卡面加进 STYLES 即自动生效 */
