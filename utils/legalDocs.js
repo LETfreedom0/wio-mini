@@ -16,8 +16,8 @@ export const CONTACT_EMAIL = '1546844202@qq.com'
 
 /** 协议/政策版本日期，内容实质变更时才更新 */
 const UPDATED = {
-  'zh-CN': '2026 年 11 月 8 日',
-  'en-US': 'November 8, 2026'
+  'zh-CN': '2026 年 11 月 14 日',
+  'en-US': 'November 14, 2026'
 }
 
 const agreementZh = {
@@ -53,7 +53,8 @@ const agreementZh = {
       p: [
         'WIO PRO 为一次性付费订阅：月卡 30 天，年卡 366 天，到期不自动续费，需要你主动再次购买。价格以下单页面展示为准。',
         '会员权益以「会员」页列出的功能为准，可能随版本更新调整；你已购买的有效期内权益不受影响。',
-        '本服务销售的是虚拟商品，一经开通不支持退款。iOS 端的交易款项由 Apple 收取与结算，相关退款规则由 Apple 制定，我们无权代为处理。'
+        '本服务销售的是虚拟商品，一经开通不支持退款。iOS 端的交易款项由 Apple 收取与结算，相关退款规则由 Apple 制定，我们无权代为处理。',
+        '会员收费用于覆盖云存储、平台认证与日常维护等运营成本；本小程序不接入广告，也不通过你的数据盈利。'
       ]
     },
     {
@@ -67,7 +68,8 @@ const agreementZh = {
     {
       h: '六、使用规范',
       p: [
-        '你不得利用本小程序从事违法活动，不得尝试破解、批量注册、干扰服务运行或抓取他人数据。'
+        '你不得利用本小程序从事违法活动，不得尝试破解、批量注册、干扰服务运行或抓取他人数据。',
+        '本小程序的名称、界面、代码、文案与图标等内容的知识产权归开发者所有。未经许可，不得复制、反编译、二次分发或用于商业用途；对侵权行为，我们将依法追究责任。'
       ]
     },
     {
@@ -124,7 +126,8 @@ const agreementEn = {
       p: [
         'WIO PRO is a one-time paid subscription: 30 days for the monthly plan and 366 days for the yearly plan. It does not renew automatically; you need to purchase again yourself. Prices are those shown on the purchase screen.',
         'The benefits are those listed on the Membership page and may change with app updates; benefits you have already paid for remain valid until they expire.',
-        'The App sells digital goods. Once activated, purchases are non-refundable. For purchases made on iOS, the payment is collected and settled by Apple; relevant refund policies are set by Apple, and we are not able to process refunds on your behalf.'
+        'The App sells digital goods. Once activated, purchases are non-refundable. For purchases made on iOS, the payment is collected and settled by Apple; relevant refund policies are set by Apple, and we are not able to process refunds on your behalf.',
+        'Membership fees exist to cover the operating costs of cloud storage, platform verification and day-to-day maintenance. The App contains no advertising and does not profit from your data.'
       ]
     },
     {
@@ -138,7 +141,8 @@ const agreementEn = {
     {
       h: '6. Acceptable use',
       p: [
-        'You must not use the App for unlawful purposes, attempt to crack it, register accounts in bulk, interfere with its operation, or scrape other users\u2019 data.'
+        'You must not use the App for unlawful purposes, attempt to crack it, register accounts in bulk, interfere with its operation, or scrape other users\u2019 data.',
+        'The App\u2019s name, interface, code, copy and icons are the intellectual property of the developer. You may not copy, decompile, redistribute or use them for commercial purposes without permission; we reserve the right to pursue legal action against infringement.'
       ]
     },
     {
