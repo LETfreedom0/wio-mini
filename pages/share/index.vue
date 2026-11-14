@@ -45,6 +45,9 @@
       </swiper>
     </view>
 
+    <!-- 页面说明：给搜一搜提供可索引的真实正文（canvas 卡片里的文字抓不到） -->
+    <text class="page-caption">{{ t.shareCaption }}</text>
+
     <view class="action-bar">
       <view class="btn btn-ghost" @click="saveToAlbum">
         <text class="btn-text">{{ t.saveToAlbum }}</text>
@@ -91,7 +94,13 @@ export default {
     },
     /** 当前卡面名（圆点下方的小字说明） */
     styleName() {
-      const map = { calendar: this.t.styleCalendar, receipt: this.t.styleReceipt }
+      const map = {
+        settle: this.t.styleSettle,
+        seal: this.t.styleSeal,
+        footprint: this.t.styleFootprint,
+        calendar: this.t.styleCalendar,
+        receipt: this.t.styleReceipt
+      }
       return map[this.style] || this.style
     },
     /** 还没出图的滑轨位显示什么：生成中 / 失败重试 */
@@ -389,6 +398,16 @@ export default {
 }
 
 /* ===== 底部操作 ===== */
+.page-caption {
+  flex-shrink: 0;
+  display: block;
+  padding: 0 28px 10px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: #9AA0A6;
+  text-align: center;
+}
+
 .action-bar {
   flex-shrink: 0;
   display: flex;
@@ -397,7 +416,6 @@ export default {
   padding-bottom: calc(16px + constant(safe-area-inset-bottom));
   padding-bottom: calc(16px + env(safe-area-inset-bottom));
 }
-
 .btn {
   flex: 1;
   height: 48px;

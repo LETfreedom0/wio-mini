@@ -90,6 +90,20 @@ for (const style of STYLES.map(s => s.key)) {
     for (const sc of scenarios) {
       wioService.getMonthStats = () => ({ ...sc.stats })
       wioService.getTargetForMonth = () => sc.target
+      // 足迹版要按天摆格子：Node 里没有 uni，给一份稳定的假日历消掉噪音
+      wioService.getEntries = () => {
+        const today = new Date()
+        const y = today.getFullYear(), m = today.getMonth() + 1
+        const out = {}
+        for (let d = 1; d <= new Date(y, m, 0).getDate(); d++) {
+          const wd = new Date(y, m - 1, d).getDay()
+          if (wd === 0 || wd === 6) continue
+          const ds = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+          out[ds] = d % 9 === 0 ? 'vacation' : d % 4 === 3 ? 'home' : 'company'
+        }
+        return out
+      }
+      wioService.isOfficialWorkingDay = dt => dt.getDay() !== 0 && dt.getDay() !== 6
       const model = buildShareModel(lang)
       const ctx = new FakeCtx()
       drawShareCard(ctx, model, null, style)
@@ -126,10 +140,13 @@ for (const style of STYLES.map(s => s.key)) {
           fail(`[${style}/${lang}/${sc.name}] 格子阵没画出来`)
         }
       } else {
+        // 小票卡有票身（952 为底）；结算三版是整幅画布，按画布底算
+        const bottomLimit = style === 'receipt'
+          ? LAYOUT_RECEIPT.paper.y + LAYOUT_RECEIPT.paper.h
+          : CARD_H - 4
         const maxBottom = ctx.ops.reduce((m, op) => Math.max(m, bbox(op).y1), 0)
-        const paperBottom = LAYOUT_RECEIPT.paper.y + LAYOUT_RECEIPT.paper.h
-        if (maxBottom > paperBottom - 4) {
-          fail(`[${style}/${lang}/${sc.name}] 文字压到票底: 最低 ${maxBottom.toFixed(0)} > ${paperBottom}`)
+        if (maxBottom > bottomLimit) {
+          fail(`[${style}/${lang}/${sc.name}] 文字压到票底: 最低 ${maxBottom.toFixed(0)} > ${bottomLimit}`)
         }
       }
 

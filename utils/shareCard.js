@@ -17,6 +17,48 @@ function formatNumber(n) {
 const formatHours = formatNumber
 
 /**
+ * 把当月每一天压成格子：公司 / 居家 / 休假 / 未记录（工作日空档）+ 周末。
+ * 足迹版靠它画图——只拿月度天数摆不出「哪天在哪」，
+ * 而那正是这张卡唯一别人抄不走的内容。
+ */
+function buildMonthGrid(year, month) {
+  let entries = {}
+  try {
+    entries = wioService.getEntries() || {}
+  } catch (e) {
+    entries = {}
+  }
+  const days = new Date(year, month, 0).getDate()
+  const out = []
+  for (let d = 1; d <= days; d++) {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const raw = entries[dateStr]
+    const status = typeof raw === 'string' ? raw : pickStatus(raw)
+    let key = ''
+    if (status === 'company') key = 'company'
+    else if (status === 'home') key = 'home'
+    else if (status && status !== 'clear') key = 'leave'
+    if (!key) {
+      let work = false
+      try {
+        work = wioService.isOfficialWorkingDay(new Date(dateStr + 'T00:00:00'))
+      } catch (e) {
+        work = false
+      }
+      key = work ? 'rest' : 'off'
+    }
+    out.push({ day: d, key })
+  }
+  return out
+}
+
+/** 上下午不同状态（半天假）：取上午那一档当这格的主色，够看且不会画成空白 */
+function pickStatus(raw) {
+  if (!raw || typeof raw !== 'object') return ''
+  return raw.am || raw.pm || ''
+}
+
+/**
  * 生成绘制所需的全部字段
  * @param {string} lang 'zh-CN' | 'en-US'
  * @param {number} [year] 默认当月
@@ -53,6 +95,12 @@ export function buildShareModel(lang, year, month) {
   cols.push({ key: 'rest', value: formatNumber(r.rest), unit: S.unitDay, label: S.colRemain, accent: true })
 
   const hasOt = r.otHours > 0
+  const monthText = `${y} · ${String(m).padStart(2, '0')}`
+  const gapText = r.achieved
+    ? S.above.replace('{n}', r.over)
+    : (isCurrent ? S.need : S.needPast).replace('{n}', r.gapDays)
+  // 印章里的字去掉对勾，章面上只留「已达标 / 未达标」
+  const badgePlain = String(r.achieved ? S.onTarget : S.offTarget).replace(/^[\s✓✔√]+/, '').trim()
 
   return {
     lang,
@@ -60,14 +108,28 @@ export function buildShareModel(lang, year, month) {
     month: m,
     scene: `${y}${String(m).padStart(2, '0')}`,
     brand: S.brand,
-    monthText: `${y} · ${String(m).padStart(2, '0')}`,
+    monthText,
     title: isCurrent ? S.cardTitle : S.cardTitlePast.replace('{m}', monthToken),
     rate: r.rate,
     achieved: r.achieved,
     badgeText: r.achieved ? S.onTarget : S.offTarget,
-    gapText: r.achieved
-      ? S.above.replace('{n}', r.over)
-      : (isCurrent ? S.need : S.needPast).replace('{n}', r.gapDays),
+    gapText,
+    settleTargetText: r.achieved
+      ? S.settleTargetOver.replace('{t}', r.target).replace('{n}', r.over)
+      : S.settleTarget.replace('{t}', r.target).replace('{n}', r.gapDays),
+    // 足迹版：1 号落在哪个星期列（周一 = 0），以及每天的格子类型
+    gridLead: (new Date(y, m - 1, 1).getDay() + 6) % 7,
+    grid: buildMonthGrid(y, m),
+    settle: {
+      year: `${y} / ${String(m).padStart(2, '0')}`,
+      kicker: S.settleStatement,
+      rateLabel: S.settleRateLabel,
+      workdays: S.settleWorkdays.replace('{n}', formatNumber(r.workingDays)),
+      foot: `${S.brand} · ${S.settleFoot}`,
+      scan: S.settleScan,
+      badgePlain,
+      sealGapText: `${gapText} · ${S.colOffice} ${formatNumber(r.company)}${S.unitDay}`
+    },
     compositionText: (isCurrent ? S.composition : S.compositionPast)
       .replace('{m}', monthToken)
       .replace('{n}', r.workingDays),

@@ -14,6 +14,18 @@ export const CARD_H = 1000
 
 export const FONT_STACK = '-apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif'
 
+/**
+ * 衬线字体：结算卡三版专用。
+ * 62% 用衬线画出来像「印在纸上的数字」，用无衬线就只是 App 里的一行读数——
+ * 这个差别决定了用户愿不愿意拍照发出去。
+ * iOS / 桌面有 Georgia，安卓回退 Noto Serif，都缺时退回系统 sans（字轻一点，但不丢字）。
+ */
+export const SERIF_STACK = 'Georgia, "Songti SC", "Noto Serif", "Times New Roman", serif'
+
+export function setSerifFont(ctx, size, weight) {
+  ctx.font = `${weight || 400} ${size}px ${SERIF_STACK}`
+}
+
 export const PALETTE = {
   bg: '#FFFDF8',
   brand: '#A0A6AD',
@@ -114,12 +126,13 @@ export function drawText(ctx, str, box, opts = {}) {
   const text = String(str)
   const weight = opts.weight || box.weight || 400
   const maxWidth = opts.maxWidth || box.w
+  const applyFont = opts.serif ? setSerifFont : setFont
   let size = box.size
-  setFont(ctx, size, weight)
+  applyFont(ctx, size, weight)
   let width = ctx.measureText(text).width
   if (width > maxWidth && width > 0) {
     size = Math.max(opts.minSize || 16, Math.floor((size * maxWidth) / width))
-    setFont(ctx, size, weight)
+    applyFont(ctx, size, weight)
     width = ctx.measureText(text).width
   }
   ctx.fillStyle = opts.color
@@ -145,12 +158,13 @@ export function drawText(ctx, str, box, opts = {}) {
  * @returns {{size:number, width:number}} 实际字号与宽度
  */
 export function drawHeroNumber(ctx, str, x, top, size, maxW, opts = {}) {
+  const applyFont = opts.serif ? setSerifFont : setFont
   let s = size
-  setFont(ctx, s, opts.weight || 700)
+  applyFont(ctx, s, opts.weight || 700)
   let width = ctx.measureText(String(str)).width
   if (width > maxW) {
     s = Math.floor((s * maxW) / width)
-    setFont(ctx, s, opts.weight || 700)
+    applyFont(ctx, s, opts.weight || 700)
     width = ctx.measureText(String(str)).width
   }
   ctx.fillStyle = opts.color
@@ -173,6 +187,34 @@ export function drawPercent(ctx, x, top, heroSize, ratio, topRatio, color) {
   ctx.textBaseline = 'alphabetic'
   ctx.fillText('%', x, top + heroSize * topRatio + s * CAP_RATIO)
   return w
+}
+
+/**
+ * 带字距的一行字。
+ * canvas 没有 letterSpacing（只有部分基础库支持），逐字落笔才能拿到稳定字距——
+ * 「回 公 司 率」这种排字感全靠它，直接写空格会在中英混排下跳字。
+ * @returns {number} 整行实际宽度
+ */
+export function drawTrackingText(ctx, str, x, cy, opts = {}) {
+  const text = String(str == null ? '' : str)
+  if (!text) return 0
+  const size = opts.size || 24
+  const weight = opts.weight || 400
+  const tracking = opts.tracking || 0
+  const applyFont = opts.serif ? setSerifFont : setFont
+  applyFont(ctx, size, weight)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = opts.color
+  const chars = Array.from(text)
+  const widths = chars.map(c => ctx.measureText(c).width)
+  const total = widths.reduce((a, b) => a + b, 0) + tracking * Math.max(0, chars.length - 1)
+  let cx = opts.align === 'center' ? x - total / 2 : opts.align === 'right' ? x - total : x
+  chars.forEach((c, i) => {
+    ctx.fillText(c, cx, cy)
+    cx += widths[i] + tracking
+  })
+  return total
 }
 
 export function drawQr(ctx, qrImage, box, placeholderText) {

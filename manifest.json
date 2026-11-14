@@ -1,9 +1,9 @@
 {
     "name" : "WIO 达标了吗",
     "appid" : "__UNI__7BFBB1D",
-    "description" : "",
-    "versionName" : "2.0.8",
-    "versionCode" : "208",
+    "description" : "为需要定期回公司办公的外企与混合办公人群设计。每天记录在公司还是居家，自动算出本月回公司率、距离目标还差几天，支持公共假期、调休补班、年假额度与月度报表。",
+    "versionName" : "2.0.9",
+    "versionCode" : "209",
     "transformPx" : false,
     /* 5+App特有相关 */
     "app-plus" : {
@@ -59,7 +59,8 @@
         },
         "usingComponents" : true,
         "permission" : {},
-        "lazyCodeLoading" : "requiredComponents"
+        "lazyCodeLoading" : "requiredComponents",
+        "sitemapLocation" : "sitemap.json"
     },
     "mp-alipay" : {
         "usingComponents" : true

@@ -1,9 +1,12 @@
 // ============================================================
 // 分享卡 · 样式分发层
 //
-// 卡面有两套样式，排版完全不同，共用 cardPaint.js 的原语：
-//   calendar —— 一天一格的日历格，月份做成左上角页签
-//   receipt  —— 打卡小票，打孔 + 收银条 + 圆章
+// 卡面共五套样式，排版各不相同，共用 cardPaint.js 的原语：
+//   settle     —— 月度结算单（新默认）
+//   seal       —— 达标印章（整幅绿底，未达标换红棕）
+//   footprint  —— 月度足迹（真实月历格子）
+//   calendar   —— 一天一格的日历格，月份做成左上角页签
+//   receipt    —— 打卡小票，打孔 + 收银条 + 圆章
 //
 // 调用方只需要传样式名，不关心具体怎么画。
 // 新增样式：写一个 drawXxxCard，在这里注册进 STYLES 即可。
@@ -12,15 +15,21 @@
 import { CARD_W, CARD_H, PALETTE } from './cardPaint.js'
 import { drawCalendarCard, LAYOUT_CALENDAR } from './cardStyleCalendar.js'
 import { drawReceiptCard, LAYOUT_RECEIPT } from './cardStyleReceipt.js'
+import { drawSettleCard, LAYOUT_SETTLE } from './cardStyleMonthly.js'
+import { drawSealCard, LAYOUT_SEAL } from './cardStyleMonthly.js'
+import { drawFootprintCard, LAYOUT_FOOTPRINT } from './cardStyleMonthly.js'
 
 export { CARD_W, CARD_H, PALETTE }
 export { segmentWidths } from './cardPaint.js'
-export { LAYOUT_CALENDAR, LAYOUT_RECEIPT }
+export { LAYOUT_CALENDAR, LAYOUT_RECEIPT, LAYOUT_SETTLE, LAYOUT_SEAL, LAYOUT_FOOTPRINT }
 
-/** 默认样式：老客户端 / 老调用方不传 style 时走这里 */
-export const DEFAULT_STYLE = 'calendar'
+/** 默认样式：新用户先看到结算单，它信息最全、最像一张“战绩” */
+export const DEFAULT_STYLE = 'settle'
 
 export const STYLES = [
+  { key: 'settle', draw: drawSettleCard, layout: LAYOUT_SETTLE },
+  { key: 'seal', draw: drawSealCard, layout: LAYOUT_SEAL },
+  { key: 'footprint', draw: drawFootprintCard, layout: LAYOUT_FOOTPRINT },
   { key: 'calendar', draw: drawCalendarCard, layout: LAYOUT_CALENDAR },
   { key: 'receipt', draw: drawReceiptCard, layout: LAYOUT_RECEIPT }
 ]

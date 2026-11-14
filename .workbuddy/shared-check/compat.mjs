@@ -114,7 +114,7 @@ function checkIntegrity(wrote) {
   ok(s.targetPercentage === 45, '目标比例保留 45%', s.targetPercentage)
   ok(s.birthdayEnabled === true && s.birthdayMonth === '03', '生日假配置保留')
   ok(s.commuteMinutes === 90, '新字段 commuteMinutes 补上默认值', s.commuteMinutes)
-  ok(s.cardStyle === 'calendar', '新字段 cardStyle 补上默认值', s.cardStyle)
+  ok(s.cardStyle === 'settle', '新字段 cardStyle 补上默认值', s.cardStyle)
   ok(s.halfFullDays && typeof s.halfFullDays === 'object', '新字段 halfFullDays 补上空对象')
   ok(JSON.stringify(newSvc.getCustomMarks()) === '{}', '没有 customMarks 键时不报错，按天标记读成空表')
   ok(s.customLeaves.length === 2, '自定义假期两条都还在', s.customLeaves.length)

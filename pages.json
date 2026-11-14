@@ -3,55 +3,63 @@
     {
       "path": "pages/index/index",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "回公司率 · 今天在哪办公"
       }
     },
     {
       "path": "pages/calendar/index",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "出勤日历 · 调休安排"
       }
     },
     {
       "path": "pages/member/index",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "WIO PRO"
       }
     },
     {
       "path": "pages/profile/index",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "我的"
       }
     },
     {
       "path": "pages/stats/index",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "月度回公司率报表"
       }
     },
     {
       "path": "pages/share/index",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "我的回公司率月报"
       }
     },
     {
       "path": "pages/legal/index",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "用户协议与隐私政策"
       }
     },
     {
       "path": "pages/orders/index",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "会员与订单"
       }
     }
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "WIO Tracker",
+    "navigationBarTitleText": "WIO 回公司率",
     "navigationBarBackgroundColor": "#F8F8F8",
     "backgroundColor": "#F8F8F8"
   },

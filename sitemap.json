@@ -1,0 +1,9 @@
+{
+  "desc": "允许索引公开功能页；会员、订单、协议页涉及支付与个人数据，不参与索引",
+  "rules": [
+    { "action": "disallow", "page": "pages/member/index" },
+    { "action": "disallow", "page": "pages/orders/index" },
+    { "action": "disallow", "page": "pages/legal/index" },
+    { "action": "allow", "page": "*" }
+  ]
+}

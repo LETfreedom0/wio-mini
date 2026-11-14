@@ -91,12 +91,30 @@ const scenarios = {
   miss: { lang: 'zh-CN', stats: { workingDays: 22, companyDays: 4, homeDays: 12, weekendLeaves: 0, totalOvertime: 0 }, target: 40 }
 }
 
+// 足迹版按真实日历摆格子：Node 里读不到 storage，不给假数据 31 格会全空
+function fakeEntries(y, m, kind) {
+  const days = new Date(y, m, 0).getDate()
+  const out = {}
+  for (let d = 1; d <= days; d++) {
+    const wd = new Date(y, m - 1, d).getDay()
+    if (wd === 0 || wd === 6) continue
+    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    if (kind === 'miss') out[dateStr] = d % 5 === 0 ? 'vacation' : 'home'
+    else if (d % 9 === 0) out[dateStr] = 'vacation'
+    else out[dateStr] = d % 4 === 3 ? 'home' : 'company'
+  }
+  return out
+}
+
 const sharp = (await import('sharp')).default
 
 for (const style of STYLES.map(s => s.key)) {
   for (const [key, sc] of Object.entries(scenarios)) {
     wioService.getMonthStats = () => ({ ...sc.stats })
     wioService.getTargetForMonth = () => sc.target
+    const today = new Date()
+    wioService.getEntries = () => fakeEntries(today.getFullYear(), today.getMonth() + 1, key)
+    wioService.isOfficialWorkingDay = dt => dt.getDay() !== 0 && dt.getDay() !== 6
     const model = buildShareModel(sc.lang)
     const ctx = new RecCtx()
     drawShareCard(ctx, model, null, style)
